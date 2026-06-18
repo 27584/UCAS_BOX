@@ -2,6 +2,8 @@
 // 工具函数
 // ============================================
 
+import { createIcons as _createIcons, icons } from 'lucide';
+
 export const QUALITY_CONFIG = {
     white: { label: '普通', color: '#e2e8f0', glow: 'rgba(226,232,240,0.3)' },
     green: { label: '稀有', color: '#22c55e', glow: 'rgba(34,197,94,0.4)' },
@@ -119,7 +121,7 @@ export function openItemDetail(item) {
     amount.textContent = `拥有: ${item.owned || 0}`;
 
     document.getElementById('item-detail-modal').style.display = 'flex';
-    createIcons();
+    _createIcons({ icons });
 }
 
 export function closeItemDetail() {

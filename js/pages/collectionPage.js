@@ -1,6 +1,6 @@
 import { getCollectionProgress } from '../api.js';
 import { itemImageHTML, QUALITY_CONFIG, openItemDetail } from '../utils.js';
-import { createIcons } from 'lucide';
+import { createIcons, icons } from 'lucide';
 
 export const collectionPage = {
     items: [],
@@ -14,16 +14,20 @@ export const collectionPage = {
             this.items = await getCollectionProgress();
             this.renderGrid();
         } catch (e) {
-            document.getElementById('collection-grid').innerHTML = `
-                <div class="empty-state" style="grid-column:1/-1;">
-                    <p>加载失败</p>
-                </div>
-            `;
+            const grid = document.getElementById('collection-grid');
+            if (grid) {
+                grid.innerHTML = `
+                    <div class="empty-state" style="grid-column:1/-1;">
+                        <p>加载失败</p>
+                    </div>
+                `;
+            }
         }
     },
 
     renderGrid() {
         const grid = document.getElementById('collection-grid');
+        if (!grid) return;
         const total = this.items.length;
         const owned = this.items.filter(i => i.owned > 0).length;
         const percent = total > 0 ? Math.round((owned / total) * 100) : 0;
@@ -57,12 +61,13 @@ export const collectionPage = {
                         name: item.item_name,
                         quality: item.item_quality,
                         image_name: item.item_image,
+                        description: item.item_description,
                         owned: item.owned
                     });
                 }
             });
         });
 
-        createIcons();
+        createIcons({ icons });
     }
 };

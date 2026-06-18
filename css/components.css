@@ -443,3 +443,40 @@
     opacity: 0.3;
     animation: floatParticle linear infinite;
 }
+
+/* 角标 */
+.badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    background: #ef4444;
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 700;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
+}
+
+.nav-link {
+    position: relative;
+}
+
+.nav-link .badge {
+    top: 2px;
+    right: 2px;
+}
+
+#header-mail-btn {
+    position: relative;
+}
+
+#header-mail-btn .badge {
+    top: -6px;
+    right: -6px;
+}

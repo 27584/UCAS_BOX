@@ -1,4 +1,4 @@
-﻿<div class="profile-page">
+<div class="profile-page">
     <div class="profile-card card animate-fade-in-up">
         <div class="profile-avatar">
             <span id="profile-initial">?</span>
@@ -21,5 +21,20 @@
             <i data-lucide="log-out"></i>
             <span>退出登录</span>
         </button>
+        <button class="btn btn-secondary" id="btn-changelog" style="margin-top:12px;width:100%;">
+            <i data-lucide="file-text"></i>
+            <span>更新日志</span>
+        </button>
+        <div class="version-info">
+            <span id="app-version"></span>
+        </div>
+    </div>
+</div>
+
+<div id="changelog-modal" class="modal" style="display:none;">
+    <div class="modal-overlay" id="changelog-overlay"></div>
+    <div class="modal-content" style="max-width:480px;">
+        <button class="btn-close" id="changelog-close"><i data-lucide="x"></i></button>
+        <div class="changelog-content" id="changelog-content"></div>
     </div>
 </div>

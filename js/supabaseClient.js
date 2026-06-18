@@ -1,10 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 
 // ============================================
-// Supabase 配置（请替换为你的项目配置）
+// Supabase 配置
 // ============================================
-const SUPABASE_URL = 'https://your-project.supabase.co';
-const SUPABASE_ANON_KEY = 'your-anon-key';
+const SUPABASE_URL = 'https://vhtfynregwcvtsnkmpuc.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZodGZ5bnJlZ3djdnRzbmttcHVjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3Nzk4MDMsImV4cCI6MjA5NzM1NTgwM30.dvipUoT6R_sloKZEy5GLiFHnNivzc61RhET8dghj9a8';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 

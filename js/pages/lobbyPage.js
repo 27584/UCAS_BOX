@@ -1,6 +1,7 @@
 import { openBox, getProfile } from '../api.js';
 import { formatCountdown, itemImageHTML, showToast, QUALITY_CONFIG } from '../utils.js';
-import { createIcons } from 'lucide';
+import { createIcons, icons } from 'lucide';
+import { updateGlobalShells } from '../auth.js';
 
 export const lobbyPage = {
     timer: null,
@@ -40,7 +41,7 @@ export const lobbyPage = {
             box.classList.remove('animate-shake');
         });
 
-        createIcons();
+        createIcons({ icons });
     },
 
     async loadState() {
@@ -91,23 +92,15 @@ export const lobbyPage = {
         const placeholder = document.getElementById('drop-placeholder');
         const nameEl = document.getElementById('drop-name');
         const qualityEl = document.getElementById('drop-quality');
-        const cfg = QUALITY_CONFIG[item.item_quality] || QUALITY_CONFIG.white;
+        const cfg = QUALITY_CONFIG[item.out_item_quality] || QUALITY_CONFIG.white;
 
         glow.style.background = cfg.color;
-        placeholder.innerHTML = itemImageHTML(item.item_name, item.item_quality, item.item_image, 96);
-        nameEl.textContent = item.item_name;
+        placeholder.innerHTML = itemImageHTML(item.out_item_name, item.out_item_quality, item.out_item_image, 96);
+        nameEl.textContent = item.out_item_name;
         nameEl.style.color = cfg.color;
         qualityEl.textContent = cfg.label;
-        qualityEl.className = `quality-badge quality-${item.item_quality}`;
+        qualityEl.className = `quality-badge quality-${item.out_item_quality}`;
 
         modal.style.display = 'flex';
-    },
-
-    async updateGlobalShells() {
-        try {
-            const profile = await getProfile();
-            const el = document.getElementById('global-shells');
-            if (el && profile) el.textContent = profile.shells;
-        } catch (e) {}
     }
 };

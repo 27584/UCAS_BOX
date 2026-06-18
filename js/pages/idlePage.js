@@ -1,14 +1,17 @@
 import { claimIdleRewards, getProfile, claimAdRewards, getIdleBoost } from '../api.js';
 import { formatNumber, createParticles, showToast } from '../utils.js';
-import { createIcons } from 'lucide';
+import { updateGlobalShells } from '../auth.js';
+import { createIcons, icons } from 'lucide';
 
 export const idlePage = {
     interval: null,
     lastClaim: null,
     baseRate: 10,
     boostRate: 0,
+    boostLoaded: false,
 
     render(container) {
+        this.boostLoaded = false;
         this.attachEvents(container);
         this.initState();
     },
@@ -18,11 +21,16 @@ export const idlePage = {
         const btnAd = container.querySelector('#btn-watch-ad');
 
         btn.addEventListener('click', async () => {
+            if (!this.boostLoaded) {
+                showToast('正在加载加成信息，请稍候...', 'info');
+                return;
+            }
             btn.disabled = true;
             try {
                 const reward = await claimIdleRewards();
                 if (reward > 0) {
                     showToast(`领取成功！获得 ${reward} 果壳币`, 'success');
+                    await updateGlobalShells();
                 } else {
                     showToast('暂无收益可领取', 'info');
                 }
@@ -30,7 +38,6 @@ export const idlePage = {
                 await this.loadBoost();
                 this.updateDisplay();
             } catch (e) {
-            } finally {
                 btn.disabled = false;
             }
         });
@@ -38,20 +45,21 @@ export const idlePage = {
         btnAd.addEventListener('click', async () => {
             btnAd.disabled = true;
             try {
-                await claimAdRewards();
+                const reward = await claimAdRewards();
                 const adUrl = 'https://www.bilibili.com/video/BV17K411M7rX/';
                 window.open(adUrl, '_blank');
-                showToast('恭喜！获得 500 果壳币', 'success');
-                btnAd.innerHTML = '<i data-lucide="check-circle"></i><span>已领取</span>';
+                await updateGlobalShells();
+                showToast(`恭喜！获得 ${reward} 果壳币`, 'success');
+                btnAd.innerHTML = '<i data-lucide="check-circle"></i><span>今日已领取</span>';
                 btnAd.classList.add('disabled');
-                createIcons();
+                createIcons({ icons });
             } catch (e) {
                 btnAd.disabled = false;
             }
         });
 
         createParticles(container.querySelector('#idle-particles'), 30);
-        createIcons();
+        createIcons({ icons });
     },
 
     async initState() {
@@ -63,9 +71,11 @@ export const idlePage = {
                 this.lastClaim = new Date();
             }
             if (profile?.ad_claimed_at) {
+                const claimDate = new Date(profile.ad_claimed_at).toISOString().split('T')[0];
+                const today = new Date().toISOString().split('T')[0];
                 const btn = document.getElementById('btn-watch-ad');
-                if (btn) {
-                    btn.innerHTML = '<i data-lucide="check-circle"></i><span>已领取</span>';
+                if (btn && claimDate === today) {
+                    btn.innerHTML = '<i data-lucide="check-circle"></i><span>今日已领取</span>';
                     btn.classList.add('disabled');
                 }
             }
@@ -80,14 +90,18 @@ export const idlePage = {
     async loadBoost() {
         try {
             this.boostRate = await getIdleBoost();
+            this.boostLoaded = true;
         } catch (e) {
             this.boostRate = 0;
+            this.boostLoaded = true;
         }
     },
 
     updateDisplay() {
         if (!this.lastClaim) return;
-        const diffMin = Math.max(0, (Date.now() - this.lastClaim.getTime()) / 60000);
+        const diffSec = Math.max(0, (Date.now() - this.lastClaim.getTime()) / 1000);
+        const cappedSec = Math.min(diffSec, 480 * 60); // 最多8小时
+        const diffMin = diffSec / 60;
         const totalRate = this.baseRate + this.boostRate;
         const amount = Math.floor(diffMin * totalRate);
 
@@ -95,11 +109,28 @@ export const idlePage = {
         const boostEl = document.getElementById('earning-boost');
         const boostValueEl = document.getElementById('boost-value');
         const totalEl = document.getElementById('earning-total');
+        const timeEl = document.getElementById('earning-time');
 
-        if (amountEl) amountEl.textContent = formatNumber(amount);
+        if (amountEl) {
+            if (!this.boostLoaded) {
+                amountEl.textContent = '加载中...';
+            } else {
+                amountEl.textContent = formatNumber(amount);
+            }
+        }
         if (boostValueEl) boostValueEl.textContent = '+' + this.boostRate;
         if (boostEl) boostEl.style.display = this.boostRate > 0 ? 'block' : 'none';
         if (totalEl) totalEl.textContent = '总速率：' + totalRate + ' / 分钟';
+
+        if (timeEl) {
+            const formatTime = (s) => {
+                const h = Math.floor(s / 3600);
+                const m = Math.floor((s % 3600) / 60);
+                const sec = Math.floor(s % 60);
+                return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+            };
+            timeEl.textContent = `已挂机：${formatTime(cappedSec)} / 08:00:00`;
+        }
     },
 
     cleanup() {

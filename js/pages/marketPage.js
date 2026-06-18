@@ -1,6 +1,7 @@
 import { getMarketOrders, getInventory, buyMarketOrder, cancelMarketOrder, placeMarketOrder, getProfile } from '../api.js';
 import { itemImageHTML, formatNumber, showToast, QUALITY_CONFIG, openItemDetail } from '../utils.js';
-import { createIcons } from 'lucide';
+import { createIcons, icons } from 'lucide';
+import { updateGlobalShells } from '../auth.js';
 
 export const marketPage = {
     orders: [],
@@ -22,7 +23,7 @@ export const marketPage = {
                 this.renderContent();
             });
         });
-        createIcons();
+        createIcons({ icons });
     },
 
     async loadData() {
@@ -58,12 +59,11 @@ export const marketPage = {
             this.loadInventoryForSell();
             content.innerHTML = '<div class="skeleton" style="height:200px;"></div>';
         }
-        createIcons();
+        createIcons({ icons });
     },
 
     renderBrowse(container) {
-        const activeOrders = this.orders.filter(o => o.status === 'active');
-        if (activeOrders.length === 0) {
+        if (this.orders.length === 0) {
             container.innerHTML = `
                 <div class="empty-state">
                     <i data-lucide="store"></i>
@@ -75,7 +75,7 @@ export const marketPage = {
 
         container.innerHTML = `
             <div class="market-list">
-                ${activeOrders.map(order => this.orderCard(order, false)).join('')}
+                ${this.orders.map(order => this.orderCard(order, false)).join('')}
             </div>
         `;
 
@@ -87,6 +87,7 @@ export const marketPage = {
                 try {
                     await buyMarketOrder(id);
                     showToast('购买成功！', 'success');
+                    await updateGlobalShells();
                     await this.loadData();
                 } catch (e) {
                     btn.disabled = false;
@@ -97,14 +98,14 @@ export const marketPage = {
         container.querySelectorAll('.market-card-item').forEach(card => {
             card.addEventListener('click', () => {
                 const itemId = parseInt(card.dataset.itemId);
-                const order = activeOrders.find(o => o.item_id === itemId);
+                const order = this.orders.find(o => o.item_id === itemId);
                 if (order) {
                     openItemDetail({
-                        id: order.items.id,
-                        name: order.items.name,
-                        quality: order.items.quality,
-                        image_name: order.items.image_name,
-                        description: order.items.description,
+                        id: order.item_id,
+                        name: order.item_name,
+                        quality: order.item_quality,
+                        image_name: order.item_image,
+                        description: order.item_description,
                         owned: 0
                     });
                 }
@@ -113,7 +114,7 @@ export const marketPage = {
     },
 
     renderMyOrders(container) {
-        const myOrders = this.orders.filter(o => o.seller_id === this.myId && o.status === 'active');
+        const myOrders = this.orders.filter(o => o.seller_id === this.myId);
         if (myOrders.length === 0) {
             container.innerHTML = `
                 <div class="empty-state">
@@ -181,16 +182,13 @@ export const marketPage = {
         const grid = container.querySelector('#sell-item-grid');
         let selectedId = null;
 
-        grid.innerHTML = this.inventory.map(inv => {
-            const item = inv.items;
-            return `
-                <div class="sell-item-card" data-id="${item.id}" data-max="${inv.quantity}">
-                    ${itemImageHTML(item.name, item.quality, item.image_name)}
-                    <div class="sell-item-name">${item.name}</div>
-                    <div class="sell-item-qty">拥有: ${inv.quantity}</div>
-                </div>
-            `;
-        }).join('');
+        grid.innerHTML = this.inventory.map(inv => `
+            <div class="sell-item-card" data-id="${inv.item_id}" data-max="${inv.quantity}">
+                ${itemImageHTML(inv.item_name, inv.item_quality, inv.item_image)}
+                <div class="sell-item-name">${inv.item_name}</div>
+                <div class="sell-item-qty">拥有: ${inv.quantity}</div>
+            </div>
+        `).join('');
 
         grid.querySelectorAll('.sell-item-card').forEach(card => {
             card.addEventListener('click', () => {
@@ -215,30 +213,29 @@ export const marketPage = {
             } catch (e) {}
         });
 
-        createIcons();
+        createIcons({ icons });
     },
 
     orderCard(order, isOwner) {
-        const item = order.items;
-        const cfg = QUALITY_CONFIG[item.quality];
+        const cfg = QUALITY_CONFIG[order.item_quality];
         const total = order.price_per_unit * order.quantity;
         return `
             <div class="market-card">
-                <div class="market-card-item" data-item-id="${item.id}">
-                    ${itemImageHTML(item.name, item.quality, item.image_name)}
+                <div class="market-card-item" data-item-id="${order.item_id}">
+                    ${itemImageHTML(order.item_name, order.item_quality, order.item_image)}
                     <div class="market-card-info">
-                        <div class="market-card-name">${item.name}</div>
-                        <span class="quality-badge quality-${item.quality}">${cfg.label}</span>
+                        <div class="market-card-name">${order.item_name}</div>
+                        <span class="quality-badge quality-${order.item_quality}">${cfg.label}</span>
                     </div>
                 </div>
                 <div class="market-card-meta">
                     <div class="market-card-price">${formatNumber(order.price_per_unit)} x ${order.quantity}</div>
                     <div class="market-card-total">合计: ${formatNumber(total)} 果壳币</div>
-                    ${!isOwner ? `<div class="market-card-seller">卖家: ${order.profiles?.nickname || '未知'}</div>` : ''}
+                    ${!isOwner ? `<div class="market-card-seller">卖家: ${order.seller_nickname || '未知'}</div>` : ''}
                 </div>
                 ${isOwner
-                    ? `<button class="btn btn-danger btn-cancel" data-id="${order.id}">下架</button>`
-                    : `<button class="btn btn-primary btn-buy" data-id="${order.id}">购买</button>`
+                    ? `<button class="btn btn-danger btn-cancel" data-id="${order.order_id}">下架</button>`
+                    : `<button class="btn btn-primary btn-buy" data-id="${order.order_id}">购买</button>`
                 }
             </div>
         `;

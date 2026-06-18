@@ -1,0 +1,50 @@
+<div class="submit-page">
+    <div class="page-header">
+        <h2><i data-lucide="send"></i> 投稿收藏品</h2>
+        <p class="page-subtitle">投稿通过审核后可获得果壳币奖励</p>
+    </div>
+
+    <div class="submit-form card">
+        <h3>投稿信息</h3>
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">物品名称</label>
+                <input type="text" class="form-input" id="submit-name" placeholder="给你的收藏品起个名字" />
+            </div>
+            <div class="form-group">
+                <label class="form-label">品质</label>
+                <select class="form-input" id="submit-quality">
+                    <option value="white">普通</option>
+                    <option value="green">稀有</option>
+                    <option value="blue">珍奇</option>
+                    <option value="purple">史诗</option>
+                    <option value="orange">传说</option>
+                    <option value="red">神圣</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">描述</label>
+                <textarea class="form-input" id="submit-desc" placeholder="描述这个收藏品的故事..." rows="3"></textarea>
+            </div>
+            <div class="form-group">
+                <label class="form-label">权重（越小越稀有，参考：3000/1500/500/250/50/3）</label>
+                <input type="number" class="form-input" id="submit-weight" placeholder="100" value="100" />
+            </div>
+        </div>
+        <button class="btn btn-primary" id="btn-submit">
+            <i data-lucide="send"></i>
+            <span>提交投稿</span>
+        </button>
+    </div>
+
+    <div class="page-header">
+        <h2><i data-lucide="history"></i> 我的投稿</h2>
+    </div>
+
+    <div class="submission-list" id="submission-list">
+        <div class="skeleton" style="height:60px;"></div>
+        <div class="skeleton" style="height:60px;"></div>
+    </div>
+</div>

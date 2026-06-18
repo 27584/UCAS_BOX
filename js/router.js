@@ -5,7 +5,10 @@ import { inventoryPage } from './pages/inventoryPage.js';
 import { marketPage } from './pages/marketPage.js';
 import { collectionPage } from './pages/collectionPage.js';
 import { profilePage } from './pages/profilePage.js';
-import { requireAuth, updateNavVisibility } from './auth.js';
+import { mailPage } from './pages/mailPage.js';
+import { adminPage } from './pages/adminPage.js';
+import { submitPage } from './pages/submitPage.js';
+import { requireAuth, updateNavVisibility, updateGlobalShells, updateMailBadge } from './auth.js';
 import { currentUser } from './supabaseClient.js';
 
 const routes = {
@@ -16,6 +19,9 @@ const routes = {
     market: marketPage,
     collection: collectionPage,
     profile: profilePage,
+    mail: mailPage,
+    admin: adminPage,
+    submit: submitPage,
 };
 
 async function loadTemplate(name) {
@@ -54,14 +60,25 @@ class Router {
         try {
             const html = await loadTemplate(route);
             container.innerHTML = html;
-            page.attachEvents(container);
+            // 调用 render（如果存在）或 attachEvents
+            if (page.render) {
+                page.render(container);
+            } else if (page.attachEvents) {
+                page.attachEvents(container);
+            }
         } catch (e) {
-            console.error('Failed to load template:', e);
-            page.render(container);
+            console.error('Failed to load template:', e.message);
+            if (page.render) {
+                page.render(container);
+            } else if (page.attachEvents) {
+                page.attachEvents(container);
+            }
         }
 
         this.updateActiveNav(route);
         updateNavVisibility();
+        updateGlobalShells();
+        updateMailBadge();
     }
 
     updateActiveNav(route) {

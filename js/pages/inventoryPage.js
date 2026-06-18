@@ -1,6 +1,6 @@
 import { getInventory } from '../api.js';
 import { itemImageHTML, QUALITY_CONFIG, openItemDetail } from '../utils.js';
-import { createIcons } from 'lucide';
+import { createIcons, icons } from 'lucide';
 
 export const inventoryPage = {
     items: [],
@@ -19,27 +19,33 @@ export const inventoryPage = {
                 this.renderGrid(btn.dataset.filter);
             });
         });
-        createIcons();
+        createIcons({ icons });
     },
 
     async loadInventory() {
         try {
             this.items = await getInventory();
+            console.log('Inventory data:', JSON.stringify(this.items, null, 2));
             this.renderGrid('all');
         } catch (e) {
-            document.getElementById('inventory-grid').innerHTML = `
-                <div class="empty-state" style="grid-column:1/-1;">
-                    <p>加载失败</p>
-                </div>
-            `;
+            console.error('Load inventory error:', e);
+            const grid = document.getElementById('inventory-grid');
+            if (grid) {
+                grid.innerHTML = `
+                    <div class="empty-state" style="grid-column:1/-1;">
+                        <p>加载失败</p>
+                    </div>
+                `;
+            }
         }
     },
 
     renderGrid(filter) {
         const grid = document.getElementById('inventory-grid');
+        if (!grid) return;
         const filtered = filter === 'all'
             ? this.items
-            : this.items.filter(i => i.items.quality === filter);
+            : this.items.filter(i => i.item_quality === filter);
 
         if (filtered.length === 0) {
             grid.innerHTML = `
@@ -48,18 +54,17 @@ export const inventoryPage = {
                     <p>这里空空如也</p>
                 </div>
             `;
-            createIcons();
+            createIcons({ icons });
             return;
         }
 
         grid.innerHTML = filtered.map((inv, idx) => {
-            const item = inv.items;
-            const cfg = QUALITY_CONFIG[item.quality];
+            const cfg = QUALITY_CONFIG[inv.item_quality];
             return `
-                <div class="item-card animate-fade-in-up" data-item-id="${item.id}" style="animation-delay:${idx * 0.03}s">
+                <div class="item-card animate-fade-in-up" data-item-id="${inv.item_id}" style="animation-delay:${idx * 0.03}s">
                     <div class="item-quality-bar" style="background:${cfg.color}"></div>
-                    ${itemImageHTML(item.name, item.quality, item.image_name)}
-                    <div class="item-name">${item.name}</div>
+                    ${itemImageHTML(inv.item_name, inv.item_quality, inv.item_image)}
+                    <div class="item-name">${inv.item_name}</div>
                     <div class="item-count">x${inv.quantity}</div>
                 </div>
             `;
@@ -68,14 +73,14 @@ export const inventoryPage = {
         grid.querySelectorAll('.item-card').forEach(card => {
             card.addEventListener('click', () => {
                 const itemId = parseInt(card.dataset.itemId);
-                const inv = this.items.find(i => i.items.id === itemId);
+                const inv = this.items.find(i => i.item_id === itemId);
                 if (inv) {
                     openItemDetail({
-                        id: inv.items.id,
-                        name: inv.items.name,
-                        quality: inv.items.quality,
-                        image_name: inv.items.image_name,
-                        description: inv.items.description,
+                        id: inv.item_id,
+                        name: inv.item_name,
+                        quality: inv.item_quality,
+                        image_name: inv.item_image,
+                        description: inv.item_description,
                         owned: inv.quantity
                     });
                 }

@@ -2,42 +2,6 @@ import { signIn, signUp } from '../api.js';
 import { router } from '../router.js';
 
 export const authPage = {
-    render(container) {
-        container.innerHTML = `
-            <div class="auth-page">
-                <div class="auth-card animate-bounce-in">
-                    <div class="auth-header">
-                        <span class="logo-icon">&#128230;</span>
-                        <h1>UCAS_BOX</h1>
-                        <p>开启你的收藏之旅</p>
-                    </div>
-                    <div class="tabs" id="auth-tabs">
-                        <button class="tab-btn active" data-mode="login">登录</button>
-                        <button class="tab-btn" data-mode="register">注册</button>
-                    </div>
-                    <form id="auth-form" class="auth-form">
-                        <div class="form-group" id="nickname-group" style="display:none;">
-                            <label class="form-label">昵称</label>
-                            <input type="text" class="form-input" id="nickname" placeholder="你的昵称" />
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">邮箱</label>
-                            <input type="email" class="form-input" id="email" placeholder="you@example.com" required />
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">密码</label>
-                            <input type="password" class="form-input" id="password" placeholder="至少6位密码" required />
-                        </div>
-                        <button type="submit" class="btn btn-primary" style="width:100%;">
-                            <span id="auth-btn-text">登录</span>
-                        </button>
-                    </form>
-                </div>
-            </div>
-        `;
-        this.attachEvents(container);
-    },
-
     attachEvents(container) {
         let mode = 'login';
         const tabs = container.querySelectorAll('#auth-tabs .tab-btn');
