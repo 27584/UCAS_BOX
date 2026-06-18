@@ -485,11 +485,11 @@ BEGIN
     SELECT COALESCE(SUM(
         CASE i.quality
             WHEN 'white' THEN 1 * inv.quantity
-            WHEN 'green' THEN 2 * inv.quantity
-            WHEN 'blue' THEN 3 * inv.quantity
-            WHEN 'purple' THEN 4 * inv.quantity
-            WHEN 'orange' THEN 5 * inv.quantity
-            WHEN 'red' THEN 6 * inv.quantity
+            WHEN 'green' THEN 5 * inv.quantity
+            WHEN 'blue' THEN 10 * inv.quantity
+            WHEN 'purple' THEN 20 * inv.quantity
+            WHEN 'orange' THEN 50 * inv.quantity
+            WHEN 'red' THEN 100 * inv.quantity
             ELSE 0
         END
     ), 0) INTO boost_rate
