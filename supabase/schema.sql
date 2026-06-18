@@ -806,6 +806,15 @@ BEGIN
     VALUES (p_user_id, p_item_id, p_quantity)
     ON CONFLICT ON CONSTRAINT inventory_user_id_item_id_key
     DO UPDATE SET quantity = public.inventory.quantity + EXCLUDED.quantity;
+
+    -- 发送系统邮件通知
+    INSERT INTO public.system_mails (user_id, title, content)
+    SELECT
+        p_user_id,
+        '收到管理员发放的物品',
+        '管理员向您发放了「' || i.name || '」×' || p_quantity || '，请查看背包。'
+    FROM public.items i
+    WHERE i.id = p_item_id;
 END;
 $$;
 
