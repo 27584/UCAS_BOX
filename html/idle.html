@@ -1,0 +1,32 @@
+﻿<div class="idle-page">
+    <div class="particle-container" id="idle-particles"></div>
+    <div class="idle-content">
+        <div class="idle-header">
+            <i data-lucide="hourglass"></i>
+            <h2>挂机收益</h2>
+            <p>时间流逝，果壳币自然累积</p>
+        </div>
+        <div class="idle-earning card animate-bounce-in">
+            <div class="earning-label">当前累计</div>
+            <div class="earning-amount" id="earning-amount">0</div>
+            <div class="earning-unit">果壳币</div>
+            <div class="earning-rate">基础速率：<span id="base-rate">10</span> / 分钟</div>
+            <div class="earning-boost" id="earning-boost" style="display:none;">
+                收藏加成：<span id="boost-value">+0</span> / 分钟
+            </div>
+            <div class="earning-total" id="earning-total">总速率：10 / 分钟</div>
+        </div>
+        <button class="btn btn-primary btn-claim" id="btn-claim">
+            <i data-lucide="coins"></i>
+            <span>领取收益</span>
+        </button>
+        <button class="btn btn-secondary btn-watch-ad" id="btn-watch-ad" style="margin-top:12px;width:100%;">
+            <i data-lucide="play-circle"></i>
+            <span>观看广告领取 500 果壳币</span>
+        </button>
+        <div class="idle-tip">
+            <i data-lucide="info"></i>
+            <span>收益会自动累积，随时可领取。离开后仍然继续计算。收藏品品质越高，加成越多！</span>
+        </div>
+    </div>
+</div>

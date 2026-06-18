@@ -1,0 +1,564 @@
+/* UCAS_BOX 各页面特定样式 */
+
+/* ========== 认证页 ========== */
+.auth-page {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 24px;
+}
+
+.auth-card {
+    width: 100%;
+    max-width: 420px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-xl);
+    padding: 40px 32px;
+    backdrop-filter: blur(12px);
+    text-align: center;
+}
+
+.auth-header {
+    margin-bottom: 28px;
+}
+
+.auth-header .logo-icon {
+    font-size: 3rem;
+    display: block;
+    margin-bottom: 12px;
+}
+
+.auth-header h1 {
+    font-family: var(--font-display);
+    font-size: 1.75rem;
+    color: var(--accent-gold);
+    margin-bottom: 6px;
+}
+
+.auth-header p {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.auth-form {
+    margin-top: 20px;
+    text-align: left;
+}
+
+/* ========== 大厅页 ========== */
+.lobby-page {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 32px;
+    padding-top: 20px;
+}
+
+.lobby-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 24px;
+}
+
+.box-container {
+    position: relative;
+    width: 220px;
+    height: 220px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mystery-box {
+    position: relative;
+    width: 160px;
+    height: 140px;
+    cursor: pointer;
+    z-index: 2;
+}
+
+.box-body {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 100px;
+    background: linear-gradient(135deg, #1e293b, #0f172a);
+    border: 2px solid var(--accent-gold);
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 30px rgba(245, 158, 11, 0.15), inset 0 0 20px rgba(245, 158, 11, 0.05);
+}
+
+.box-lid {
+    position: absolute;
+    top: 0;
+    left: -10px;
+    right: -10px;
+    height: 50px;
+    background: linear-gradient(135deg, #334155, #1e293b);
+    border: 2px solid var(--accent-gold);
+    border-radius: var(--radius-md) var(--radius-md) 4px 4px;
+    transform-origin: bottom;
+    z-index: 3;
+}
+
+.box-icon {
+    font-family: var(--font-display);
+    font-size: 3rem;
+    color: var(--accent-gold);
+    font-weight: 700;
+    text-shadow: 0 0 12px rgba(245, 158, 11, 0.3);
+}
+
+.box-glow {
+    position: absolute;
+    inset: -20px;
+    background: radial-gradient(circle, rgba(245, 158, 11, 0.15) 0%, transparent 70%);
+    border-radius: 50%;
+    animation: glowPulse 3s ease-in-out infinite;
+    pointer-events: none;
+}
+
+.box-particles {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.lobby-info h2 {
+    font-family: var(--font-display);
+    font-size: 1.75rem;
+    color: var(--accent-gold);
+    margin-bottom: 8px;
+}
+
+.cooldown-text {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    margin-bottom: 16px;
+}
+
+.countdown-display {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-family: var(--font-display);
+    font-size: 2.5rem;
+    color: var(--accent-gold);
+    margin-bottom: 16px;
+    text-shadow: 0 0 20px rgba(245, 158, 11, 0.2);
+}
+
+.countdown-display svg {
+    width: 32px;
+    height: 32px;
+}
+
+.btn-open {
+    padding: 14px 36px;
+    font-size: 1.1rem;
+}
+
+.lobby-stats {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    justify-content: center;
+    width: 100%;
+    max-width: 600px;
+}
+
+.stat-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.stat-item svg {
+    width: 18px;
+    height: 18px;
+    color: var(--accent-gold);
+}
+
+/* ========== 挂机页 ========== */
+.idle-page {
+    position: relative;
+    min-height: 60vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.idle-content {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+    max-width: 480px;
+    width: 100%;
+}
+
+.idle-header {
+    margin-bottom: 28px;
+}
+
+.idle-header svg {
+    width: 40px;
+    height: 40px;
+    color: var(--accent-gold);
+    margin-bottom: 12px;
+}
+
+.idle-header h2 {
+    font-family: var(--font-display);
+    font-size: 1.75rem;
+    color: var(--accent-gold);
+    margin-bottom: 6px;
+}
+
+.idle-header p {
+    color: var(--text-muted);
+}
+
+.idle-earning {
+    padding: 36px 24px;
+}
+
+.earning-label {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.earning-amount {
+    font-family: var(--font-display);
+    font-size: 4rem;
+    font-weight: 700;
+    color: var(--accent-gold);
+    line-height: 1;
+    text-shadow: 0 0 30px rgba(245, 158, 11, 0.2);
+}
+
+.earning-unit {
+    font-size: 1rem;
+    color: var(--text-muted);
+    margin-top: 8px;
+}
+
+.earning-rate {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-color);
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.btn-claim {
+    width: 100%;
+    padding: 16px;
+    font-size: 1.1rem;
+}
+
+.idle-tip {
+    margin-top: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+.idle-tip svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
+/* ========== 背包页 ========== */
+.inventory-page .page-header {
+    margin-bottom: 24px;
+}
+
+.page-header h2 {
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    color: var(--accent-gold);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.page-header h2 svg {
+    width: 24px;
+    height: 24px;
+}
+
+.filter-bar {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.filter-btn {
+    padding: 6px 14px;
+    background: var(--bg-glass);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-xl);
+    color: var(--text-secondary);
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.filter-btn:hover {
+    border-color: var(--accent-gold);
+    color: var(--text-primary);
+}
+
+.filter-btn.active {
+    background: rgba(245, 158, 11, 0.12);
+    border-color: var(--accent-gold);
+    color: var(--accent-gold);
+}
+
+/* ========== 市场页 ========== */
+.market-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.market-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: var(--bg-glass);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    flex-wrap: wrap;
+}
+
+.market-card-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    min-width: 180px;
+}
+
+.market-card-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.market-card-name {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.market-card-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 140px;
+}
+
+.market-card-price {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.market-card-total {
+    font-weight: 600;
+    color: var(--accent-gold);
+}
+
+.market-card-seller {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.sell-form {
+    max-width: 600px;
+}
+
+.sell-item-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 10px;
+    max-height: 240px;
+    overflow-y: auto;
+    padding: 8px;
+    background: rgba(0,0,0,0.2);
+    border-radius: var(--radius-md);
+}
+
+.sell-item-card {
+    padding: 10px;
+    background: var(--bg-glass);
+    border: 2px solid transparent;
+    border-radius: var(--radius-md);
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.sell-item-card:hover {
+    border-color: var(--accent-gold);
+}
+
+.sell-item-card.selected {
+    border-color: var(--accent-gold);
+    background: rgba(245, 158, 11, 0.08);
+}
+
+.sell-item-name {
+    font-size: 0.75rem;
+    margin-top: 6px;
+    color: var(--text-primary);
+}
+
+.sell-item-qty {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+/* ========== 图鉴页 ========== */
+.collection-progress {
+    margin-bottom: 20px;
+}
+
+.progress-bar {
+    height: 8px;
+    background: rgba(255,255,255,0.06);
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-gold), var(--accent-purple));
+    border-radius: var(--radius-xl);
+    transition: width 0.6s ease;
+}
+
+.progress-text {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.collection-card.unowned {
+    opacity: 0.5;
+}
+
+.collection-card.unowned .item-name {
+    color: var(--text-muted);
+}
+
+/* ========== 个人中心 ========== */
+.profile-page {
+    display: flex;
+    justify-content: center;
+    padding-top: 20px;
+}
+
+.profile-card {
+    width: 100%;
+    max-width: 400px;
+    text-align: center;
+    padding: 40px 32px;
+}
+
+.profile-avatar {
+    width: 80px;
+    height: 80px;
+    margin: 0 auto 16px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent-gold), var(--accent-purple));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-display);
+    font-size: 2rem;
+    font-weight: 700;
+    color: #0f172a;
+    box-shadow: 0 8px 24px rgba(245, 158, 11, 0.2);
+}
+
+.profile-card h2 {
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.profile-email {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin-bottom: 24px;
+}
+
+.profile-stats {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border-color);
+}
+
+.profile-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.profile-stat svg {
+    width: 20px;
+    height: 20px;
+    color: var(--accent-gold);
+}
+
+.stat-value {
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--accent-gold);
+}
+
+.stat-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+    .earning-amount {
+        font-size: 3rem;
+    }
+    .market-card {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .market-card-meta {
+        width: 100%;
+    }
+}

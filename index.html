@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>快来开盒朕欲萎喵喵喵</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="css/pages.css">
+    <link rel="stylesheet" href="css/animations.css">
+    <script type="importmap">
+    {
+        "imports": {
+            "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.39.0",
+            "lucide": "https://esm.sh/lucide@0.294.0"
+        }
+    }
+    </script>
+</head>
+<body>
+    <div id="app">
+        <!-- 顶部导航 -->
+        <header class="top-nav" id="top-nav" style="display:none;">
+            <div class="nav-brand">
+                <span class="logo-icon">&#128230;</span>
+                <span class="logo-text">UCAS_BOX</span>
+            </div>
+            <nav class="nav-links">
+                <a href="#lobby" data-route="lobby" class="nav-link">
+                    <i data-lucide="box"></i>
+                    <span>开盒</span>
+                </a>
+                <a href="#idle" data-route="idle" class="nav-link">
+                    <i data-lucide="clock"></i>
+                    <span>挂机</span>
+                </a>
+                <a href="#inventory" data-route="inventory" class="nav-link">
+                    <i data-lucide="backpack"></i>
+                    <span>背包</span>
+                </a>
+                <a href="#market" data-route="market" class="nav-link">
+                    <i data-lucide="store"></i>
+                    <span>市场</span>
+                </a>
+                <a href="#collection" data-route="collection" class="nav-link">
+                    <i data-lucide="book-open"></i>
+                    <span>图鉴</span>
+                </a>
+                <a href="#profile" data-route="profile" class="nav-link">
+                    <i data-lucide="user"></i>
+                    <span>我的</span>
+                </a>
+            </nav>
+            <div class="nav-user">
+                <span class="shell-badge">
+                    <i data-lucide="coins"></i>
+                    <span id="global-shells">0</span>
+                </span>
+            </div>
+        </header>
+
+        <!-- 主内容区 -->
+        <main id="main-content"></main>
+
+        <!-- 底部导航（移动端） -->
+        <nav class="bottom-nav" id="bottom-nav" style="display:none;">
+            <a href="#lobby" data-route="lobby" class="nav-link">
+                <i data-lucide="box"></i>
+                <span>开盒</span>
+            </a>
+            <a href="#idle" data-route="idle" class="nav-link">
+                <i data-lucide="clock"></i>
+                <span>挂机</span>
+            </a>
+            <a href="#inventory" data-route="inventory" class="nav-link">
+                <i data-lucide="backpack"></i>
+                <span>背包</span>
+            </a>
+            <a href="#market" data-route="market" class="nav-link">
+                <i data-lucide="store"></i>
+                <span>市场</span>
+            </a>
+            <a href="#profile" data-route="profile" class="nav-link">
+                <i data-lucide="user"></i>
+                <span>我的</span>
+            </a>
+        </nav>
+    </div>
+
+    <!-- 全局消息提示 -->
+    <div id="toast-container"></div>
+
+    <!-- 掉落展示弹层 -->
+    <div id="drop-modal" class="modal" style="display:none;">
+        <div class="modal-overlay"></div>
+        <div class="modal-content drop-reveal">
+            <div class="drop-glow" id="drop-glow"></div>
+            <div class="drop-item" id="drop-item">
+                <div class="item-placeholder" id="drop-placeholder"></div>
+                <h3 id="drop-name"></h3>
+                <span class="quality-badge" id="drop-quality"></span>
+            </div>
+            <button class="btn btn-primary" id="drop-close">收下</button>
+        </div>
+    </div>
+
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>

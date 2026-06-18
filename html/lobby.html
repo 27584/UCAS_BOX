@@ -1,0 +1,36 @@
+﻿<div class="lobby-page">
+    <div class="lobby-hero">
+        <div class="box-container" id="box-container">
+            <div class="mystery-box" id="mystery-box">
+                <div class="box-lid" id="box-lid"></div>
+                <div class="box-body">
+                    <span class="box-icon">?</span>
+                </div>
+                <div class="box-glow"></div>
+            </div>
+            <div class="box-particles" id="box-particles"></div>
+        </div>
+        <div class="lobby-info">
+            <h2>神秘宝盒</h2>
+            <p class="cooldown-text" id="cooldown-text">点击开启，获取随机收藏品</p>
+            <div class="countdown-display" id="countdown-display" style="display:none;">
+                <i data-lucide="timer"></i>
+                <span id="countdown-timer">00:00</span>
+            </div>
+            <button class="btn btn-primary btn-open" id="btn-open">
+                <i data-lucide="sparkles"></i>
+                <span>开启宝盒</span>
+            </button>
+        </div>
+    </div>
+    <div class="lobby-stats card">
+        <div class="stat-item">
+            <i data-lucide="clock"></i>
+            <span>冷却时间：10 分钟</span>
+        </div>
+        <div class="stat-item">
+            <i data-lucide="gem"></i>
+            <span>可能获得：普通 ~ 神圣</span>
+        </div>
+    </div>
+</div>
