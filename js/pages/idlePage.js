@@ -46,7 +46,7 @@ export const idlePage = {
             btnAd.disabled = true;
             try {
                 const reward = await claimAdRewards();
-                const adUrl = 'https://www.bilibili.com/video/BV17K411M7rX/';
+                const adUrl = 'https://27584.github.io/Man/';
                 window.open(adUrl, '_blank');
                 await updateGlobalShells();
                 showToast(`恭喜！获得 ${reward} 果壳币`, 'success');
