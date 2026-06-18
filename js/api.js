@@ -26,12 +26,22 @@ export async function signUp(email, password, nickname) {
         const msg = error.message?.toLowerCase?.() || '';
         if (msg.includes('rate limit') || msg.includes('429') || msg.includes('over email send rate limit')) {
             showToast('操作太频繁，请 1 小时后再试', 'error');
+        } else if (msg.includes('already registered') || msg.includes('already exists')) {
+            showToast('该邮箱已注册，请直接登录', 'error');
         } else {
             showToast(error.message, 'error');
         }
         throw error;
     }
-    showToast('注册成功，请查收邮件验证（如未开启验证则可直接登录）', 'success');
+    
+    // Supabase 对已存在邮箱会静默返回成功（不发送邮件）
+    // 检查 identities 是否为空来判断是否真正注册
+    if (data?.user?.identities?.length === 0) {
+        showToast('该邮箱已注册，请直接登录', 'error');
+        throw new Error('该邮箱已注册');
+    }
+    
+    showToast('注册成功，请查收邮件验证', 'success');
     return data;
 }
 
@@ -118,8 +128,14 @@ export async function getInventory() {
     return rpc('get_user_inventory');
 }
 
-export async function getMarketOrders() {
-    return rpc('get_market_orders');
+export async function getMarketOrders(page = 1, limit = 10, quality = null, sort = 'newest', search = null) {
+    return rpc('get_market_orders', {
+        p_page: page,
+        p_limit: limit,
+        p_quality: quality,
+        p_sort: sort,
+        p_search: search
+    });
 }
 
 export async function getItems() {

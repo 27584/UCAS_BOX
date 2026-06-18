@@ -3,11 +3,19 @@ import { itemImageHTML, formatNumber, showToast, QUALITY_CONFIG, openItemDetail 
 import { createIcons, icons } from 'lucide';
 import { updateGlobalShells } from '../auth.js';
 
+const PAGE_SIZE = 10;
+
 export const marketPage = {
     orders: [],
     inventory: [],
     myId: null,
     tab: 'browse',
+    page: 1,
+    totalCount: 0,
+    filterQuality: '',
+    filterSort: 'newest',
+    filterSearch: '',
+    isLoading: false,
 
     render(container) {
         this.attachEvents(container);
@@ -18,25 +26,77 @@ export const marketPage = {
         container.querySelectorAll('.tab-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 this.tab = btn.dataset.tab;
+                this.page = 1;
                 container.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 this.renderContent();
             });
         });
+
+        // 筛选事件
+        const filterQuality = document.getElementById('filter-quality');
+        const filterSort = document.getElementById('filter-sort');
+        const filterSearch = document.getElementById('filter-search');
+
+        filterQuality?.addEventListener('change', (e) => {
+            this.filterQuality = e.target.value;
+            this.page = 1;
+            this.loadBrowseData();
+        });
+
+        filterSort?.addEventListener('change', (e) => {
+            this.filterSort = e.target.value;
+            this.page = 1;
+            this.loadBrowseData();
+        });
+
+        let searchTimeout;
+        filterSearch?.addEventListener('input', (e) => {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                this.filterSearch = e.target.value.trim();
+                this.page = 1;
+                this.loadBrowseData();
+            }, 300);
+        });
+
         createIcons({ icons });
     },
 
     async loadData() {
         try {
-            const [orders, profile] = await Promise.all([
-                getMarketOrders(),
-                getProfile()
-            ]);
-            this.orders = orders;
+            const profile = await getProfile();
             this.myId = profile?.id;
             this.renderContent();
         } catch (e) {
             console.error(e);
+        }
+    },
+
+    async loadBrowseData() {
+        if (this.isLoading) return;
+        this.isLoading = true;
+
+        const content = document.getElementById('market-content');
+        content.innerHTML = '<div class="skeleton" style="height:200px;"></div>';
+
+        try {
+            const data = await getMarketOrders(
+                this.page,
+                PAGE_SIZE,
+                this.filterQuality || null,
+                this.filterSort,
+                this.filterSearch || null
+            );
+            
+            this.orders = data || [];
+            this.totalCount = data[0]?.total_count || 0;
+            this.renderBrowse(content);
+        } catch (e) {
+            console.error(e);
+            content.innerHTML = '<div class="empty-state"><p>加载失败</p></div>';
+        } finally {
+            this.isLoading = false;
         }
     },
 
@@ -51,15 +111,38 @@ export const marketPage = {
 
     renderContent() {
         const content = document.getElementById('market-content');
+        const filterBar = document.getElementById('market-filter');
+        const pagination = document.getElementById('market-pagination');
+
         if (this.tab === 'browse') {
-            this.renderBrowse(content);
+            filterBar.style.display = 'flex';
+            pagination.style.display = 'flex';
+            this.loadBrowseData();
         } else if (this.tab === 'my') {
-            this.renderMyOrders(content);
+            filterBar.style.display = 'none';
+            pagination.style.display = 'none';
+            this.loadMyOrdersData();
         } else if (this.tab === 'sell') {
+            filterBar.style.display = 'none';
+            pagination.style.display = 'none';
             this.loadInventoryForSell();
             content.innerHTML = '<div class="skeleton" style="height:200px;"></div>';
         }
         createIcons({ icons });
+    },
+
+    async loadMyOrdersData() {
+        const content = document.getElementById('market-content');
+        content.innerHTML = '<div class="skeleton" style="height:200px;"></div>';
+        
+        try {
+            // 获取所有订单来筛选我的订单（或者创建专门的 RPC）
+            const allOrders = await getMarketOrders(1, 1000);
+            const myOrders = (allOrders || []).filter(o => o.seller_id === this.myId);
+            this.renderMyOrders(content, myOrders);
+        } catch (e) {
+            content.innerHTML = '<div class="empty-state"><p>加载失败</p></div>';
+        }
     },
 
     renderBrowse(container) {
@@ -67,9 +150,10 @@ export const marketPage = {
             container.innerHTML = `
                 <div class="empty-state">
                     <i data-lucide="store"></i>
-                    <p>市场暂无订单</p>
+                    <p>没有符合条件的订单</p>
                 </div>
             `;
+            this.renderPagination(0);
             return;
         }
 
@@ -78,6 +162,9 @@ export const marketPage = {
                 ${this.orders.map(order => this.orderCard(order, false)).join('')}
             </div>
         `;
+
+        const totalPages = Math.ceil(this.totalCount / PAGE_SIZE);
+        this.renderPagination(totalPages);
 
         container.querySelectorAll('.btn-buy').forEach(btn => {
             btn.addEventListener('click', async (e) => {
@@ -88,7 +175,7 @@ export const marketPage = {
                     await buyMarketOrder(id);
                     showToast('购买成功！', 'success');
                     await updateGlobalShells();
-                    await this.loadData();
+                    this.loadBrowseData();
                 } catch (e) {
                     btn.disabled = false;
                 }
@@ -111,10 +198,57 @@ export const marketPage = {
                 }
             });
         });
+
+        createIcons({ icons });
     },
 
-    renderMyOrders(container) {
-        const myOrders = this.orders.filter(o => o.seller_id === this.myId);
+    renderPagination(totalPages) {
+        const pagination = document.getElementById('market-pagination');
+        if (!pagination || totalPages <= 1) {
+            if (pagination) pagination.style.display = totalPages <= 1 ? 'none' : 'flex';
+            return;
+        }
+
+        pagination.style.display = 'flex';
+        
+        // 限制显示的页码数量
+        const maxVisiblePages = 5;
+        let startPage = Math.max(1, this.page - Math.floor(maxVisiblePages / 2));
+        let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+        if (endPage - startPage < maxVisiblePages - 1) {
+            startPage = Math.max(1, endPage - maxVisiblePages + 1);
+        }
+
+        pagination.innerHTML = `
+            <button class="page-btn" data-page="${this.page - 1}" ${this.page === 1 ? 'disabled' : ''}>
+                <i data-lucide="chevron-left"></i>
+            </button>
+            ${startPage > 1 ? '<button class="page-btn" data-page="1">1</button>' : ''}
+            ${startPage > 2 ? '<span class="page-ellipsis">...</span>' : ''}
+            ${Array.from({ length: endPage - startPage + 1 }, (_, i) => startPage + i).map(p => `
+                <button class="page-btn ${p === this.page ? 'active' : ''}" data-page="${p}">${p}</button>
+            `).join('')}
+            ${endPage < totalPages - 1 ? '<span class="page-ellipsis">...</span>' : ''}
+            ${endPage < totalPages ? `<button class="page-btn" data-page="${totalPages}">${totalPages}</button>` : ''}
+            <button class="page-btn" data-page="${this.page + 1}" ${this.page === totalPages ? 'disabled' : ''}>
+                <i data-lucide="chevron-right"></i>
+            </button>
+        `;
+
+        pagination.querySelectorAll('.page-btn:not([disabled])').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const p = parseInt(btn.dataset.page);
+                if (p >= 1 && p <= totalPages && p !== this.page) {
+                    this.page = p;
+                    this.loadBrowseData();
+                }
+            });
+        });
+
+        createIcons({ icons });
+    },
+
+    renderMyOrders(container, myOrders) {
         if (myOrders.length === 0) {
             container.innerHTML = `
                 <div class="empty-state">
@@ -138,12 +272,14 @@ export const marketPage = {
                 try {
                     await cancelMarketOrder(id);
                     showToast('已下架', 'info');
-                    await this.loadData();
+                    this.loadMyOrdersData();
                 } catch (e) {
                     btn.disabled = false;
                 }
             });
         });
+
+        createIcons({ icons });
     },
 
     renderSellForm() {
@@ -209,7 +345,7 @@ export const marketPage = {
                 showToast('发布成功', 'success');
                 this.tab = 'my';
                 document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === 'my'));
-                await this.loadData();
+                this.renderContent();
             } catch (e) {}
         });
 

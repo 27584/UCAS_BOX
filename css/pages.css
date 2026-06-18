@@ -916,6 +916,66 @@
     color: white;
 }
 
+/* 市场筛选 */
+.market-filter {
+    display: flex;
+    padding: 12px 0;
+    margin-bottom: 12px;
+}
+
+.filter-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+/* 分页 */
+.pagination {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    padding: 16px 0;
+    margin-top: 12px;
+}
+
+.page-btn {
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-glass);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.page-btn:hover:not([disabled]):not(.active) {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--accent-gold);
+}
+
+.page-btn.active {
+    background: var(--accent-gold);
+    color: #0f172a;
+    border-color: var(--accent-gold);
+    font-weight: 600;
+}
+
+.page-btn[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.page-ellipsis {
+    color: var(--text-secondary);
+    padding: 0 4px;
+}
+
 /* 响应式*/
 @media (max-width: 768px) {
     .earning-amount {

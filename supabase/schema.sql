@@ -515,10 +515,16 @@ END;
 $$;
 
 -- ============================================================
--- 13. RPC 函数：获取市场订单
+-- 13. RPC 函数：获取市场订单（分页+筛选）
 -- ============================================================
-DROP FUNCTION IF EXISTS public.get_market_orders();
-CREATE OR REPLACE FUNCTION public.get_market_orders()
+DROP FUNCTION IF EXISTS public.get_market_orders(INT, INT, TEXT, TEXT, TEXT);
+CREATE OR REPLACE FUNCTION public.get_market_orders(
+    p_page INT DEFAULT 1,
+    p_limit INT DEFAULT 10,
+    p_quality TEXT DEFAULT NULL,
+    p_sort TEXT DEFAULT 'newest',
+    p_search TEXT DEFAULT NULL
+)
 RETURNS TABLE(
     order_id BIGINT,
     seller_id UUID,
@@ -532,12 +538,18 @@ RETURNS TABLE(
     item_quality TEXT,
     item_image TEXT,
     item_description TEXT,
-    seller_nickname TEXT
+    seller_nickname TEXT,
+    total_count BIGINT
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
+DECLARE
+    offset_val INT;
+    quality_order INT;
 BEGIN
+    offset_val := (COALESCE(p_page, 1) - 1) * COALESCE(p_limit, 10);
+
     RETURN QUERY
     SELECT
         mo.id AS order_id,
@@ -552,12 +564,39 @@ BEGIN
         i.quality AS item_quality,
         i.image_name AS item_image,
         i.description AS item_description,
-        p.nickname AS seller_nickname
+        p.nickname AS seller_nickname,
+        (
+            SELECT COUNT(*) FROM public.market_orders mo2
+            JOIN public.items i2 ON mo2.item_id = i2.id
+            LEFT JOIN public.profiles p2 ON mo2.seller_id = p2.id
+            WHERE mo2.status = 'active'
+            AND (p_quality IS NULL OR i2.quality = p_quality)
+            AND (p_search IS NULL OR i2.name ILIKE '%' || p_search || '%' OR p2.nickname ILIKE '%' || p_search || '%')
+        )::BIGINT AS total_count
     FROM public.market_orders mo
     JOIN public.items i ON mo.item_id = i.id
     LEFT JOIN public.profiles p ON mo.seller_id = p.id
     WHERE mo.status = 'active'
-    ORDER BY mo.created_at DESC;
+    AND (p_quality IS NULL OR i.quality = p_quality)
+    AND (p_search IS NULL OR i.name ILIKE '%' || p_search || '%' OR p.nickname ILIKE '%' || p_search || '%')
+    ORDER BY
+        CASE COALESCE(p_sort, 'newest')
+            WHEN 'price-low' THEN mo.price_per_unit
+            WHEN 'price-high' THEN -mo.price_per_unit
+            WHEN 'quality' THEN
+                CASE i.quality
+                    WHEN 'red' THEN 1
+                    WHEN 'orange' THEN 2
+                    WHEN 'purple' THEN 3
+                    WHEN 'blue' THEN 4
+                    WHEN 'green' THEN 5
+                    WHEN 'white' THEN 6
+                    ELSE 7
+                END
+            ELSE EXTRACT(EPOCH FROM mo.created_at)
+        END DESC
+    LIMIT p_limit
+    OFFSET offset_val;
 END;
 $$;
 
