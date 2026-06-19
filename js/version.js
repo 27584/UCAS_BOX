@@ -2,11 +2,11 @@
 // 版本信息与更新日志
 // ============================================
 
-export const VERSION = 'v0.2.2_beta';
+export const VERSION = 'v0.2.3_beta';
 
 export const CHANGELOG = [
       {
-        version: 'v0.2.2_beta',
+        version: 'v0.2.3_beta',
         date: '2026-06-19',
         type: 'feature',
         features: [
@@ -23,7 +23,7 @@ export const CHANGELOG = [
         type: 'feature',
         features: [
             '开盒系统 - 每10分钟可开启一次神秘盒子',
-            '挂机收益 - 离线自动积累果壳币',
+            '挂机收益 - 在线/离线自动积累果壳币',
             '背包系统 - 存放和管理收藏品',
             '市场系统 - 玩家间自由交易物品',
             '收藏图鉴 - 追踪已收集的物品',
