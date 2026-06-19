@@ -79,6 +79,24 @@
             </div>
         </header>
 
+        <!-- 邮箱未验证提示 -->
+        <div id="email-unverified-banner" class="email-banner" style="display:none;">
+            <div class="email-banner-content">
+                <i data-lucide="alert-circle"></i>
+                <div class="email-banner-text">
+                    <span>您的邮箱 <strong id="unverified-email"></strong> 尚未验证</span>
+                    <small>验证邮箱后可正常使用所有功能</small>
+                </div>
+            </div>
+            <button class="btn btn-small" id="resend-verification-btn" onclick="resendVerificationEmail()">
+                <i data-lucide="send"></i>
+                重新发送验证邮件
+            </button>
+            <button class="email-banner-close" onclick="document.getElementById('email-unverified-banner').style.display='none'">
+                <i data-lucide="x"></i>
+            </button>
+        </div>
+
         <!-- 主内容区 -->
         <main id="main-content"></main>
 

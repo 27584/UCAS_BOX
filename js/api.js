@@ -51,6 +51,8 @@ export async function signIn(email, password) {
         const msg = error.message?.toLowerCase?.() || '';
         if (msg.includes('rate limit') || msg.includes('429') || msg.includes('over email send rate limit')) {
             showToast('操作太频繁，请 1 小时后再试', 'error');
+        } else if (msg.includes('email not confirmed') || msg.includes('not confirmed')) {
+            showToast('邮箱尚未验证，请查收验证邮件后登录', 'error');
         } else {
             showToast(error.message, 'error');
         }
@@ -128,13 +130,14 @@ export async function getInventory() {
     return rpc('get_user_inventory');
 }
 
-export async function getMarketOrders(page = 1, limit = 10, quality = null, sort = 'newest', search = null) {
+export async function getMarketOrders(page = 1, limit = 10, quality = null, sort = 'newest', search = null, type = null) {
     return rpc('get_market_orders', {
         p_page: page,
         p_limit: limit,
         p_quality: quality,
         p_sort: sort,
-        p_search: search
+        p_search: search,
+        p_type: type
     });
 }
 
@@ -211,5 +214,12 @@ export async function rejectSubmission(submissionId, adminNote) {
     return rpc('reject_submission', {
         p_submission_id: submissionId,
         p_admin_note: adminNote
+    });
+}
+
+// 使用改名卡修改昵称
+export async function useRenameCard(newNickname) {
+    return rpc('use_rename_card', {
+        p_new_nickname: newNickname
     });
 }

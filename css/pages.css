@@ -47,6 +47,71 @@
     text-align: left;
 }
 
+.auth-footer {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-color);
+    text-align: center;
+}
+
+.resend-section {
+    text-align: left;
+}
+
+.resend-label {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin-bottom: 10px;
+}
+
+.resend-row {
+    display: flex;
+    gap: 8px;
+}
+
+.resend-row .form-input {
+    flex: 1;
+    padding: 10px 14px;
+    font-size: 0.9rem;
+}
+
+.resend-row .btn-ghost {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.resend-row .btn-ghost:hover:not(:disabled) {
+    border-color: var(--accent-gold);
+    color: var(--accent-gold);
+    background: rgba(245, 158, 11, 0.08);
+}
+
+.resend-row .btn-ghost:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.resend-row .btn-ghost svg {
+    width: 16px;
+    height: 16px;
+}
+
+.spin {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
 /* ========== 大厅页 ========== */
 .lobby-page {
     display: flex;

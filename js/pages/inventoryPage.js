@@ -4,14 +4,31 @@ import { createIcons, icons } from 'lucide';
 
 export const inventoryPage = {
     items: [],
+    filterType: '',
 
     render(container) {
         this.attachEvents(container);
         this.loadInventory();
     },
 
+    loadInventory() {
+        return this._loadInventory();
+    },
+
+    _loadInventory() {
+        const self = this;
+        getInventory().then(items => {
+            self.items = items || [];
+            self.renderGrid('all');
+        }).catch(e => {
+            console.error('Load inventory error:', e);
+        });
+    },
+
     attachEvents(container) {
         const buttons = container.querySelectorAll('.filter-btn');
+        const filterType = document.getElementById('inventory-filter-type');
+        
         buttons.forEach(btn => {
             btn.addEventListener('click', () => {
                 buttons.forEach(b => b.classList.remove('active'));
@@ -19,6 +36,13 @@ export const inventoryPage = {
                 this.renderGrid(btn.dataset.filter);
             });
         });
+        
+        filterType?.addEventListener('change', (e) => {
+            this.filterType = e.target.value;
+            const activeBtn = container.querySelector('.filter-btn.active');
+            this.renderGrid(activeBtn?.dataset.filter || 'all');
+        });
+        
         createIcons({ icons });
     },
 
@@ -40,12 +64,20 @@ export const inventoryPage = {
         }
     },
 
+    refreshInventory() {
+        this.loadInventory();
+    },
+
     renderGrid(filter) {
         const grid = document.getElementById('inventory-grid');
         if (!grid) return;
-        const filtered = filter === 'all'
+        let filtered = filter === 'all'
             ? this.items
             : this.items.filter(i => i.item_quality === filter);
+        
+        if (this.filterType) {
+            filtered = filtered.filter(i => i.item_type === this.filterType);
+        }
 
         if (filtered.length === 0) {
             grid.innerHTML = `
@@ -81,6 +113,7 @@ export const inventoryPage = {
                         quality: inv.item_quality,
                         image_name: inv.item_image,
                         description: inv.item_description,
+                        item_type: inv.item_type,
                         owned: inv.quantity
                     });
                 }

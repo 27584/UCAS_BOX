@@ -66,12 +66,21 @@ class Router {
             } else if (page.attachEvents) {
                 page.attachEvents(container);
             }
+            
+            // 背包页面挂载刷新方法
+            if (route === 'inventory' && page.refreshInventory) {
+                window.refreshInventory = () => page.refreshInventory();
+            }
         } catch (e) {
             console.error('Failed to load template:', e.message);
             if (page.render) {
                 page.render(container);
             } else if (page.attachEvents) {
                 page.attachEvents(container);
+            }
+            
+            if (route === 'inventory' && page.refreshInventory) {
+                window.refreshInventory = () => page.refreshInventory();
             }
         }
 

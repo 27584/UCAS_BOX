@@ -1,7 +1,15 @@
-﻿<div class="inventory-page">
+<div class="inventory-page">
     <div class="page-header">
         <h2><i data-lucide="backpack"></i> 我的背包</h2>
         <div class="filter-bar">
+            <select class="form-input" id="inventory-filter-type" style="width:auto;margin-right:12px;">
+                <option value="">全部类型</option>
+                <option value="collection">收藏品</option>
+                <option value="consumable">消耗品</option>
+                <option value="equipment">装备</option>
+                <option value="material">材料</option>
+                <option value="currency">货币</option>
+            </select>
             <button class="filter-btn active" data-filter="all">全部</button>
             <button class="filter-btn" data-filter="white">普通</button>
             <button class="filter-btn" data-filter="green">稀有</button>

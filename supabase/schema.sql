@@ -25,8 +25,18 @@ CREATE TABLE IF NOT EXISTS public.items (
     image_name TEXT NOT NULL,
     description TEXT,
     drop_weight INT DEFAULT 100,
+    item_type TEXT DEFAULT 'collection' CHECK (item_type IN ('collection', 'consumable', 'equipment', 'material', 'currency')),
     created_at TIMESTAMPTZ DEFAULT now()
 );
+
+ALTER TABLE public.items ADD COLUMN IF NOT EXISTS item_type TEXT DEFAULT 'collection';
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'items_item_type_check') THEN
+        ALTER TABLE public.items ADD CONSTRAINT items_item_type_check CHECK (item_type IN ('collection', 'consumable', 'equipment', 'material', 'currency'));
+    END IF;
+END $$;
 
 -- ============================================================
 -- 3. 用户背包
@@ -486,7 +496,7 @@ $$;
 -- ============================================================
 DROP FUNCTION IF EXISTS public.get_user_inventory();
 CREATE OR REPLACE FUNCTION public.get_user_inventory()
-RETURNS TABLE(inv_id BIGINT, item_id BIGINT, quantity INT, acquired_at TIMESTAMPTZ, item_name TEXT, item_quality TEXT, item_image TEXT, item_description TEXT)
+RETURNS TABLE(inv_id BIGINT, item_id BIGINT, quantity INT, acquired_at TIMESTAMPTZ, item_name TEXT, item_quality TEXT, item_image TEXT, item_description TEXT, item_type TEXT)
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
@@ -506,7 +516,8 @@ BEGIN
         i.name AS item_name,
         i.quality AS item_quality,
         i.image_name AS item_image,
-        i.description AS item_description
+        i.description AS item_description,
+        i.item_type AS item_type
     FROM public.inventory inv
     JOIN public.items i ON inv.item_id = i.id
     WHERE inv.user_id = user_uuid
@@ -514,16 +525,80 @@ BEGIN
 END;
 $$;
 
+-- 使用改名卡修改昵称
+CREATE OR REPLACE FUNCTION public.use_rename_card(p_new_nickname TEXT)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+    item_def_id BIGINT;
+    inv_id BIGINT;
+    new_nickname TEXT;
+BEGIN
+    IF user_uuid IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '请先登录');
+    END IF;
+
+    -- 检查昵称长度
+    IF p_new_nickname IS NULL OR char_length(trim(p_new_nickname)) < 2 THEN
+        RETURN jsonb_build_object('success', false, 'message', '昵称至少需要2个字符');
+    END IF;
+    
+    IF char_length(trim(p_new_nickname)) > 20 THEN
+        RETURN jsonb_build_object('success', false, 'message', '昵称不能超过20个字符');
+    END IF;
+    
+    new_nickname := trim(p_new_nickname);
+    
+    -- 检查是否包含非法字符
+    IF new_nickname LIKE '%<%' OR new_nickname LIKE '%>%' OR new_nickname LIKE '%''%' 
+       OR new_nickname LIKE '%"%' OR new_nickname LIKE '%\\%' OR new_nickname LIKE '%%;(%' OR new_nickname LIKE '%)%' THEN
+        RETURN jsonb_build_object('success', false, 'message', '昵称不能包含特殊字符');
+    END IF;
+    
+    -- 查找改名卡物品定义
+    SELECT id INTO item_def_id FROM public.items WHERE name = '改名卡' AND item_type = 'consumable';
+    
+    IF item_def_id IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '改名卡不存在');
+    END IF;
+    
+    -- 检查用户是否拥有改名卡
+    SELECT id INTO inv_id FROM public.inventory WHERE user_id = user_uuid AND item_id = item_def_id;
+    
+    IF inv_id IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '你没有改名卡');
+    END IF;
+    
+       -- 扣除改名卡（数量减1，如果只剩1个则删除记录）
+    UPDATE public.inventory SET quantity = quantity - 1 WHERE id = inv_id;
+    DELETE FROM public.inventory WHERE id = inv_id AND quantity <= 0;
+    
+    -- 检查昵称是否已被使用
+    IF EXISTS (SELECT 1 FROM public.profiles WHERE nickname = new_nickname AND id != user_uuid) THEN
+        RETURN jsonb_build_object('success', false, 'message', '该昵称已被使用');
+    END IF;
+    
+    -- 更新用户昵称
+    UPDATE public.profiles SET nickname = new_nickname WHERE id = user_uuid;
+    
+    RETURN jsonb_build_object('success', true, 'message', '昵称修改成功', 'new_nickname', new_nickname);
+END;
+$$;
+
 -- ============================================================
 -- 13. RPC 函数：获取市场订单（分页+筛选）
 -- ============================================================
-DROP FUNCTION IF EXISTS public.get_market_orders(INT, INT, TEXT, TEXT, TEXT);
+DROP FUNCTION IF EXISTS public.get_market_orders(INT, INT, TEXT, TEXT, TEXT, TEXT);
 CREATE OR REPLACE FUNCTION public.get_market_orders(
     p_page INT DEFAULT 1,
     p_limit INT DEFAULT 10,
     p_quality TEXT DEFAULT NULL,
     p_sort TEXT DEFAULT 'newest',
-    p_search TEXT DEFAULT NULL
+    p_search TEXT DEFAULT NULL,
+    p_type TEXT DEFAULT NULL
 )
 RETURNS TABLE(
     order_id BIGINT,
@@ -538,6 +613,7 @@ RETURNS TABLE(
     item_quality TEXT,
     item_image TEXT,
     item_description TEXT,
+    item_type TEXT,
     seller_nickname TEXT,
     total_count BIGINT
 )
@@ -564,6 +640,7 @@ BEGIN
         i.quality AS item_quality,
         i.image_name AS item_image,
         i.description AS item_description,
+        i.item_type AS item_type,
         p.nickname AS seller_nickname,
         (
             SELECT COUNT(*) FROM public.market_orders mo2
@@ -571,6 +648,7 @@ BEGIN
             LEFT JOIN public.profiles p2 ON mo2.seller_id = p2.id
             WHERE mo2.status = 'active'
             AND (p_quality IS NULL OR i2.quality = p_quality)
+            AND (p_type IS NULL OR i2.item_type = p_type)
             AND (p_search IS NULL OR i2.name ILIKE '%' || p_search || '%' OR p2.nickname ILIKE '%' || p_search || '%')
         )::BIGINT AS total_count
     FROM public.market_orders mo
@@ -578,6 +656,7 @@ BEGIN
     LEFT JOIN public.profiles p ON mo.seller_id = p.id
     WHERE mo.status = 'active'
     AND (p_quality IS NULL OR i.quality = p_quality)
+    AND (p_type IS NULL OR i.item_type = p_type)
     AND (p_search IS NULL OR i.name ILIKE '%' || p_search || '%' OR p.nickname ILIKE '%' || p_search || '%')
     ORDER BY
         CASE COALESCE(p_sort, 'newest')
@@ -605,7 +684,7 @@ $$;
 -- ============================================================
 DROP FUNCTION IF EXISTS public.get_collection_progress();
 CREATE OR REPLACE FUNCTION public.get_collection_progress()
-RETURNS TABLE(item_id BIGINT, item_name TEXT, item_quality TEXT, item_image TEXT, item_description TEXT, owned BIGINT)
+RETURNS TABLE(item_id BIGINT, item_name TEXT, item_quality TEXT, item_image TEXT, item_description TEXT, item_type TEXT, owned BIGINT)
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
@@ -623,6 +702,7 @@ BEGIN
         i.quality,
         i.image_name,
         i.description,
+        i.item_type,
         COALESCE(inv.quantity, 0)::BIGINT AS owned
     FROM public.items i
     LEFT JOIN public.inventory inv ON inv.item_id = i.id AND inv.user_id = user_uuid
@@ -862,7 +942,7 @@ $$;
 -- ============================================================
 DROP FUNCTION IF EXISTS public.admin_get_items();
 CREATE OR REPLACE FUNCTION public.admin_get_items()
-RETURNS TABLE(item_id BIGINT, name TEXT, quality TEXT, image_name TEXT, description TEXT, drop_weight INT)
+RETURNS TABLE(item_id BIGINT, name TEXT, quality TEXT, image_name TEXT, description TEXT, drop_weight INT, item_type TEXT)
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
@@ -878,22 +958,23 @@ BEGIN
     END IF;
 
     RETURN QUERY
-    SELECT i.id AS item_id, i.name, i.quality, i.image_name, i.description, i.drop_weight
+    SELECT i.id AS item_id, i.name, i.quality, i.image_name, i.description, i.drop_weight, i.item_type
     FROM public.items i
     ORDER BY i.id;
 END;
 $$;
 
 -- ============================================================
--- 22. RPC 函数：添加收藏品（管理员）
+-- 22. RPC 函数：添加物品（管理员）
 -- ============================================================
-DROP FUNCTION IF EXISTS public.admin_add_item_definition(TEXT, TEXT, TEXT, TEXT, INT);
+DROP FUNCTION IF EXISTS public.admin_add_item_definition(TEXT, TEXT, TEXT, TEXT, INT, TEXT);
 CREATE OR REPLACE FUNCTION public.admin_add_item_definition(
     p_name TEXT,
     p_quality TEXT,
     p_image_name TEXT,
     p_description TEXT,
-    p_drop_weight INT
+    p_drop_weight INT,
+    p_item_type TEXT DEFAULT 'collection'
 )
 RETURNS BIGINT
 LANGUAGE plpgsql
@@ -911,8 +992,8 @@ BEGIN
         RAISE EXCEPTION '无权限';
     END IF;
 
-    INSERT INTO public.items (name, quality, image_name, description, drop_weight)
-    VALUES (p_name, p_quality, p_image_name, p_description, p_drop_weight)
+    INSERT INTO public.items (name, quality, image_name, description, drop_weight, item_type)
+    VALUES (p_name, p_quality, p_image_name, p_description, p_drop_weight, p_item_type)
     RETURNING id INTO new_id;
 
     RETURN new_id;

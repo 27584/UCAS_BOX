@@ -1,5 +1,5 @@
 import { getMarketOrders, getInventory, buyMarketOrder, cancelMarketOrder, placeMarketOrder, getProfile } from '../api.js';
-import { itemImageHTML, formatNumber, showToast, QUALITY_CONFIG, openItemDetail } from '../utils.js';
+import { itemImageHTML, formatNumber, showToast, QUALITY_CONFIG, ITEM_TYPE_CONFIG, openItemDetail } from '../utils.js';
 import { createIcons, icons } from 'lucide';
 import { updateGlobalShells } from '../auth.js';
 
@@ -15,6 +15,7 @@ export const marketPage = {
     filterQuality: '',
     filterSort: 'newest',
     filterSearch: '',
+    filterType: '',
     isLoading: false,
 
     render(container) {
@@ -37,6 +38,7 @@ export const marketPage = {
         const filterQuality = document.getElementById('filter-quality');
         const filterSort = document.getElementById('filter-sort');
         const filterSearch = document.getElementById('filter-search');
+        const filterType = document.getElementById('filter-type');
 
         filterQuality?.addEventListener('change', (e) => {
             this.filterQuality = e.target.value;
@@ -46,6 +48,12 @@ export const marketPage = {
 
         filterSort?.addEventListener('change', (e) => {
             this.filterSort = e.target.value;
+            this.page = 1;
+            this.loadBrowseData();
+        });
+
+        filterType?.addEventListener('change', (e) => {
+            this.filterType = e.target.value;
             this.page = 1;
             this.loadBrowseData();
         });
@@ -86,7 +94,8 @@ export const marketPage = {
                 PAGE_SIZE,
                 this.filterQuality || null,
                 this.filterSort,
-                this.filterSearch || null
+                this.filterSearch || null,
+                this.filterType || null
             );
             
             this.orders = data || [];
@@ -193,6 +202,7 @@ export const marketPage = {
                         quality: order.item_quality,
                         image_name: order.item_image,
                         description: order.item_description,
+                        item_type: order.item_type,
                         owned: 0
                     });
                 }

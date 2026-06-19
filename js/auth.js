@@ -1,7 +1,7 @@
 import { supabase, currentUser, refreshSession } from './supabaseClient.js';
 import { router } from './router.js';
 import { getProfile, getMails, checkAdmin } from './api.js';
-import { formatNumber } from './utils.js';
+import { formatNumber, showToast } from './utils.js';
 
 // ============================================
 // 认证状态管理
@@ -13,12 +13,14 @@ export async function initAuth() {
     updateGlobalShells();
     updateMailBadge();
     updateAdminNav();
+    checkEmailVerification();
 
     supabase.auth.onAuthStateChange((event, session) => {
         updateNavVisibility();
         updateGlobalShells();
         updateMailBadge();
         updateAdminNav();
+        checkEmailVerification();
         const hash = window.location.hash.replace('#', '') || 'lobby';
         if (!session && hash !== 'auth') {
             router.navigate('auth');
@@ -26,6 +28,52 @@ export async function initAuth() {
             router.navigate('lobby');
         }
     });
+}
+
+export async function checkEmailVerification() {
+    const banner = document.getElementById('email-unverified-banner');
+    if (!banner) return;
+    
+    if (!currentUser) {
+        banner.style.display = 'none';
+        return;
+    }
+    
+    // 检查邮箱是否已验证 (email_confirmed_at 不为 null)
+    const isVerified = !!currentUser.email_confirmed_at;
+    
+    if (!isVerified) {
+        banner.style.display = 'flex';
+        banner.querySelector('#unverified-email').textContent = currentUser.email;
+    } else {
+        banner.style.display = 'none';
+    }
+}
+
+export async function resendVerificationEmail() {
+    if (!currentUser) return;
+    
+    const btn = document.getElementById('resend-verification-btn');
+    if (btn) btn.disabled = true;
+    
+    try {
+        const { error } = await supabase.auth.resend({
+            type: 'signup',
+            email: currentUser.email
+        });
+        
+        if (error) {
+            showToast('发送失败: ' + error.message, 'error');
+        } else {
+            showToast('验证邮件已发送，请查收邮箱', 'success');
+        }
+    } catch (e) {
+        showToast('发送失败，请稍后重试', 'error');
+    } finally {
+        if (btn) {
+            setTimeout(() => { btn.disabled = false; }, 30000); // 30秒冷却
+        }
+    }
 }
 
 export async function updateGlobalShells() {

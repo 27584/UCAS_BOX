@@ -8,6 +8,7 @@ export const collectionPage = {
     items: [],
     page: 1,
     filterOwned: '',
+    filterType: '',
 
     render(container) {
         this.attachEvents();
@@ -16,8 +17,16 @@ export const collectionPage = {
 
     attachEvents() {
         const filterOwned = document.getElementById('collection-filter-owned');
+        const filterType = document.getElementById('collection-filter-type');
+        
         filterOwned?.addEventListener('change', (e) => {
             this.filterOwned = e.target.value;
+            this.page = 1;
+            this.renderGrid();
+        });
+        
+        filterType?.addEventListener('change', (e) => {
+            this.filterType = e.target.value;
             this.page = 1;
             this.renderGrid();
         });
@@ -40,12 +49,19 @@ export const collectionPage = {
     },
 
     getFilteredItems() {
-        if (this.filterOwned === 'owned') {
-            return this.items.filter(i => i.owned > 0);
-        } else if (this.filterOwned === 'unowned') {
-            return this.items.filter(i => i.owned === 0);
+        let filtered = this.items;
+        
+        if (this.filterType) {
+            filtered = filtered.filter(i => i.item_type === this.filterType);
         }
-        return this.items;
+        
+        if (this.filterOwned === 'owned') {
+            filtered = filtered.filter(i => i.owned > 0);
+        } else if (this.filterOwned === 'unowned') {
+            filtered = filtered.filter(i => i.owned === 0);
+        }
+        
+        return filtered;
     },
 
     renderGrid() {
@@ -108,6 +124,7 @@ export const collectionPage = {
                         quality: item.item_quality,
                         image_name: item.item_image,
                         description: item.item_description,
+                        item_type: item.item_type,
                         owned: item.owned
                     });
                 }

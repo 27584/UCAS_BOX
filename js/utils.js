@@ -13,6 +13,22 @@ export const QUALITY_CONFIG = {
     red: { label: '神圣', color: '#ef4444', glow: 'rgba(239,68,68,0.5)' },
 };
 
+export const ITEM_TYPE_CONFIG = {
+    collection: { label: '收藏品', color: '#f59e0b', bg: '#f59e0b22' },
+    consumable: { label: '消耗品', color: '#ef4444', bg: '#ef444422' },
+    equipment: { label: '装备', color: '#3b82f6', bg: '#3b82f622' },
+    material: { label: '材料', color: '#22c55e', bg: '#22c55e22' },
+    currency: { label: '货币', color: '#a855f7', bg: '#a855f722' },
+};
+
+export function getItemTypeLabel(type) {
+    return ITEM_TYPE_CONFIG[type]?.label || '未知';
+}
+
+export function getItemTypeColor(type) {
+    return ITEM_TYPE_CONFIG[type]?.color || '#64748b';
+}
+
 export function escapeHtml(str) {
     if (str == null) return '';
     const div = document.createElement('div');
@@ -75,6 +91,7 @@ export function createParticles(container, count = 20) {
 
 export function openItemDetail(item) {
     const cfg = QUALITY_CONFIG[item.quality] || QUALITY_CONFIG.white;
+    const typeCfg = ITEM_TYPE_CONFIG[item.item_type] || ITEM_TYPE_CONFIG.collection;
     const modal = document.getElementById('item-detail-modal');
     if (!modal) {
         const modalHtml = `
@@ -86,7 +103,10 @@ export function openItemDetail(item) {
                         <div class="detail-icon" id="detail-icon"></div>
                         <div class="detail-info">
                             <h3 id="detail-name"></h3>
-                            <span class="quality-badge" id="detail-quality"></span>
+                            <div class="detail-tags">
+                                <span class="quality-badge" id="detail-quality"></span>
+                                <span class="type-badge" id="detail-type"></span>
+                            </div>
                         </div>
                     </div>
                     <div class="detail-body">
@@ -97,6 +117,7 @@ export function openItemDetail(item) {
                                 <span id="detail-amount">拥有: 0</span>
                             </div>
                         </div>
+                        <div class="detail-actions" id="detail-actions" style="display:none;"></div>
                     </div>
                 </div>
             </div>
@@ -109,6 +130,7 @@ export function openItemDetail(item) {
     const icon = document.getElementById('detail-icon');
     const name = document.getElementById('detail-name');
     const quality = document.getElementById('detail-quality');
+    const type = document.getElementById('detail-type');
     const desc = document.getElementById('detail-desc');
     const amount = document.getElementById('detail-amount');
 
@@ -117,8 +139,31 @@ export function openItemDetail(item) {
     name.style.color = cfg.color;
     quality.textContent = cfg.label;
     quality.className = `quality-badge quality-${item.quality}`;
+    type.textContent = typeCfg.label;
+    type.style.background = typeCfg.bg;
+    type.style.color = typeCfg.color;
     desc.textContent = item.description ? escapeHtml(item.description) : '暂无描述';
     amount.textContent = `拥有: ${item.owned || 0}`;
+
+    // 消耗品特殊操作
+    const actionsDiv = document.getElementById('detail-actions');
+    if (item.item_type === 'consumable' && item.name === '改名卡') {
+        actionsDiv.style.display = 'block';
+        actionsDiv.innerHTML = `
+            <button class="btn btn-primary" id="use-rename-btn" style="width:100%;margin-top:16px;">
+                <i data-lucide="edit-3"></i>
+                <span>使用改名卡</span>
+            </button>
+        `;
+        _createIcons({ icons });
+        
+        document.getElementById('use-rename-btn').addEventListener('click', () => {
+            closeItemDetail();
+            setTimeout(() => window.openRenameModal && window.openRenameModal(), 100);
+        });
+    } else {
+        actionsDiv.style.display = 'none';
+    }
 
     document.getElementById('item-detail-modal').style.display = 'flex';
     _createIcons({ icons });
