@@ -1,4 +1,4 @@
-﻿<div class="collection-page">
+<div class="collection-page">
     <div class="page-header">
         <h2><i data-lucide="book-open"></i> 收藏图鉴</h2>
         <div class="collection-progress" id="collection-progress">
@@ -8,10 +8,18 @@
             <span class="progress-text" id="progress-text">加载中...</span>
         </div>
     </div>
+    <div class="collection-filter">
+        <select class="form-input" id="collection-filter-owned" style="width:auto;">
+            <option value="">全部</option>
+            <option value="owned">已拥有</option>
+            <option value="unowned">未收集</option>
+        </select>
+    </div>
     <div class="item-grid" id="collection-grid">
         <div class="skeleton" style="height:140px;"></div>
         <div class="skeleton" style="height:140px;"></div>
         <div class="skeleton" style="height:140px;"></div>
         <div class="skeleton" style="height:140px;"></div>
     </div>
+    <div class="pagination" id="collection-pagination"></div>
 </div>

@@ -2,14 +2,17 @@
 // 版本信息与更新日志
 // ============================================
 
-export const VERSION = 'v0.2.0_beta';
+export const VERSION = 'v0.2.1_beta';
 
 export const CHANGELOG = [
       {
-        version: 'v0.2.0_beta',
+        version: 'v0.2.1_beta',
         date: '2026-06-19',
         type: 'feature',
         features: [
+            
+            "修复移动端图鉴不显示的问题",
+            "新增图鉴分页",
             "新增市场筛选、分页、搜索",
             '修复了邮箱注册的问题，如果需要改邮箱可联系管理员',
         ]

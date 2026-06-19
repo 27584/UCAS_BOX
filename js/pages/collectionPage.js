@@ -2,11 +2,25 @@ import { getCollectionProgress } from '../api.js';
 import { itemImageHTML, QUALITY_CONFIG, openItemDetail } from '../utils.js';
 import { createIcons, icons } from 'lucide';
 
+const PAGE_SIZE = 12;
+
 export const collectionPage = {
     items: [],
+    page: 1,
+    filterOwned: '',
 
     render(container) {
+        this.attachEvents();
         this.loadCollection();
+    },
+
+    attachEvents() {
+        const filterOwned = document.getElementById('collection-filter-owned');
+        filterOwned?.addEventListener('change', (e) => {
+            this.filterOwned = e.target.value;
+            this.page = 1;
+            this.renderGrid();
+        });
     },
 
     async loadCollection() {
@@ -25,17 +39,47 @@ export const collectionPage = {
         }
     },
 
+    getFilteredItems() {
+        if (this.filterOwned === 'owned') {
+            return this.items.filter(i => i.owned > 0);
+        } else if (this.filterOwned === 'unowned') {
+            return this.items.filter(i => i.owned === 0);
+        }
+        return this.items;
+    },
+
     renderGrid() {
         const grid = document.getElementById('collection-grid');
         if (!grid) return;
+
+        // 更新进度条（始终显示全部数据的统计）
         const total = this.items.length;
         const owned = this.items.filter(i => i.owned > 0).length;
         const percent = total > 0 ? Math.round((owned / total) * 100) : 0;
 
-        document.getElementById('progress-fill').style.width = percent + '%';
-        document.getElementById('progress-text').textContent = `${owned} / ${total} (${percent}%)`;
+        const progressFill = document.getElementById('progress-fill');
+        const progressText = document.getElementById('progress-text');
+        if (progressFill) progressFill.style.width = percent + '%';
+        if (progressText) progressText.textContent = `${owned} / ${total} (${percent}%)`;
 
-        grid.innerHTML = this.items.map((item, idx) => {
+        // 筛选和分页
+        const filtered = this.getFilteredItems();
+        const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+        const start = (this.page - 1) * PAGE_SIZE;
+        const pageItems = filtered.slice(start, start + PAGE_SIZE);
+
+        if (filtered.length === 0) {
+            grid.innerHTML = `
+                <div class="empty-state" style="grid-column:1/-1;">
+                    <i data-lucide="search-x"></i>
+                    <p>没有符合条件的物品</p>
+                </div>
+            `;
+            this.renderPagination(0);
+            return;
+        }
+
+        grid.innerHTML = pageItems.map((item, idx) => {
             const cfg = QUALITY_CONFIG[item.item_quality];
             const isOwned = item.owned > 0;
             return `
@@ -51,6 +95,8 @@ export const collectionPage = {
             `;
         }).join('');
 
+        this.renderPagination(totalPages);
+
         grid.querySelectorAll('.item-card').forEach(card => {
             card.addEventListener('click', () => {
                 const itemId = parseInt(card.dataset.itemId);
@@ -64,6 +110,49 @@ export const collectionPage = {
                         description: item.item_description,
                         owned: item.owned
                     });
+                }
+            });
+        });
+
+        createIcons({ icons });
+    },
+
+    renderPagination(totalPages) {
+        const pagination = document.getElementById('collection-pagination');
+        if (!pagination || totalPages <= 1) {
+            if (pagination) pagination.innerHTML = '';
+            return;
+        }
+
+        const maxVisiblePages = 5;
+        let startPage = Math.max(1, this.page - Math.floor(maxVisiblePages / 2));
+        let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+        if (endPage - startPage < maxVisiblePages - 1) {
+            startPage = Math.max(1, endPage - maxVisiblePages + 1);
+        }
+
+        pagination.innerHTML = `
+            <button class="page-btn" data-page="${this.page - 1}" ${this.page === 1 ? 'disabled' : ''}>
+                <i data-lucide="chevron-left"></i>
+            </button>
+            ${startPage > 1 ? '<button class="page-btn" data-page="1">1</button>' : ''}
+            ${startPage > 2 ? '<span class="page-ellipsis">...</span>' : ''}
+            ${Array.from({ length: endPage - startPage + 1 }, (_, i) => startPage + i).map(p => `
+                <button class="page-btn ${p === this.page ? 'active' : ''}" data-page="${p}">${p}</button>
+            `).join('')}
+            ${endPage < totalPages - 1 ? '<span class="page-ellipsis">...</span>' : ''}
+            ${endPage < totalPages ? `<button class="page-btn" data-page="${totalPages}">${totalPages}</button>` : ''}
+            <button class="page-btn" data-page="${this.page + 1}" ${this.page === totalPages ? 'disabled' : ''}>
+                <i data-lucide="chevron-right"></i>
+            </button>
+        `;
+
+        pagination.querySelectorAll('.page-btn:not([disabled])').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const p = parseInt(btn.dataset.page);
+                if (p >= 1 && p <= totalPages && p !== this.page) {
+                    this.page = p;
+                    this.renderGrid();
                 }
             });
         });

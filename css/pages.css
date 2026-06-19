@@ -976,6 +976,13 @@
     padding: 0 4px;
 }
 
+/* 图鉴筛选 */
+.collection-filter {
+    display: flex;
+    padding: 12px 0;
+    margin-bottom: 12px;
+}
+
 /* 响应式*/
 @media (max-width: 768px) {
     .earning-amount {
@@ -998,5 +1005,30 @@
     .user-actions {
         width: 100%;
         flex-wrap: wrap;
+    }
+    /* 分页移动端适配 */
+    .pagination {
+        flex-wrap: wrap;
+        gap: 6px;
+        padding: 12px 0;
+    }
+    .page-btn {
+        width: 32px;
+        height: 32px;
+        font-size: 0.85rem;
+    }
+    .market-filter {
+        flex-wrap: wrap;
+    }
+    .filter-row {
+        width: 100%;
+    }
+    .filter-row .form-input {
+        flex: 1;
+        min-width: 100px;
+    }
+    #filter-search {
+        width: 100%;
+        margin-top: 8px;
     }
 }
