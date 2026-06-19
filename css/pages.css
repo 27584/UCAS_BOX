@@ -861,24 +861,24 @@
 
 .lottery-number-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 8px;
+    grid-template-columns: repeat(16, 1fr);
+    gap: 4px;
     margin-bottom: 16px;
 }
 
 .lottery-number-btn {
-    aspect-ratio: 1;
     display: flex;
     align-items: center;
     justify-content: center;
     background: rgba(255,255,255,0.05);
     border: 2px solid transparent;
-    border-radius: 10px;
+    border-radius: 6px;
     color: var(--text-primary);
-    font-size: 1.2rem;
+    font-size: 0.85rem;
     font-weight: 700;
     cursor: pointer;
     transition: all 0.2s;
+    padding: 6px 0;
 }
 
 .lottery-number-btn:hover {
@@ -1242,12 +1242,12 @@
 
 .quantity-btn {
     flex: 1;
-    padding: 8px 12px;
+    padding: 6px 8px;
     background: rgba(0,0,0,0.3);
     border: 1px solid rgba(255,255,255,0.1);
     border-radius: 8px;
     color: var(--text-secondary);
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
