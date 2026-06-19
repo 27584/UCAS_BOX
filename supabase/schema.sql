@@ -286,21 +286,23 @@ BEGIN
         RAISE EXCEPTION '冷却中，还需等待 % 秒', (cooldown_seconds - EXTRACT(EPOCH FROM (now_time - last_open)))::INT;
     END IF;
 
-    -- 计算总权重
+    -- 计算总权重（只计算收藏品类型）
     SELECT COALESCE(SUM(drop_weight), 0) INTO total_weight
-    FROM public.items;
+    FROM public.items
+    WHERE item_type = 'collection';
 
     IF total_weight <= 0 THEN
         RAISE EXCEPTION '暂无收藏品可掉落';
     END IF;
 
-    -- 随机选择
+    -- 随机选择（只从收藏品中选择）
     random_pick := floor(random() * total_weight) + 1;
     remaining := random_pick;
 
     FOR selected_item IN
         SELECT id, name, quality, image_name, drop_weight
         FROM public.items
+        WHERE item_type = 'collection'
         ORDER BY id
     LOOP
         remaining := remaining - selected_item.drop_weight;
@@ -428,6 +430,7 @@ AS $$
 DECLARE
     buyer_uuid UUID := auth.uid();
     order_rec RECORD;
+    item_name TEXT;
     total_price BIGINT;
     buyer_shells BIGINT;
     buy_qty INT;
@@ -436,9 +439,10 @@ BEGIN
         RAISE EXCEPTION '未登录';
     END IF;
 
-    SELECT * INTO order_rec
-    FROM public.market_orders
-    WHERE id = p_order_id AND status = 'active'
+    SELECT mo.*, i.name AS item_name INTO order_rec
+    FROM public.market_orders mo
+    JOIN public.items i ON mo.item_id = i.id
+    WHERE mo.id = p_order_id AND mo.status = 'active'
     FOR UPDATE;
 
     IF order_rec IS NULL THEN
@@ -457,6 +461,7 @@ BEGIN
     END IF;
 
     total_price := order_rec.price_per_unit * buy_qty;
+    item_name := order_rec.item_name;
 
     -- 锁定买家余额
     SELECT shells INTO buyer_shells
@@ -496,7 +501,7 @@ BEGIN
         VALUES (
             order_rec.seller_id,
             '订单出售成功',
-            '你上架的物品已被全部购买，获得 ' || total_price || ' 果壳币。'
+            '你上架的「' || item_name || '」已被全部购买，获得 ' || total_price || ' 果壳币。'
         );
     ELSE
         -- 部分购买，减少订单数量
@@ -509,7 +514,7 @@ BEGIN
         VALUES (
             order_rec.seller_id,
             '订单部分出售',
-            '你上架的物品被购买 ' || buy_qty || ' 件，获得 ' || total_price || ' 果壳币，剩余 ' || (order_rec.quantity - buy_qty) || ' 件。'
+            '你上架的「' || item_name || '」被购买 ' || buy_qty || ' 件，获得 ' || total_price || ' 果壳币，剩余 ' || (order_rec.quantity - buy_qty) || ' 件。'
         );
     END IF;
 END;

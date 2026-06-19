@@ -2,11 +2,11 @@
 // 版本信息与更新日志
 // ============================================
 
-export const VERSION = 'v0.2.5_beta';
+export const VERSION = 'v0.2.6_beta';
 
 export const CHANGELOG = [
       {
-        version: 'v0.2.5_beta',
+        version: 'v0.2.6_beta',
         date: '2026-06-19',
         type: 'feature',
         features: [

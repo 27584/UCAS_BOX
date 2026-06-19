@@ -26,6 +26,12 @@ export async function initAuth() {
             router.navigate('auth');
         } else if (session && hash === 'auth') {
             router.navigate('lobby');
+        } else {
+            // 登录状态下切换页面后同步导航状态
+            const currentRoute = window.location.hash.replace('#', '') || 'lobby';
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.classList.toggle('active', link.dataset.route === currentRoute);
+            });
         }
     });
 }
@@ -135,6 +141,14 @@ export function updateNavVisibility() {
     const bottomNav = document.getElementById('bottom-nav');
     if (topNav) topNav.style.display = isLoggedIn ? 'flex' : 'none';
     if (bottomNav) bottomNav.style.display = isLoggedIn ? 'flex' : 'none';
+    
+    // 同步当前路由的导航选中状态
+    if (isLoggedIn) {
+        const currentRoute = window.location.hash.replace('#', '') || 'lobby';
+        document.querySelectorAll('.nav-link').forEach(link => {
+            link.classList.toggle('active', link.dataset.route === currentRoute);
+        });
+    }
 }
 
 export function requireAuth() {

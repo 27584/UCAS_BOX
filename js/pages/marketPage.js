@@ -369,7 +369,6 @@ export const marketPage = {
 
     orderCard(order, isOwner) {
         const cfg = QUALITY_CONFIG[order.item_quality];
-        const total = order.price_per_unit * order.quantity;
         return `
             <div class="market-card">
                 <div class="market-card-item" data-item-id="${order.item_id}">
@@ -380,8 +379,13 @@ export const marketPage = {
                     </div>
                 </div>
                 <div class="market-card-meta">
-                    <div class="market-card-price">${formatNumber(order.price_per_unit)} x ${order.quantity}</div>
-                    <div class="market-card-total">合计: ${formatNumber(total)} 果壳币</div>
+                    <div class="market-card-price-row">
+                        <span class="market-card-unit-price">
+                            <i data-lucide="gem" style="width:16px;height:16px;color:#f59e0b;"></i>
+                            ${formatNumber(order.price_per_unit)} 果壳币
+                        </span>
+                        <span class="market-card-qty">数量 ${order.quantity}</span>
+                    </div>
                     ${!isOwner ? `<div class="market-card-seller">卖家: ${order.seller_nickname || '未知'}</div>` : ''}
                 </div>
                 ${isOwner

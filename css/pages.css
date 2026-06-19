@@ -451,14 +451,25 @@
     min-width: 140px;
 }
 
-.market-card-price {
-    font-size: 0.85rem;
-    color: var(--text-secondary);
+.market-card-price-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
 }
 
-.market-card-total {
+.market-card-unit-price {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 1rem;
     font-weight: 600;
     color: var(--accent-gold);
+}
+
+.market-card-qty {
+    font-size: 0.85rem;
+    color: var(--text-muted);
 }
 
 .market-card-seller {
