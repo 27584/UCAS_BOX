@@ -262,3 +262,8 @@ export async function claimDragonBoatOnline() {
 export async function mergeCollections(itemIds) {
     return rpc('merge_collections', { p_item_ids: itemIds });
 }
+
+// 获取最低版本要求
+export async function getMinVersion() {
+    return rpc('get_min_version');
+}

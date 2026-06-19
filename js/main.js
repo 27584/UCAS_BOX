@@ -2,8 +2,9 @@ import { initAuth, resendVerificationEmail } from './auth.js';
 import { router } from './router.js';
 import { createIcons, icons } from 'lucide';
 import { showToast, itemImageHTML, openItemDetail, QUALITY_CONFIG } from './utils.js';
-import { useRenameCard, useDragonBoatBag } from './api.js';
+import { useRenameCard, useDragonBoatBag, getMinVersion } from './api.js';
 import { formatNumber } from './utils.js';
+import { VERSION, VERSION_CODE } from './version.js';
 
 // ============================================
 // 应用入口
@@ -15,6 +16,9 @@ window.openRenameModal = openRenameModal;
 window.useDragonBoatBag = useDragonBoatBagMain;
 
 async function bootstrap() {
+    // 版本检测
+    await checkVersion();
+
     await initAuth();
     router.handleRoute();
 
@@ -28,6 +32,55 @@ async function bootstrap() {
 
     // 全局每秒刷新一次图标（应对动态内容）
     setInterval(() => createIcons({ icons }), 2000);
+}
+
+// 版本检测
+async function checkVersion() {
+    try {
+        const result = await getMinVersion();
+        if (result && result.min_version_code > VERSION_CODE) {
+            showVersionUpdateModal(result);
+        }
+    } catch (e) {
+        console.error('版本检测失败:', e);
+    }
+}
+
+// 显示版本更新提示弹窗
+function showVersionUpdateModal(result) {
+    const modalHtml = `
+        <div id="version-modal" class="modal" style="display:flex;z-index:99999;">
+            <div class="modal-overlay"></div>
+            <div class="modal-content" style="background:linear-gradient(135deg,#1a1f2e,#0f172a);border-radius:16px;padding:24px;max-width:400px;width:90%;text-align:center;border:2px solid var(--accent-gold);">
+                <div style="font-size:48px;margin-bottom:16px;">
+                    <i data-lucide="alert-triangle" style="color:var(--accent-gold);"></i>
+                </div>
+                <h3 style="margin:0 0 12px;color:var(--accent-gold);font-size:20px;">
+                    版本过低
+                </h3>
+                <p style="color:var(--text-secondary);margin-bottom:8px;font-size:14px;">
+                    当前版本：<span style="color:var(--text-primary);">${VERSION}</span>
+                </p>
+                <p style="color:var(--text-secondary);margin-bottom:16px;font-size:14px;">
+                    最低要求：<span style="color:var(--accent-gold);">${result.min_version}</span>
+                </p>
+                <p style="color:var(--text-primary);margin-bottom:20px;font-size:15px;line-height:1.6;">
+                    ${result.message}
+                </p>
+                <button id="version-close-btn" class="btn btn-primary" style="width:100%;">
+                    我知道了
+                </button>
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    createIcons({ icons });
+
+    const modal = document.getElementById('version-modal');
+    const closeBtn = document.getElementById('version-close-btn');
+
+    closeBtn.addEventListener('click', () => modal.remove());
+    modal.querySelector('.modal-overlay').addEventListener('click', () => modal.remove());
 }
 
 bootstrap();

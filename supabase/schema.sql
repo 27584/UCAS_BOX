@@ -2223,3 +2223,17 @@ BEGIN
     );
 END;
 $$;
+
+-- 获取最低版本要求
+CREATE OR REPLACE FUNCTION public.get_min_version()
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN jsonb_build_object(
+        'min_version_code', 1,
+        'min_version', 'v0.3.2_beta',
+        'message', '当前版本过低，请更新（CTRL+SHIFT+F5刷新或寻求可靠途径）'
+    );
+END;
+$$;
