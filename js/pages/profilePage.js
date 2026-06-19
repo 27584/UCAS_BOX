@@ -1,4 +1,4 @@
-import { signOut } from '../api.js';
+import { signOut, getInventory } from '../api.js';
 import { getProfile } from '../api.js';
 import { formatNumber, escapeHtml } from '../utils.js';
 import { router } from '../router.js';
@@ -73,6 +73,10 @@ export const profilePage = {
             document.getElementById('profile-email').textContent = profile.id ? '' : '';
             document.getElementById('profile-shells').textContent = formatNumber(profile.shells);
             document.getElementById('global-shells').textContent = formatNumber(profile.shells);
+
+            const inventory = await getInventory();
+            const collectionCount = inventory?.filter(item => item.item_type === 'collection').reduce((sum, item) => sum + item.quantity, 0) || 0;
+            document.getElementById('profile-items').textContent = formatNumber(collectionCount);
         } catch (e) {
             console.error(e);
         }

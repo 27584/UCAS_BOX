@@ -864,9 +864,9 @@ BEGIN
             WHEN 'white' THEN 0 * inv.quantity
             WHEN 'green' THEN 0 * inv.quantity
             WHEN 'blue' THEN 1 * inv.quantity
-            WHEN 'purple' THEN 2 * inv.quantity
-            WHEN 'orange' THEN 5 * inv.quantity
-            WHEN 'red' THEN 10 * inv.quantity
+            WHEN 'purple' THEN 5 * inv.quantity
+            WHEN 'orange' THEN 10 * inv.quantity
+            WHEN 'red' THEN 30 * inv.quantity
             ELSE 0
         END
     ), 0) INTO boost_rate
@@ -1525,9 +1525,9 @@ BEGIN
     -- 检查并领取10分钟奖励
     IF v_online_total >= 600 AND NOT v_claimed_10min THEN
         INSERT INTO public.inventory (user_id, item_id, quantity)
-        VALUES (user_uuid, bag_item_id, 1)
+        VALUES (user_uuid, bag_item_id, 2)
         ON CONFLICT ON CONSTRAINT inventory_user_id_item_id_key
-        DO UPDATE SET quantity = public.inventory.quantity + 1;
+        DO UPDATE SET quantity = public.inventory.quantity + 2;
         
         UPDATE public.dragon_boat_progress SET claimed_10min = true WHERE user_id = user_uuid;
         claimed_10 := true;
@@ -1536,9 +1536,9 @@ BEGIN
     -- 检查并领取60分钟奖励
     IF v_online_total >= 3600 AND NOT v_claimed_60min THEN
         INSERT INTO public.inventory (user_id, item_id, quantity)
-        VALUES (user_uuid, bag_item_id, 1)
+        VALUES (user_uuid, bag_item_id, 3)
         ON CONFLICT ON CONSTRAINT inventory_user_id_item_id_key
-        DO UPDATE SET quantity = public.inventory.quantity + 1;
+        DO UPDATE SET quantity = public.inventory.quantity + 3;
         
         UPDATE public.dragon_boat_progress SET claimed_60min = true WHERE user_id = user_uuid;
         claimed_60 := true;
