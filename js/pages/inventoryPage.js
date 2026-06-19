@@ -1,5 +1,5 @@
-import { getInventory } from '../api.js';
-import { itemImageHTML, QUALITY_CONFIG, openItemDetail } from '../utils.js';
+import { getInventory, mergeCollections } from '../api.js';
+import { itemImageHTML, QUALITY_CONFIG, openItemDetail, closeItemDetail, showToast } from '../utils.js';
 import { createIcons, icons } from 'lucide';
 
 export const inventoryPage = {
@@ -9,6 +9,23 @@ export const inventoryPage = {
     render(container) {
         this.attachEvents(container);
         this.loadInventory();
+
+        const self = this;
+        window.handleMergeCollection = async (itemId) => {
+            try {
+                const result = await mergeCollections(itemId);
+                if (result.success) {
+                    showToast(result.message, 'success');
+                    closeItemDetail();
+                    await self.loadInventory();
+                } else {
+                    showToast(result.message, 'error');
+                }
+            } catch (e) {
+                console.error(e);
+                showToast('合成失败', 'error');
+            }
+        };
     },
 
     loadInventory() {
