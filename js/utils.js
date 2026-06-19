@@ -138,24 +138,21 @@ export function openItemDetail(item) {
     name.textContent = item.name;
     name.style.color = cfg.color;
     quality.textContent = cfg.label;
-    quality.className = `quality-badge quality-${item.quality}`;
+    quality.className = 'quality-badge quality-' + item.quality;
     type.textContent = typeCfg.label;
     type.style.background = typeCfg.bg;
     type.style.color = typeCfg.color;
     desc.textContent = item.description ? escapeHtml(item.description) : '暂无描述';
-    amount.textContent = `拥有: ${item.owned || 0}`;
+    amount.textContent = '拥有: ' + (item.owned || 0);
 
-    // 消耗品特殊操作
     const actionsDiv = document.getElementById('detail-actions');
     if (item.item_type === 'consumable') {
         if (item.name === '改名卡') {
             actionsDiv.style.display = 'block';
-            actionsDiv.innerHTML = `
-                <button class="btn btn-primary" id="use-rename-btn" style="width:100%;margin-top:16px;">
-                    <i data-lucide="edit-3"></i>
-                    <span>使用改名卡</span>
-                </button>
-            `;
+            actionsDiv.innerHTML = '<button class="btn btn-primary" id="use-rename-btn" style="width:100%;margin-top:16px;">' +
+                '<i data-lucide="edit-3"></i>' +
+                '<span>使用改名卡</span>' +
+                '</button>';
             _createIcons({ icons });
 
             document.getElementById('use-rename-btn').addEventListener('click', () => {
@@ -164,12 +161,10 @@ export function openItemDetail(item) {
             });
         } else if (item.name === '端午节福袋') {
             actionsDiv.style.display = 'block';
-            actionsDiv.innerHTML = `
-                <button class="btn btn-primary" id="use-dragon-boat-btn" style="width:100%;margin-top:16px;">
-                    <i data-lucide="gift"></i>
-                    <span>打开福袋</span>
-                </button>
-            `;
+            actionsDiv.innerHTML = '<button class="btn btn-primary" id="use-dragon-boat-btn" style="width:100%;margin-top:16px;">' +
+                '<i data-lucide="gift"></i>' +
+                '<span>打开福袋</span>' +
+                '</button>';
             _createIcons({ icons });
 
             document.getElementById('use-dragon-boat-btn').addEventListener('click', async () => {

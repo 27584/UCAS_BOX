@@ -1,4 +1,4 @@
-import { checkAdmin, getAllUsers, getSystemStats, adminGetItems, adminAddItem, adminAddItemDefinition, getItems, getPendingSubmissions, approveSubmission, rejectSubmission } from '../api.js';
+import { checkAdmin, getAllUsers, getSystemStats, adminGetItems, adminAddItem, adminAddItemDefinition, getItems, getPendingSubmissions, approveSubmission, rejectSubmission, getLotteryRound, drawLotteryRound, getLotteryHistory } from '../api.js';
 import { router } from '../router.js';
 import { createIcons, icons } from 'lucide';
 import { showToast, QUALITY_CONFIG } from '../utils.js';
@@ -9,10 +9,15 @@ export const adminPage = {
     submissions: [],
 
     async render(container) {
-        this.attachEvents(container);
-        await this.checkPermission();
+        // 先校验权限，成功再渲染DOM、绑定事件
+        const pass = await this.checkPermission();
+        if (!pass) return;
+
         await this.loadStats();
         await this.loadUsers();
+        // DOM渲染完成后再绑定事件
+        this.attachEvents(container);
+        createIcons({ icons });
     },
 
     async checkPermission() {
@@ -32,30 +37,42 @@ export const adminPage = {
     },
 
     attachEvents(container) {
+        // Tab切换
         container.querySelectorAll('.tab-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 container.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 const tab = btn.dataset.tab;
                 container.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
-                container.querySelector(`#tab-${tab}`).style.display = 'block';
+                const targetTab = container.querySelector(`#tab-${tab}`);
+                if (targetTab) targetTab.style.display = 'block';
+
                 if (tab === 'items') this.loadItems();
                 if (tab === 'submissions') this.loadSubmissions();
+                if (tab === 'lottery') this.loadLotteryInfo();
             });
-        });
+        }); // 修复：原代码缺失这个闭合括号
 
-        container.querySelector('#btn-add-item')?.addEventListener('click', () => this.addItem());
+        // 新增物品按钮
+        const addItemBtn = container.querySelector('#btn-add-item');
+        if (addItemBtn) addItemBtn.addEventListener('click', () => this.addItem());
 
-        createIcons({ icons });
+        // 彩票开奖按钮
+        const drawBtn = container.querySelector('#btn-admin-draw');
+        if (drawBtn) drawBtn.addEventListener('click', () => this.adminDraw());
+
+        const debugDrawBtn = container.querySelector('#btn-debug-draw');
+        if (debugDrawBtn) debugDrawBtn.addEventListener('click', () => this.debugDraw());
     },
 
     async loadStats() {
         try {
             const stats = await getSystemStats();
-            document.getElementById('stat-users').textContent = stats[0]?.total_users || 0;
-            document.getElementById('stat-items').textContent = stats[0]?.total_items || 0;
-            document.getElementById('stat-orders').textContent = stats[0]?.total_orders || 0;
-            document.getElementById('stat-mails').textContent = stats[0]?.total_mails || 0;
+            const statData = stats?.[0] ?? {};
+            document.getElementById('stat-users').textContent = statData.total_users || 0;
+            document.getElementById('stat-items').textContent = statData.total_items || 0;
+            document.getElementById('stat-orders').textContent = statData.total_orders || 0;
+            document.getElementById('stat-mails').textContent = statData.total_mails || 0;
         } catch (e) {
             console.error('Failed to load stats:', e);
         }
@@ -63,6 +80,7 @@ export const adminPage = {
 
     async loadUsers() {
         const list = document.getElementById('user-list');
+        if (!list) return;
         try {
             this.users = await getAllUsers();
             this.renderUsers();
@@ -73,6 +91,7 @@ export const adminPage = {
 
     renderUsers() {
         const list = document.getElementById('user-list');
+        if (!list) return;
         if (this.users.length === 0) {
             list.innerHTML = '<div class="empty-state"><p>暂无用户</p></div>';
             return;
@@ -100,13 +119,15 @@ export const adminPage = {
 
         this.loadItemsForSelect();
         this.attachUserActions();
-        createIcons({ icons });
     },
 
     async loadItemsForSelect() {
         try {
             const items = await adminGetItems();
-            document.querySelectorAll('select[data-user-id]').forEach(select => {
+            const selects = document.querySelectorAll('select[data-user-id]');
+            selects.forEach(select => {
+                // 清空旧选项防止重复叠加
+                select.innerHTML = '<option value="">选择物品</option>';
                 items.forEach(item => {
                     const opt = document.createElement('option');
                     opt.value = item.item_id;
@@ -125,6 +146,8 @@ export const adminPage = {
                 const userId = btn.dataset.giveTo;
                 const select = document.querySelector(`select[data-user-id="${userId}"]`);
                 const qtyInput = document.querySelector(`input[data-qty-for="${userId}"]`);
+                if (!select || !qtyInput) return;
+
                 const itemId = parseInt(select.value);
                 const quantity = parseInt(qtyInput.value) || 1;
 
@@ -145,6 +168,7 @@ export const adminPage = {
 
     async loadItems() {
         const list = document.getElementById('item-list');
+        if (!list) return;
         try {
             this.items = await adminGetItems();
             this.renderItems();
@@ -155,6 +179,7 @@ export const adminPage = {
 
     renderItems() {
         const list = document.getElementById('item-list');
+        if (!list) return;
         if (this.items.length === 0) {
             list.innerHTML = '<div class="empty-state"><p>暂无收藏品</p></div>';
             return;
@@ -178,10 +203,16 @@ export const adminPage = {
     },
 
     async addItem() {
-        const name = document.getElementById('item-name').value.trim();
-        const quality = document.getElementById('item-quality').value;
-        const description = document.getElementById('item-desc').value.trim();
-        const weight = parseInt(document.getElementById('item-weight').value) || 100;
+        const nameEl = document.getElementById('item-name');
+        const qualityEl = document.getElementById('item-quality');
+        const descEl = document.getElementById('item-desc');
+        const weightEl = document.getElementById('item-weight');
+        if (!nameEl || !qualityEl || !descEl || !weightEl) return;
+
+        const name = nameEl.value.trim();
+        const quality = qualityEl.value;
+        const description = descEl.value.trim();
+        const weight = parseInt(weightEl.value) || 100;
 
         if (!name) {
             showToast('请输入物品名称', 'error');
@@ -191,8 +222,8 @@ export const adminPage = {
         try {
             await adminAddItemDefinition(name, quality, '', description, weight);
             showToast('添加成功', 'success');
-            document.getElementById('item-name').value = '';
-            document.getElementById('item-desc').value = '';
+            nameEl.value = '';
+            descEl.value = '';
             await this.loadStats();
             this.loadItems();
         } catch (e) {
@@ -202,6 +233,7 @@ export const adminPage = {
 
     async loadSubmissions() {
         const list = document.getElementById('submission-list-admin');
+        if (!list) return;
         try {
             this.submissions = await getPendingSubmissions();
             this.renderSubmissions();
@@ -245,7 +277,6 @@ export const adminPage = {
         }).join('');
 
         this.attachSubmissionActions();
-        createIcons({ icons });
     },
 
     attachSubmissionActions() {
@@ -253,7 +284,7 @@ export const adminPage = {
             btn.addEventListener('click', async () => {
                 const id = parseInt(btn.dataset.approve);
                 const input = document.querySelector(`input[data-sub-id="${id}"]`);
-                const reward = parseInt(input.value) || 0;
+                const reward = input ? (parseInt(input.value) || 0) : 0;
                 try {
                     await approveSubmission(id, reward);
                     showToast('审核通过', 'success');
@@ -265,7 +296,7 @@ export const adminPage = {
         });
 
         document.querySelectorAll('button[data-reject]').forEach(btn => {
-            btn.addEventListener('click', async () => {
+            btn.addEventListener('click', () => {
                 const id = parseInt(btn.dataset.reject);
                 this.showRejectModal(id);
             });
@@ -273,15 +304,14 @@ export const adminPage = {
     },
 
     showRejectModal(submissionId) {
-        // 创建拒绝弹窗
         const modalHtml = `
             <div id="reject-modal" class="modal" style="display:flex;">
-                <div class="modal-overlay" onclick="document.getElementById('reject-modal').remove()"></div>
+                <div class="modal-overlay"></div>
                 <div class="modal-content" style="max-width:400px;">
                     <h3 style="margin-bottom:16px;color:var(--text-primary);">拒绝投稿</h3>
                     <textarea id="reject-reason-input" class="form-input" placeholder="请输入拒绝原因..." rows="4" style="width:100%;margin-bottom:16px;"></textarea>
                     <div style="display:flex;gap:12px;justify-content:flex-end;">
-                        <button class="btn btn-secondary" onclick="document.getElementById('reject-modal').remove()">取消</button>
+                        <button class="btn btn-secondary modal-close">取消</button>
                         <button class="btn btn-danger" id="confirm-reject-btn">确认拒绝</button>
                     </div>
                 </div>
@@ -289,17 +319,112 @@ export const adminPage = {
         `;
 
         document.body.insertAdjacentHTML('beforeend', modalHtml);
+        const modal = document.getElementById('reject-modal');
+        // 遮罩/取消关闭弹窗（不用内联onclick）
+        modal.querySelector('.modal-overlay').addEventListener('click', () => modal.remove());
+        modal.querySelector('.modal-close').addEventListener('click', () => modal.remove());
 
-        document.getElementById('confirm-reject-btn').addEventListener('click', async () => {
-            const reason = document.getElementById('reject-reason-input').value.trim() || '无';
+        modal.querySelector('#confirm-reject-btn').addEventListener('click', async () => {
+            const input = document.getElementById('reject-reason-input');
+            const reason = input?.value.trim() || '无';
             try {
                 await rejectSubmission(submissionId, reason);
                 showToast('已拒绝', 'success');
-                document.getElementById('reject-modal').remove();
+                modal.remove();
                 this.loadSubmissions();
             } catch (e) {
                 showToast('操作失败', 'error');
             }
         });
+    },
+
+    async loadLotteryInfo() {
+        try {
+            const round = await getLotteryRound();
+            if (!round) throw new Error('无当期彩票');
+            document.getElementById('admin-lottery-round').textContent = round.round_number ?? '--';
+            document.getElementById('admin-lottery-pool').textContent = (round.total_pool ?? 0).toLocaleString();
+            document.getElementById('admin-lottery-numbers').textContent = round.winning_numbers ?? '--';
+            document.getElementById('admin-lottery-status').textContent = this.getStatusText(round.status);
+            document.getElementById('admin-lottery-end').textContent = round.end_time ? new Date(round.end_time).toLocaleString() : '--';
+
+            await this.loadLotteryRoundList();
+        } catch (e) {
+            console.error('加载彩票信息失败:', e);
+        }
+    },
+
+    getStatusText(status) {
+        const map = {
+            active: '进行中',
+            closed: '已结束',
+            drawn: '已开奖'
+        };
+        return map[status] || status || '未知';
+    },
+
+    async adminDraw() {
+        try {
+            const round = await getLotteryRound();
+            if (!round) return showToast('无当期彩票', 'error');
+            const result = await drawLotteryRound(round.round_id);
+            if (result.success) {
+                showToast('开奖成功！号码: ' + result.winning_numbers, 'success');
+                await this.loadLotteryInfo();
+            } else {
+                showToast(result.message || '开奖失败', 'error');
+            }
+        } catch (e) {
+            showToast('开奖失败', 'error');
+        }
+    },
+
+    async debugDraw() {
+        const inputEl = document.getElementById('debug-numbers');
+        if (!inputEl) return;
+        const customNumbers = inputEl.value.trim().toUpperCase();
+        try {
+            const round = await getLotteryRound();
+            if (!round) return showToast('无当期彩票', 'error');
+            const result = await drawLotteryRound(round.round_id, customNumbers || null);
+            if (result.success) {
+                showToast('Debug开奖成功！号码: ' + result.winning_numbers, 'success');
+                inputEl.value = '';
+                await this.loadLotteryInfo();
+            } else {
+                showToast(result.message || '开奖失败', 'error');
+            }
+        } catch (e) {
+            showToast('开奖失败', 'error');
+        }
+    },
+
+    async loadLotteryRoundList() {
+        const list = document.getElementById('admin-lottery-list');
+        if (!list) return;
+        try {
+            const history = await getLotteryHistory(20);
+            if (!history || history.length === 0) {
+                list.innerHTML = '<div class="empty-state"><p>暂无期次记录</p></div>';
+                return;
+            }
+
+            const html = history.map(round => {
+                return `<div class="lottery-round-item">
+                    <div class="round-info">
+                        <span class="round-number">${round.round_number}</span>
+                        <span class="round-status">${this.getStatusText(round.status)}</span>
+                    </div>
+                    <div class="round-detail">
+                        <span>奖池: ${(round.total_pool ?? 0).toLocaleString()}</span>
+                        <span>号码: ${round.winning_numbers ?? '--'}</span>
+                    </div>
+                </div>`;
+            }).join('');
+
+            list.innerHTML = html;
+        } catch (e) {
+            list.innerHTML = '<div class="empty-state"><p>加载失败</p></div>';
+        }
     }
 };

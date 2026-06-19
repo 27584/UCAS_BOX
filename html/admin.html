@@ -38,6 +38,7 @@
         <button class="tab-btn active" data-tab="users">用户管理</button>
         <button class="tab-btn" data-tab="items">物品管理</button>
         <button class="tab-btn" data-tab="submissions">投稿审核</button>
+        <button class="tab-btn" data-tab="lottery">彩票管理</button>
     </div>
 
     <div class="tab-content" id="tab-users">
@@ -93,6 +94,61 @@
         <div class="submission-list" id="submission-list-admin">
             <div class="skeleton" style="height:60px;"></div>
             <div class="skeleton" style="height:60px;"></div>
+        </div>
+    </div>
+
+    <div class="tab-content" id="tab-lottery" style="display:none;">
+        <div class="lottery-admin-card card">
+            <h3>当前期次信息</h3>
+            <div class="lottery-admin-info">
+                <div class="info-row">
+                    <span class="info-label">期次编号</span>
+                    <span class="info-value" id="admin-lottery-round">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">奖池金额</span>
+                    <span class="info-value" id="admin-lottery-pool">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">开奖号码</span>
+                    <span class="info-value" id="admin-lottery-numbers">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">状态</span>
+                    <span class="info-value" id="admin-lottery-status">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">截止时间</span>
+                    <span class="info-value" id="admin-lottery-end">-</span>
+                </div>
+            </div>
+            <button class="btn btn-primary" id="btn-admin-draw" style="margin-top:16px;">
+                <i data-lucide="zap"></i>
+                <span>立即开奖</span>
+            </button>
+        </div>
+
+        <div class="lottery-admin-card card">
+            <h3>Debug功能</h3>
+            <div class="debug-section">
+                <div class="debug-item">
+                    <label class="debug-label">测试开奖号码（选填）</label>
+                    <input type="text" class="form-input" id="debug-numbers" placeholder="如：A3F2D9" maxlength="6" />
+                    <span class="debug-hint">不填写则随机生成</span>
+                </div>
+                <button class="btn btn-secondary" id="btn-debug-draw">
+                    <i data-lucide="bug"></i>
+                    <span>Debug开奖</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="lottery-admin-card card">
+            <h3>期次列表</h3>
+            <div class="lottery-round-list" id="admin-lottery-list">
+                <div class="skeleton" style="height:60px;"></div>
+                <div class="skeleton" style="height:60px;"></div>
+            </div>
         </div>
     </div>
 </div>

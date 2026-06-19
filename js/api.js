@@ -116,6 +116,30 @@ export async function markMailRead(mailId) {
     return rpc('mark_mail_read', { p_mail_id: mailId });
 }
 
+export async function getLotteryRound() {
+    return rpc('get_lottery_round');
+}
+
+export async function buyLotteryTicket(numbers, quantity) {
+    return rpc('buy_lottery_ticket', { p_numbers: numbers, p_quantity: quantity });
+}
+
+export async function getLotteryHistory(limit) {
+    return rpc('get_lottery_history', { limit_num: limit });
+}
+
+export async function getUserLotteryTickets(roundId) {
+    return rpc('get_user_tickets', { p_round_id: roundId });
+}
+
+export async function drawLotteryRound(roundId, customNumbers = null) {
+    const params = { p_round_id: roundId };
+    if (customNumbers !== null) {
+        params.custom_numbers = customNumbers;
+    }
+    return rpc('draw_lottery_round', params);
+}
+
 // 查询（受RLS保护）
 export async function getProfile() {
     const { data, error } = await supabase

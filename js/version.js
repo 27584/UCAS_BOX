@@ -2,9 +2,17 @@
 // 版本信息与更新日志
 // ============================================
 
-export const VERSION = 'v0.2.8_beta';
+export const VERSION = 'v0.3.0_beta';
 
-export const CHANGELOG = [
+export const CHANGELOG = [ {
+        version: 'v0.3.0_beta',
+        date: '2026-06-19',
+        type: 'feature',
+        features: [
+            "新增彩票，快来试试手气吧~",
+            "降低广告奖励为1000-5000",
+        ]
+    },
       {
         version: 'v0.2.8_beta',
         date: '2026-06-19',

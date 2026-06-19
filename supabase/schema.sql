@@ -68,6 +68,79 @@ DROP POLICY IF EXISTS "Users can insert own dragon boat progress" ON public.drag
 CREATE POLICY "Users can insert own dragon boat progress" ON public.dragon_boat_progress FOR INSERT WITH CHECK (auth.uid() = user_id);
 
 -- ============================================================
+-- 1.6 彩票活动表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.lottery_rounds (
+    round_id BIGSERIAL PRIMARY KEY,
+    round_number TEXT NOT NULL UNIQUE,
+    start_time TIMESTAMPTZ NOT NULL,
+    end_time TIMESTAMPTZ NOT NULL,
+    base_pool BIGINT DEFAULT 5000,
+    rollover_pool BIGINT DEFAULT 0,
+    final_pool BIGINT,
+    winning_numbers TEXT,
+    status TEXT DEFAULT 'active' CHECK (status IN ('active', 'closed', 'drawn')),
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.lottery_tickets (
+    id BIGSERIAL PRIMARY KEY,
+    round_id BIGINT REFERENCES public.lottery_rounds ON DELETE CASCADE,
+    user_id UUID REFERENCES auth.users ON DELETE CASCADE,
+    numbers TEXT NOT NULL,
+    quantity INT DEFAULT 1,
+    is_winning BOOLEAN DEFAULT false,
+    prize_level TEXT,
+    prize_amount BIGINT DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    UNIQUE(round_id, user_id, numbers)
+);
+
+-- 为已存在的彩票表添加数量字段（兼容旧版PostgreSQL）
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'lottery_tickets' AND column_name = 'quantity') THEN
+        ALTER TABLE public.lottery_tickets ADD COLUMN quantity INT DEFAULT 1;
+    END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS public.lottery_results (
+    id BIGSERIAL PRIMARY KEY,
+    round_id BIGINT REFERENCES public.lottery_rounds ON DELETE CASCADE,
+    prize_level TEXT NOT NULL,
+    pool_share NUMERIC NOT NULL,
+    total_winners INT DEFAULT 0,
+    total_people INT DEFAULT 0,
+    rollover_amount BIGINT DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- 为已存在的开奖结果表添加人数字段
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'lottery_results' AND column_name = 'total_people') THEN
+        ALTER TABLE public.lottery_results ADD COLUMN total_people INT DEFAULT 0;
+    END IF;
+END $$;
+
+-- RLS for lottery tables
+ALTER TABLE public.lottery_rounds ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.lottery_tickets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.lottery_results ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view all lottery rounds" ON public.lottery_rounds;
+CREATE POLICY "Users can view all lottery rounds" ON public.lottery_rounds FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Users can view own lottery tickets" ON public.lottery_tickets;
+CREATE POLICY "Users can view own lottery tickets" ON public.lottery_tickets FOR SELECT USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can insert lottery tickets" ON public.lottery_tickets;
+CREATE POLICY "Users can insert lottery tickets" ON public.lottery_tickets FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can view all lottery results" ON public.lottery_results;
+CREATE POLICY "Users can view all lottery results" ON public.lottery_results FOR SELECT USING (true);
+
+-- ============================================================
 -- 2. 收藏品字典
 -- ============================================================
 CREATE TABLE IF NOT EXISTS public.items (
@@ -806,7 +879,7 @@ END;
 $$;
 
 -- ============================================================
--- 14. RPC 函数：领取广告奖励（每日限领一次，随机 1000-10000）
+-- 14. RPC 函数：领取广告奖励（每日限领一次，随机 1000-5000）
 -- ============================================================
 DROP FUNCTION IF EXISTS public.claim_ad_rewards();
 CREATE OR REPLACE FUNCTION public.claim_ad_rewards()
@@ -831,7 +904,7 @@ BEGIN
         RAISE EXCEPTION '今日已领取过广告奖励，请明天再来';
     END IF;
 
-    reward := FLOOR(1000 + RANDOM() * 9000)::BIGINT;
+    reward := FLOOR(1000 + RANDOM() * 4000)::BIGINT;
 
     UPDATE public.profiles
     SET shells = shells + reward,
@@ -1551,6 +1624,472 @@ BEGIN
         'claimed_1min', claimed_1 OR v_claimed_1min,
         'claimed_10min', claimed_10 OR v_claimed_10min,
         'claimed_60min', claimed_60 OR v_claimed_60min
+    );
+END;
+$$;
+
+-- ============================================================
+-- 31. RPC 函数：彩票 - 获取当前期次
+-- ============================================================
+DROP FUNCTION IF EXISTS public.get_lottery_round();
+CREATE OR REPLACE FUNCTION public.get_lottery_round()
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+    current_round RECORD;
+    user_ticket_count INT := 0;
+    time_left INT;
+BEGIN
+    -- 查找当前活跃期次
+    SELECT * INTO current_round FROM public.lottery_rounds
+    WHERE status = 'active' OR (status = 'closed' AND winning_numbers IS NULL)
+    ORDER BY public.lottery_rounds.round_id DESC
+    LIMIT 1;
+
+    -- 如果没有期次，创建新期次
+    IF current_round IS NULL THEN
+        INSERT INTO public.lottery_rounds (round_number, start_time, end_time, base_pool, rollover_pool, status)
+        VALUES (
+            'R' || to_char(now(), 'YYYYMMDDHH24MI'),
+            now(),
+            now() + INTERVAL '8 hours',
+            5000,
+            0,
+            'active'
+        )
+        RETURNING * INTO current_round;
+    END IF;
+
+    -- 检查期次是否已过期需要关闭
+    IF current_round.status = 'active' AND current_round.end_time < now() THEN
+        UPDATE public.lottery_rounds SET status = 'closed' WHERE round_id = current_round.round_id;
+        current_round.status := 'closed';
+    END IF;
+
+    -- 计算剩余时间
+    IF current_round.status = 'active' THEN
+        time_left := GREATEST(0, EXTRACT(EPOCH FROM (current_round.end_time - now())));
+    ELSE
+        time_left := 0;
+    END IF;
+
+    -- 统计用户已购彩票数（按数量计算）
+    IF user_uuid IS NOT NULL THEN
+        SELECT COALESCE(SUM(lottery_tickets.quantity), 0) INTO user_ticket_count FROM public.lottery_tickets
+        WHERE lottery_tickets.round_id = current_round.round_id AND lottery_tickets.user_id = user_uuid;
+    END IF;
+
+    RETURN jsonb_build_object(
+        'round_id', current_round.round_id,
+        'round_number', current_round.round_number,
+        'start_time', current_round.start_time,
+        'end_time', current_round.end_time,
+        'base_pool', current_round.base_pool,
+        'rollover_pool', current_round.rollover_pool,
+        'total_pool', current_round.base_pool + current_round.rollover_pool,
+        'winning_numbers', current_round.winning_numbers,
+        'status', current_round.status,
+        'time_left', time_left,
+        'user_ticket_count', user_ticket_count,
+        'max_tickets', 30,
+        'ticket_price', 100
+    );
+END;
+$$;
+
+-- ============================================================
+-- 32. RPC 函数：彩票 - 购买彩票
+-- ============================================================
+DROP FUNCTION IF EXISTS public.buy_lottery_ticket(numbers TEXT);
+DROP FUNCTION IF EXISTS public.buy_lottery_ticket(numbers TEXT, quantity INT);
+DROP FUNCTION IF EXISTS public.buy_lottery_ticket(numbers TEXT, p_quantity INT);
+DROP FUNCTION IF EXISTS public.buy_lottery_ticket(p_numbers TEXT, p_quantity INT);
+CREATE OR REPLACE FUNCTION public.buy_lottery_ticket(p_numbers TEXT, p_quantity INT DEFAULT 1)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+    current_round RECORD;
+    ticket_price BIGINT := 100;
+    max_tickets INT := 30;
+    user_ticket_count INT := 0;
+    existing_quantity INT := 0;
+    total_cost BIGINT;
+    clean_numbers TEXT;
+    char_arr TEXT[];
+    i INT;
+    j INT;
+    has_duplicate BOOLEAN := false;
+BEGIN
+    IF user_uuid IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '请先登录');
+    END IF;
+
+    -- 验证数量参数
+    IF p_quantity IS NULL OR p_quantity < 1 THEN
+        p_quantity := 1;
+    END IF;
+    IF p_quantity > 10 THEN
+        RETURN jsonb_build_object('success', false, 'message', '单次最多购买10注');
+    END IF;
+
+    -- 获取当前期次
+    SELECT * INTO current_round FROM public.lottery_rounds
+    WHERE status = 'active'
+    ORDER BY public.lottery_rounds.round_id DESC
+    LIMIT 1;
+
+    IF current_round IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '暂无可用期次');
+    END IF;
+
+    IF current_round.end_time < now() THEN
+        RETURN jsonb_build_object('success', false, 'message', '本期已结束');
+    END IF;
+
+    -- 验证号码格式
+    clean_numbers := UPPER(TRIM(p_numbers));
+    
+    IF LENGTH(clean_numbers) != 6 THEN
+        RETURN jsonb_build_object('success', false, 'message', '请选择6个号码');
+    END IF;
+
+    IF clean_numbers !~ '^[0-9A-F]{6}$' THEN
+        RETURN jsonb_build_object('success', false, 'message', '号码只能包含0-9和A-F');
+    END IF;
+
+    -- 检查是否有重复字符
+    char_arr := REGEXP_SPLIT_TO_ARRAY(clean_numbers, '');
+    FOR i IN 1..6 LOOP
+        FOR j IN (i+1)..6 LOOP
+            IF char_arr[i] = char_arr[j] THEN
+                has_duplicate := true;
+                EXIT;
+            END IF;
+        END LOOP;
+        IF has_duplicate THEN EXIT; END IF;
+    END LOOP;
+
+    IF has_duplicate THEN
+        RETURN jsonb_build_object('success', false, 'message', '号码不能重复');
+    END IF;
+
+    clean_numbers := (
+        SELECT string_agg(c, '') FROM (
+            SELECT unnest(REGEXP_SPLIT_TO_ARRAY(clean_numbers, '')) AS c
+            ORDER BY c
+        ) AS t
+    );
+
+    -- 检查限购（按数量计算）
+    SELECT COALESCE(SUM(lt.quantity), 0) INTO user_ticket_count FROM public.lottery_tickets lt
+    WHERE lt.round_id = current_round.round_id AND lt.user_id = user_uuid;
+
+    -- 检查是否已有相同号码，获取现有数量
+    SELECT COALESCE(lt.quantity, 0) INTO existing_quantity FROM public.lottery_tickets lt
+    WHERE lt.round_id = current_round.round_id AND lt.user_id = user_uuid AND lt.numbers = clean_numbers;
+
+    -- 计算购买后的总数量
+    IF user_ticket_count + p_quantity > max_tickets THEN
+        RETURN jsonb_build_object('success', false, 'message', '单期限购30注，当前已购' || user_ticket_count || '注');
+    END IF;
+
+    total_cost := ticket_price * p_quantity;
+
+    -- 检查余额
+    PERFORM 1 FROM public.profiles WHERE id = user_uuid AND shells >= total_cost FOR UPDATE;
+    
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('success', false, 'message', '果壳币不足，需要' || total_cost || '果壳币');
+    END IF;
+
+    -- 扣除果壳币
+    UPDATE public.profiles SET shells = shells - total_cost WHERE id = user_uuid;
+
+    -- 添加到奖池
+    UPDATE public.lottery_rounds SET base_pool = base_pool + total_cost WHERE round_id = current_round.round_id;
+
+    -- 插入或更新彩票记录（合并相同号码）
+    INSERT INTO public.lottery_tickets (round_id, user_id, numbers, quantity)
+    VALUES (current_round.round_id, user_uuid, clean_numbers, p_quantity)
+    ON CONFLICT (round_id, user_id, numbers) DO UPDATE
+    SET quantity = lottery_tickets.quantity + EXCLUDED.quantity;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'message', '购买成功',
+        'numbers', clean_numbers,
+        'quantity', p_quantity,
+        'total_quantity', existing_quantity + p_quantity,
+        'round_number', current_round.round_number,
+        'remaining_tickets', max_tickets - user_ticket_count - p_quantity,
+        'cost', total_cost
+    );
+END;
+$$;
+
+-- ============================================================
+-- 33. RPC 函数：彩票 - 开奖
+-- ============================================================
+DROP FUNCTION IF EXISTS public.draw_lottery_round(BIGINT);
+DROP FUNCTION IF EXISTS public.draw_lottery_round(BIGINT, TEXT);
+CREATE OR REPLACE FUNCTION public.draw_lottery_round(p_round_id BIGINT, custom_numbers TEXT DEFAULT NULL)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+    v_round RECORD;
+    v_winning_numbers TEXT;
+    v_total_pool BIGINT;
+    v_tickets RECORD;
+    v_matched_count INT;
+    v_prize_level TEXT;
+    v_prize_amount BIGINT;
+    v_pool_share NUMERIC;
+    v_winners INT;
+    v_people INT;
+    v_rollover_amount BIGINT;
+    v_winner RECORD;
+    v_prize_details TEXT;
+    v_total_prize BIGINT;
+    v_total_prize_distributed BIGINT;
+    v_prize_pool_share BIGINT;
+    
+    prizes JSONB := '[{"level":"特等奖","matches":[6],"share":0.3},{"level":"一等奖","matches":[5],"share":0.2},{"level":"二等奖","matches":[4],"share":0.15},{"level":"三等奖","matches":[3],"share":0.15},{"level":"幸运奖","matches":[1,2],"share":0.2}]';
+    v_prize RECORD;
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = user_uuid AND is_admin = true) THEN
+        RETURN jsonb_build_object('success', false, 'message', '权限不足');
+    END IF;
+
+    SELECT * INTO v_round FROM public.lottery_rounds WHERE lottery_rounds.round_id = p_round_id;
+
+    IF v_round IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '期次不存在');
+    END IF;
+
+    IF v_round.status = 'drawn' THEN
+        RETURN jsonb_build_object('success', false, 'message', '已开奖');
+    END IF;
+
+    IF custom_numbers IS NOT NULL THEN
+        v_winning_numbers := UPPER(TRIM(custom_numbers));
+        IF LENGTH(v_winning_numbers) != 6 OR v_winning_numbers !~ '^[0-9A-F]{6}$' THEN
+            RETURN jsonb_build_object('success', false, 'message', '自定义号码格式错误');
+        END IF;
+        -- 排序自定义号码
+        v_winning_numbers := (
+            SELECT string_agg(c, '') FROM (
+                SELECT unnest(REGEXP_SPLIT_TO_ARRAY(v_winning_numbers, '')) AS c
+                ORDER BY c
+            ) AS t
+        );
+    ELSE
+        -- 随机生成6个不重复的号码并排序
+        v_winning_numbers := (
+            SELECT string_agg(c, '' ORDER BY c) FROM (
+                SELECT c FROM unnest(ARRAY['0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F']) AS c
+                ORDER BY random()
+                LIMIT 6
+            ) AS t
+        );
+    END IF;
+
+    v_total_pool := v_round.base_pool + v_round.rollover_pool;
+    v_rollover_amount := 0;
+    v_total_prize_distributed := 0;
+
+    -- 计算每个奖项的中奖情况，同时累计未中奖滚存和中奖后剩余
+    FOR v_prize IN SELECT * FROM jsonb_to_recordset(prizes) AS x(level TEXT, matches INT[], share NUMERIC) LOOP
+        v_winners := 0;
+        v_people := 0;
+        v_prize_pool_share := FLOOR(v_total_pool * v_prize.share);
+        
+        SELECT COALESCE(SUM(lt.quantity), 0) INTO v_winners 
+        FROM public.lottery_tickets lt
+        WHERE lt.round_id = p_round_id 
+        AND lt.is_winning = false
+        AND (SELECT CAST(COUNT(*) AS INT) FROM unnest(REGEXP_SPLIT_TO_ARRAY(lt.numbers, '')) AS n 
+             WHERE n = ANY(REGEXP_SPLIT_TO_ARRAY(v_winning_numbers, ''))) = ANY(v_prize.matches);
+        
+        SELECT COUNT(DISTINCT lt.user_id) INTO v_people 
+        FROM public.lottery_tickets lt
+        WHERE lt.round_id = p_round_id 
+        AND lt.is_winning = false
+        AND (SELECT CAST(COUNT(*) AS INT) FROM unnest(REGEXP_SPLIT_TO_ARRAY(lt.numbers, '')) AS n 
+             WHERE n = ANY(REGEXP_SPLIT_TO_ARRAY(v_winning_numbers, ''))) = ANY(v_prize.matches);
+        
+        IF v_winners > 0 THEN
+            v_prize_amount := v_prize_pool_share / v_winners;
+            v_total_prize_distributed := v_total_prize_distributed + v_prize_pool_share;
+            
+            UPDATE public.lottery_tickets t
+            SET is_winning = true,
+                prize_level = v_prize.level,
+                prize_amount = v_prize_amount * t.quantity
+            WHERE t.round_id = p_round_id
+            AND t.is_winning = false
+            AND (SELECT CAST(COUNT(*) AS INT) FROM unnest(REGEXP_SPLIT_TO_ARRAY(t.numbers, '')) AS n 
+                 WHERE n = ANY(REGEXP_SPLIT_TO_ARRAY(v_winning_numbers, ''))) = ANY(v_prize.matches);
+        ELSE
+            v_rollover_amount := v_rollover_amount + v_prize_pool_share;
+        END IF;
+
+        INSERT INTO public.lottery_results (round_id, prize_level, pool_share, total_winners, total_people, rollover_amount)
+        VALUES (p_round_id, v_prize.level, v_prize.share, v_winners, v_people, v_prize_pool_share);
+    END LOOP;
+
+    -- 更新本期为已开奖，并记录最终奖池和剩余滚存
+    UPDATE public.lottery_rounds 
+    SET winning_numbers = v_winning_numbers,
+        status = 'drawn',
+        final_pool = v_total_pool,
+        rollover_pool = v_rollover_amount
+    WHERE lottery_rounds.round_id = p_round_id;
+
+    -- 创建新期次，滚存 = 本期剩余未分配金额
+    INSERT INTO public.lottery_rounds (round_number, start_time, end_time, base_pool, rollover_pool, status)
+    VALUES (
+        'R' || to_char(now(), 'YYYYMMDDHH24MI'),
+        now(),
+        now() + INTERVAL '8 hours',
+        5000,
+        v_rollover_amount,
+        'active'
+    );
+
+    -- 发放奖金
+    UPDATE public.profiles p
+    SET shells = shells + COALESCE((SELECT SUM(prize_amount) FROM public.lottery_tickets t WHERE t.user_id = p.id AND t.round_id = p_round_id), 0)
+    WHERE EXISTS (SELECT 1 FROM public.lottery_tickets t WHERE t.user_id = p.id AND t.round_id = p_round_id AND t.is_winning = true);
+
+    -- 给中奖用户发送邮件通知
+    FOR v_winner IN SELECT DISTINCT t.user_id FROM public.lottery_tickets t WHERE t.round_id = p_round_id AND t.is_winning = true LOOP
+        -- 获取用户中奖详情
+        SELECT array_to_string(array_agg(t.prize_level || ' ' || t.prize_amount || '果壳币'), '，') INTO v_prize_details
+        FROM public.lottery_tickets t WHERE t.user_id = v_winner.user_id AND t.round_id = p_round_id AND t.is_winning = true;
+        
+        SELECT SUM(t.prize_amount) INTO v_total_prize FROM public.lottery_tickets t WHERE t.user_id = v_winner.user_id AND t.round_id = p_round_id AND t.is_winning = true;
+        
+        INSERT INTO public.system_mails (user_id, title, content)
+        VALUES (
+            v_winner.user_id,
+            '恭喜中奖！',
+            '你在第 ' || v_round.round_number || ' 期彩票中获奖项：' || COALESCE(v_prize_details, '') || '，总计获得 ' || COALESCE(v_total_prize, 0) || ' 果壳币。'
+        );
+    END LOOP;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'message', '开奖完成',
+        'round_id', p_round_id,
+        'winning_numbers', v_winning_numbers,
+        'total_pool', v_total_pool
+    );
+END;
+$$;
+
+-- ============================================================
+-- 34. RPC 函数：彩票 - 获取往期开奖记录
+-- ============================================================
+DROP FUNCTION IF EXISTS public.get_lottery_history(limit_num INT);
+CREATE OR REPLACE FUNCTION public.get_lottery_history(limit_num INT)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+BEGIN
+    IF limit_num IS NULL OR limit_num <= 0 THEN
+        limit_num := 10;
+    END IF;
+
+    RETURN (
+        SELECT jsonb_agg(row) FROM (
+            SELECT 
+                r.round_id,
+                r.round_number,
+                r.end_time,
+                r.winning_numbers,
+                COALESCE(r.final_pool, r.base_pool + r.rollover_pool) AS total_pool,
+                r.status,
+                (SELECT jsonb_agg(
+                    jsonb_build_object(
+                        'prize_level', lr.prize_level,
+                        'pool_share', lr.pool_share,
+                        'total_winners', lr.total_winners,
+                        'total_people', lr.total_people,
+                        'rollover_amount', lr.rollover_amount
+                    )
+                ) FROM public.lottery_results lr WHERE lr.round_id = r.round_id) AS results,
+                (SELECT jsonb_agg(
+                    jsonb_build_object(
+                        'numbers', lt.numbers,
+                        'quantity', lt.quantity,
+                        'is_winning', lt.is_winning,
+                        'prize_level', lt.prize_level,
+                        'prize_amount', lt.prize_amount
+                    )
+                ) FROM public.lottery_tickets lt 
+                 WHERE lt.round_id = r.round_id AND lt.user_id = user_uuid) AS user_tickets
+            FROM public.lottery_rounds r
+            WHERE r.status = 'drawn'
+            ORDER BY r.round_id DESC
+            LIMIT limit_num
+        ) AS row
+    );
+END;
+$$;
+
+-- ============================================================
+-- 35. RPC 函数：彩票 - 获取用户彩票（修复模糊列round_id）
+-- ============================================================
+DROP FUNCTION IF EXISTS public.get_user_tickets(BIGINT);
+DROP FUNCTION IF EXISTS public.get_user_tickets(p_round_id BIGINT);
+CREATE OR REPLACE FUNCTION public.get_user_tickets(p_round_id BIGINT)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+BEGIN
+    IF user_uuid IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '请先登录');
+    END IF;
+
+    RETURN (
+        SELECT jsonb_agg(
+            jsonb_build_object(
+                'id', data.id,
+                'numbers', data.numbers,
+                'quantity', data.quantity,
+                'is_winning', data.is_winning,
+                'prize_level', data.prize_level,
+                'prize_amount', data.prize_amount,
+                'created_at', data.created_at
+            )
+        ) FROM (
+            SELECT 
+                t.id,
+                t.numbers,
+                t.quantity,
+                t.is_winning,
+                t.prize_level,
+                t.prize_amount,
+                t.created_at
+            FROM public.lottery_tickets t
+            WHERE t.user_id = user_uuid AND t.round_id = p_round_id
+            ORDER BY t.created_at DESC
+        ) AS data
     );
 END;
 $$;

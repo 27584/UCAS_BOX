@@ -136,7 +136,6 @@ async function useDragonBoatBagMain() {
     if (result && result.success) {
         showToast(result.message, 'success');
         
-        // 显示获得的物品
         const item = {
             item_id: result.item_id,
             name: result.item_name,
@@ -144,30 +143,27 @@ async function useDragonBoatBagMain() {
             image_name: result.item_image
         };
         
-        // 创建结果弹窗
         const modal = document.createElement('div');
         modal.className = 'modal-overlay';
         modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:10000;';
         
         const cfg = QUALITY_CONFIG[item.quality] || QUALITY_CONFIG.white;
+        const itemHtml = itemImageHTML(item.name, item.quality, item.image_name, 100);
         
-        modal.innerHTML = `
-            <div style="background:#1a1f2e;border-radius:20px;padding:32px;text-align:center;max-width:320px;width:90%;">
-                <h3 style="color:#f8fafc;margin:0 0 24px;font-size:20px;">恭喜获得</h3>
-                <div style="width:100px;height:100px;margin:0 auto 16px;border-radius:16px;background:linear-gradient(135deg,${cfg.bg},rgba(30,41,59,0.8));display:flex;align-items:center;justify-content:center;font-size:60px;border:2px solid ${cfg.color};">
-                    ${itemImageHTML(item.name, item.quality, item.image_name, 100)}
-                </div>
-                <div style="font-size:24px;font-weight:700;color:${cfg.color};margin-bottom:8px;">${item.name}</div>
-                <span class="quality-badge quality-${item.quality}">${cfg.label}</span>
-                <button class="btn btn-primary" style="margin-top:24px;width:100%;" id="dragon-boat-result-close">确定</button>
-            </div>
-        `;
+        modal.innerHTML = '<div style="background:#1a1f2e;border-radius:20px;padding:32px;text-align:center;max-width:320px;width:90%;">' +
+            '<h3 style="color:#f8fafc;margin:0 0 24px;font-size:20px;">恭喜获得</h3>' +
+            '<div style="width:100px;height:100px;margin:0 auto 16px;border-radius:16px;background:linear-gradient(135deg,' + cfg.bg + ',rgba(30,41,59,0.8));display:flex;align-items:center;justify-content:center;font-size:60px;border:2px solid ' + cfg.color + ';">' +
+            itemHtml +
+            '</div>' +
+            '<div style="font-size:24px;font-weight:700;color:' + cfg.color + ';margin-bottom:8px;">' + item.name + '</div>' +
+            '<span class="quality-badge quality-' + item.quality + '">' + cfg.label + '</span>' +
+            '<button class="btn btn-primary" style="margin-top:24px;width:100%;" id="dragon-boat-result-close">确定</button>' +
+            '</div>';
         
         document.body.appendChild(modal);
         
         modal.querySelector('#dragon-boat-result-close').addEventListener('click', () => {
             modal.remove();
-            // 刷新背包
             if (window.refreshInventory) window.refreshInventory();
         });
         

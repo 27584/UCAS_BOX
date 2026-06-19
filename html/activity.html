@@ -1,151 +1,299 @@
 <div class="activity-page">
-    <div class="particle-container" id="activity-particles"></div>
-    <div class="activity-content">
-        <div class="activity-hero">
-            <div class="activity-badge">端午限定</div>
-            <h1>端午活动</h1>
-            <p class="activity-date">2026年6月19日</p>
-        </div>
+    <div class="activity-tabs">
+        <button class="activity-tab active" data-tab="dragon-boat">
+            <i data-lucide="gift"></i>
+            <span>端午活动</span>
+        </button>
+        <button class="activity-tab" data-tab="lottery">
+            <i data-lucide="ticket"></i>
+            <span>彩票活动</span>
+        </button>
+    </div>
 
-        <!-- 端午福袋 -->
-        <div class="activity-card card animate-fade-in-up">
-            <div class="activity-card-header">
-                <div class="activity-icon dragon">
-                    <i data-lucide="gift"></i>
-                </div>
-                <div class="activity-card-title">
-                    <h2>端午福袋</h2>
-                    <p>打开福袋随机获得端午节收藏品</p>
-                </div>
+    <!-- 端午活动面板 -->
+    <div class="activity-panel active" id="panel-dragon-boat">
+        <div class="particle-container" id="activity-particles"></div>
+        <div class="activity-content">
+            <div class="activity-hero">
+                <div class="activity-badge">端午限定</div>
+                <h1>端午活动</h1>
+                <p class="activity-date">2026年6月19日</p>
             </div>
-            <div class="activity-items">
-                <div class="activity-item-row">
-                    <div class="activity-item">
-                        <div class="item-icon-placeholder" style="background:linear-gradient(135deg,#3b82f622,#3b82f611);border:2px solid #3b82f655);">粽</div>
-                        <span>粽子</span>
-                        <span class="quality-tag" style="color:#3b82f6;font-size:0.75rem;">珍奇</span>
-                    </div>
-                    <div class="activity-item">
-                        <div class="item-icon-placeholder" style="background:linear-gradient(135deg,#3b82f622,#3b82f611);border:2px solid #3b82f655);">艾</div>
-                        <span>艾草香囊</span>
-                        <span class="quality-tag" style="color:#3b82f6;font-size:0.75rem;">珍奇</span>
-                    </div>
-                    <div class="activity-item">
-                        <div class="item-icon-placeholder" style="background:linear-gradient(135deg,#3b82f622,#3b82f611);border:2px solid #3b82f655);">龙</div>
-                        <span>龙舟模型</span>
-                        <span class="quality-tag" style="color:#3b82f6;font-size:0.75rem;">珍奇</span>
-                    </div>
-                    <div class="activity-item">
-                        <div class="item-icon-placeholder" style="background:linear-gradient(135deg,#a855f722,#a855f711);border:2px solid #a855f755);">绳</div>
-                        <span>五彩绳</span>
-                        <span class="quality-tag" style="color:#a855f7;font-size:0.75rem;">史诗</span>
-                    </div>
-                    <div class="activity-item">
-                        <div class="item-icon-placeholder" style="background:linear-gradient(135deg,#f9731622,#f9731611);border:2px solid #f9731655);">酒</div>
-                        <span>雄黄酒</span>
-                        <span class="quality-tag" style="color:#f97316;font-size:0.75rem;">传说</span>
-                    </div>
-                    <div class="activity-item">
-                        <div class="item-icon-placeholder" style="background:linear-gradient(135deg,#f9731622,#f9731611);border:2px solid #f9731655);">诗</div>
-                        <span>离骚</span>
-                        <span class="quality-tag" style="color:#f97316;font-size:0.75rem;">传说</span>
-                    </div>
-                </div>
-            </div>
-            <div class="activity-tip">
-                <i data-lucide="info"></i>
-                <span>点击使用端午福袋可开启，每个福袋随机获得一件收藏品</span>
-            </div>
-        </div>
 
-        <!-- 在线礼包 -->
-        <div class="activity-card card animate-fade-in-up" style="animation-delay:0.1s;">
-            <div class="activity-card-header">
-                <div class="activity-icon clock">
-                    <i data-lucide="clock"></i>
-                </div>
-                <div class="activity-card-title">
-                    <h2>在线礼包</h2>
-                    <p>端午节期间在线可领取端午福袋</p>
-                </div>
-            </div>
-            <div class="online-rewards">
-                <div class="online-reward-item" id="online-reward-1">
-                    <div class="online-reward-time">在线1分钟</div>
-                    <div class="online-reward-arrow"><i data-lucide="arrow-right"></i></div>
-                    <div class="online-reward-gift">
+            <div class="activity-card card animate-fade-in-up">
+                <div class="activity-card-header">
+                    <div class="activity-icon dragon">
                         <i data-lucide="gift"></i>
-                        <span>端午福袋 x1</span>
                     </div>
-                    <button class="btn btn-small btn-claim-online" id="btn-claim-online-1" data-milestone="1" disabled>
-                        <span>领取</span>
+                    <div class="activity-card-title">
+                        <h2>端午福袋</h2>
+                        <p>打开福袋随机获得端午节收藏品</p>
+                    </div>
+                </div>
+                <div class="activity-items">
+                    <div class="activity-item-row">
+                        <div class="activity-item">
+                            <div class="item-icon-placeholder" style="background:linear-gradient(135deg,#3b82f622,#3b82f611);border:2px solid #3b82f655);">粽</div>
+                            <span>粽子</span>
+                            <span class="quality-tag" style="color:#3b82f6;font-size:0.75rem;">珍奇</span>
+                        </div>
+                        <div class="activity-item">
+                            <div class="item-icon-placeholder" style="background:linear-gradient(135deg,#3b82f622,#3b82f611);border:2px solid #3b82f655);">艾</div>
+                            <span>艾草香囊</span>
+                            <span class="quality-tag" style="color:#3b82f6;font-size:0.75rem;">珍奇</span>
+                        </div>
+                        <div class="activity-item">
+                            <div class="item-icon-placeholder" style="background:linear-gradient(135deg,#3b82f622,#3b82f611);border:2px solid #3b82f655);">龙</div>
+                            <span>龙舟模型</span>
+                            <span class="quality-tag" style="color:#3b82f6;font-size:0.75rem;">珍奇</span>
+                        </div>
+                        <div class="activity-item">
+                            <div class="item-icon-placeholder" style="background:linear-gradient(135deg,#a855f722,#a855f711);border:2px solid #a855f755);">绳</div>
+                            <span>五彩绳</span>
+                            <span class="quality-tag" style="color:#a855f7;font-size:0.75rem;">史诗</span>
+                        </div>
+                        <div class="activity-item">
+                            <div class="item-icon-placeholder" style="background:linear-gradient(135deg,#f9731622,#f9731611);border:2px solid #f9731655);">酒</div>
+                            <span>雄黄酒</span>
+                            <span class="quality-tag" style="color:#f97316;font-size:0.75rem;">传说</span>
+                        </div>
+                        <div class="activity-item">
+                            <div class="item-icon-placeholder" style="background:linear-gradient(135deg,#f9731622,#f9731611);border:2px solid #f9731655);">诗</div>
+                            <span>离骚</span>
+                            <span class="quality-tag" style="color:#f97316;font-size:0.75rem;">传说</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="activity-tip">
+                    <i data-lucide="info"></i>
+                    <span>点击使用端午福袋可开启，每个福袋随机获得一件收藏品</span>
+                </div>
+            </div>
+
+            <div class="activity-card card animate-fade-in-up" style="animation-delay:0.1s;">
+                <div class="activity-card-header">
+                    <div class="activity-icon clock">
+                        <i data-lucide="clock"></i>
+                    </div>
+                    <div class="activity-card-title">
+                        <h2>在线礼包</h2>
+                        <p>端午节期间在线可领取端午福袋</p>
+                    </div>
+                </div>
+                <div class="online-rewards">
+                    <div class="online-reward-item" id="online-reward-1">
+                        <div class="online-reward-time">在线1分钟</div>
+                        <div class="online-reward-arrow"><i data-lucide="arrow-right"></i></div>
+                        <div class="online-reward-gift">
+                            <i data-lucide="gift"></i>
+                            <span>端午福袋 x1</span>
+                        </div>
+                        <button class="btn btn-small btn-claim-online" id="btn-claim-online-1" data-milestone="1" disabled>
+                            <span>领取</span>
+                        </button>
+                    </div>
+                    <div class="online-reward-item" id="online-reward-10">
+                        <div class="online-reward-time">在线10分钟</div>
+                        <div class="online-reward-arrow"><i data-lucide="arrow-right"></i></div>
+                        <div class="online-reward-gift">
+                            <i data-lucide="gift"></i>
+                            <span>端午福袋 x2</span>
+                        </div>
+                        <button class="btn btn-small btn-claim-online" id="btn-claim-online-10" data-milestone="10" disabled>
+                            <span>领取</span>
+                        </button>
+                    </div>
+                    <div class="online-reward-item" id="online-reward-60">
+                        <div class="online-reward-time">在线60分钟</div>
+                        <div class="online-reward-arrow"><i data-lucide="arrow-right"></i></div>
+                        <div class="online-reward-gift">
+                            <i data-lucide="gift"></i>
+                            <span>端午福袋 x3</span>
+                        </div>
+                        <button class="btn btn-small btn-claim-online" id="btn-claim-online-60" data-milestone="60" disabled>
+                            <span>领取</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="online-status">
+                    <span>当前在线: <strong id="db-online-display">0</strong> 秒</span>
+                </div>
+                <div class="activity-tip">
+                    <i data-lucide="info"></i>
+                    <span>每日重置领取状态，在线时间累计计算</span>
+                </div>
+            </div>
+
+            <div class="activity-card card animate-fade-in-up" style="animation-delay:0.2s;">
+                <div class="activity-card-header">
+                    <div class="activity-icon info">
+                        <i data-lucide="help-circle"></i>
+                    </div>
+                    <div class="activity-card-title">
+                        <h2>活动说明</h2>
+                    </div>
+                </div>
+                <div class="activity-rules">
+                    <div class="rule-item">
+                        <span class="rule-number">1</span>
+                        <span>端午福袋可在背包页面使用，打开后随机获得一件端午节收藏品</span>
+                    </div>
+                    <div class="rule-item">
+                        <span class="rule-number">2</span>
+                        <span>在线礼包需在活动期间领取，每个里程碑每日仅可领取一次</span>
+                    </div>
+                    <div class="rule-item">
+                        <span class="rule-number">3</span>
+                        <span>收藏品可用于挂机收益加成，品质越高加成越多</span>
+                    </div>
+                    <div class="rule-item">
+                        <span class="rule-number">4</span>
+                        <span>活动结束后将无法领取在线礼包，但已获得的收藏品保留</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 彩票活动面板 -->
+    <div class="activity-panel" id="panel-lottery">
+        <div class="lottery-content">
+            <div class="lottery-header">
+                <div class="lottery-badge">每8小时一期</div>
+                <h1>彩票活动</h1>
+                <p class="lottery-subtitle">16进制选号，赢取丰厚奖金</p>
+            </div>
+
+            <div class="lottery-info-card">
+                <div class="lottery-info-row">
+                    <div class="lottery-info-item">
+                        <span class="info-label">当前期次</span>
+                        <span class="info-value" id="lottery-round-number">--</span>
+                    </div>
+                    <div class="lottery-info-item">
+                        <span class="info-label">奖池金额</span>
+                        <span class="info-value highlight" id="lottery-total-pool">--</span>
+                    </div>
+                </div>
+                <div class="lottery-info-row">
+                    <div class="lottery-info-item">
+                        <span class="info-label">剩余时间</span>
+                        <span class="info-value" id="lottery-time-left">--</span>
+                    </div>
+                    <div class="lottery-info-item">
+                        <span class="info-label">已购注数</span>
+                        <span class="info-value" id="lottery-user-count">0/30</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lottery-card">
+                <div class="lottery-section-title">
+                    <i data-lucide="circle-dot"></i>
+                    <span>选择号码</span>
+                </div>
+                <div class="lottery-number-grid" id="lottery-number-grid">
+                    <button class="lottery-number-btn" data-num="0">0</button>
+                    <button class="lottery-number-btn" data-num="1">1</button>
+                    <button class="lottery-number-btn" data-num="2">2</button>
+                    <button class="lottery-number-btn" data-num="3">3</button>
+                    <button class="lottery-number-btn" data-num="4">4</button>
+                    <button class="lottery-number-btn" data-num="5">5</button>
+                    <button class="lottery-number-btn" data-num="6">6</button>
+                    <button class="lottery-number-btn" data-num="7">7</button>
+                    <button class="lottery-number-btn" data-num="8">8</button>
+                    <button class="lottery-number-btn" data-num="9">9</button>
+                    <button class="lottery-number-btn" data-num="A">A</button>
+                    <button class="lottery-number-btn" data-num="B">B</button>
+                    <button class="lottery-number-btn" data-num="C">C</button>
+                    <button class="lottery-number-btn" data-num="D">D</button>
+                    <button class="lottery-number-btn" data-num="E">E</button>
+                    <button class="lottery-number-btn" data-num="F">F</button>
+                </div>
+                <div class="lottery-selected">
+                    <div class="selected-label">已选号码</div>
+                    <div class="selected-numbers" id="lottery-selected-numbers">
+                        <span class="selected-slot">--</span>
+                        <span class="selected-slot">--</span>
+                        <span class="selected-slot">--</span>
+                        <span class="selected-slot">--</span>
+                        <span class="selected-slot">--</span>
+                        <span class="selected-slot">--</span>
+                    </div>
+                </div>
+                <div class="lottery-quantity-selector">
+                    <span class="quantity-label">购买数量</span>
+                    <div class="quantity-buttons" id="lottery-quantity-buttons">
+                        <button class="quantity-btn active" data-qty="1">1注</button>
+                        <button class="quantity-btn" data-qty="2">2注</button>
+                        <button class="quantity-btn" data-qty="5">5注</button>
+                        <button class="quantity-btn" data-qty="10">10注</button>
+                    </div>
+                </div>
+                <div class="lottery-actions">
+                    <button class="btn btn-secondary btn-small" id="btn-lottery-clear">
+                        <i data-lucide="rotate-ccw"></i>
+                        <span>清空</span>
+                    </button>
+                    <button class="btn btn-primary" id="btn-lottery-buy" disabled>
+                        <span id="btn-lottery-buy-text">购买 (100果壳币)</span>
                     </button>
                 </div>
-                <div class="online-reward-item" id="online-reward-10">
-                    <div class="online-reward-time">在线10分钟</div>
-                    <div class="online-reward-arrow"><i data-lucide="arrow-right"></i></div>
-                    <div class="online-reward-gift">
-                        <i data-lucide="gift"></i>
-                        <span>端午福袋 x2</span>
-                    </div>
-                    <button class="btn btn-small btn-claim-online" id="btn-claim-online-10" data-milestone="10" disabled>
-                        <span>领取</span>
-                    </button>
-                </div>
-                <div class="online-reward-item" id="online-reward-60">
-                    <div class="online-reward-time">在线60分钟</div>
-                    <div class="online-reward-arrow"><i data-lucide="arrow-right"></i></div>
-                    <div class="online-reward-gift">
-                        <i data-lucide="gift"></i>
-                        <span>端午福袋 x3</span>
-                    </div>
-                    <button class="btn btn-small btn-claim-online" id="btn-claim-online-60" data-milestone="60" disabled>
-                        <span>领取</span>
-                    </button>
-                </div>
             </div>
-            <div class="online-status">
-                <span>当前在线: <strong id="db-online-display">0</strong> 秒</span>
-            </div>
-            <div class="activity-tip">
-                <i data-lucide="info"></i>
-                <span>每日重置领取状态，在线时间累计计算</span>
-            </div>
-        </div>
 
-        <!-- 活动说明 -->
-        <div class="activity-card card animate-fade-in-up" style="animation-delay:0.2s;">
-            <div class="activity-card-header">
-                <div class="activity-icon info">
-                    <i data-lucide="help-circle"></i>
+            <div class="lottery-card">
+                <div class="lottery-section-title">
+                    <i data-lucide="trophy"></i>
+                    <span>奖项设置</span>
                 </div>
-                <div class="activity-card-title">
-                    <h2>活动说明</h2>
+                <div class="lottery-prizes">
+                    <div class="prize-row">
+                        <div class="prize-level">特等奖</div>
+                        <div class="prize-matches">6个全中</div>
+                        <div class="prize-share">30%</div>
+                    </div>
+                    <div class="prize-row">
+                        <div class="prize-level">一等奖</div>
+                        <div class="prize-matches">命中5个</div>
+                        <div class="prize-share">20%</div>
+                    </div>
+                    <div class="prize-row">
+                        <div class="prize-level">二等奖</div>
+                        <div class="prize-matches">命中4个</div>
+                        <div class="prize-share">15%</div>
+                    </div>
+                    <div class="prize-row">
+                        <div class="prize-level">三等奖</div>
+                        <div class="prize-matches">命中3个</div>
+                        <div class="prize-share">10%</div>
+                    </div>
+                    <div class="prize-row">
+                        <div class="prize-level">幸运奖</div>
+                        <div class="prize-matches">命中1-2个</div>
+                        <div class="prize-share">5%</div>
+                    </div>
                 </div>
             </div>
-            <div class="activity-rules">
-                <div class="rule-item">
-                    <span class="rule-number">1</span>
-                    <span>端午福袋可在背包页面使用，打开后随机获得一件端午节收藏品</span>
+
+            <div class="lottery-card">
+                <div class="lottery-section-title">
+                    <i data-lucide="history"></i>
+                    <span>往期开奖</span>
                 </div>
-                <div class="rule-item">
-                    <span class="rule-number">2</span>
-                    <span>在线礼包需在活动期间领取，每个里程碑每日仅可领取一次</span>
+                <div class="lottery-history" id="lottery-history">
+                    <div class="empty-state">暂无往期开奖记录</div>
                 </div>
-                <div class="rule-item">
-                    <span class="rule-number">3</span>
-                    <span>收藏品可用于挂机收益加成，品质越高加成越多</span>
+            </div>
+
+            <div class="lottery-card">
+                <div class="lottery-section-title">
+                    <i data-lucide="ticket"></i>
+                    <span>我的彩票</span>
                 </div>
-                <div class="rule-item">
-                    <span class="rule-number">4</span>
-                    <span>活动结束后将无法领取在线礼包，但已获得的收藏品保留</span>
+                <div class="lottery-my-tickets" id="lottery-my-tickets">
+                    <div class="empty-state">暂无彩票</div>
                 </div>
             </div>
         </div>
-
-        <a href="#idle" class="btn btn-primary" style="width:100%;margin-top:16px;">
-            <i data-lucide="clock"></i>
-            <span>前往挂机</span>
-        </a>
     </div>
 </div>
