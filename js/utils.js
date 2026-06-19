@@ -162,13 +162,6 @@ export function openItemDetail(item) {
         }
     }
 
-    if (item.item_type === 'collection' && (item.owned || 0) >= 9 && item.quality !== 'red') {
-        actionHtml += '<button class="btn btn-primary" id="merge-collection-btn" style="width:100%;margin-top:12px;">' +
-            '<i data-lucide="arrow-up-circle"></i>' +
-            '<span>合成升品 (消耗9个)</span>' +
-            '</button>';
-    }
-
     if (actionHtml) {
         actionsDiv.style.display = 'block';
         actionsDiv.innerHTML = actionHtml;
@@ -188,14 +181,6 @@ export function openItemDetail(item) {
                     }
                 });
             }
-        }
-
-        if (item.item_type === 'collection' && (item.owned || 0) >= 9 && item.quality !== 'red') {
-            document.getElementById('merge-collection-btn').addEventListener('click', async () => {
-                if (window.handleMergeCollection) {
-                    await window.handleMergeCollection(item.id);
-                }
-            });
         }
     } else {
         actionsDiv.style.display = 'none';

@@ -2095,10 +2095,11 @@ END;
 $$;
 
 -- ============================================================
--- 36. RPC 函数：收藏品合成（9个同品质同名物品合成1个下一品质）
+-- 36. RPC 函数：收藏品合成（9个同品质收藏品合成1个下一品质随机收藏品）
 -- ============================================================
-DROP FUNCTION IF EXISTS public.merge_collections(BIGINT);
-CREATE OR REPLACE FUNCTION public.merge_collections(p_item_id BIGINT)
+DROP FUNCTION IF EXISTS public.merge_collections(TEXT);
+DROP FUNCTION IF EXISTS public.merge_collections(BIGINT[]);
+CREATE OR REPLACE FUNCTION public.merge_collections(p_item_ids BIGINT[])
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -2107,69 +2108,105 @@ DECLARE
     user_uuid UUID := auth.uid();
     v_item RECORD;
     v_target_item RECORD;
-    v_inv_quantity INT;
     quality_order TEXT[] := ARRAY['white', 'green', 'blue', 'purple', 'orange', 'red'];
     next_quality TEXT;
     v_quality_idx INT;
+    total_weight NUMERIC;
+    random_pick NUMERIC;
+    remaining NUMERIC;
+    v_temp RECORD;
+    v_first_quality TEXT;
+    item_count INT;
 BEGIN
     IF user_uuid IS NULL THEN
         RETURN jsonb_build_object('success', false, 'message', '请先登录');
     END IF;
 
-    -- 获取物品信息
-    SELECT * INTO v_item FROM public.items WHERE id = p_item_id;
-    IF v_item IS NULL THEN
-        RETURN jsonb_build_object('success', false, 'message', '物品不存在');
+    -- 检查数量
+    item_count := array_length(p_item_ids, 1);
+    IF item_count IS NULL OR item_count < 9 THEN
+        RETURN jsonb_build_object('success', false, 'message', '需要选择9个收藏品');
     END IF;
 
-    -- 检查是否是收藏品
-    IF v_item.item_type != 'collection' THEN
-        RETURN jsonb_build_object('success', false, 'message', '该物品不可合成');
-    END IF;
+    -- 获取第一个物品的品质
+    SELECT i.quality INTO v_first_quality
+    FROM public.inventory inv
+    JOIN public.items i ON inv.item_id = i.id
+    WHERE inv.id = p_item_ids[1]
+    AND inv.user_id = user_uuid
+    AND i.item_type = 'collection';
 
-    -- 检查用户库存
-    SELECT quantity INTO v_inv_quantity
-    FROM public.inventory
-    WHERE user_id = user_uuid AND item_id = p_item_id
-    FOR UPDATE;
+    -- 检查所有物品是否都是收藏品且品质相同
+    FOR v_temp IN
+        SELECT inv.id, i.quality, i.item_type, inv.quantity
+        FROM unnest(p_item_ids) AS arr_id(id)
+        JOIN public.inventory inv ON inv.id = arr_id.id
+        JOIN public.items i ON inv.item_id = i.id
+        WHERE inv.user_id = user_uuid
+    LOOP
+        IF v_temp.item_type != 'collection' THEN
+            RETURN jsonb_build_object('success', false, 'message', '只能选择收藏品');
+        END IF;
+        IF v_temp.quality != v_first_quality THEN
+            RETURN jsonb_build_object('success', false, 'message', '所有收藏品必须是同一品质');
+        END IF;
+    END LOOP;
 
-    IF v_inv_quantity IS NULL OR v_inv_quantity < 9 THEN
-        RETURN jsonb_build_object('success', false, 'message', '数量不足，需要9个' || v_item.name);
-    END IF;
-
-    -- 计算下一品质
-    SELECT array_position(quality_order, v_item.quality) INTO v_quality_idx;
+    -- 检查是否是最高品质
+    SELECT array_position(quality_order, v_first_quality) INTO v_quality_idx;
     IF v_quality_idx IS NULL OR v_quality_idx >= array_length(quality_order, 1) THEN
-        RETURN jsonb_build_object('success', false, 'message', '该物品已达到最高品质');
+        RETURN jsonb_build_object('success', false, 'message', '该品质已达到最高品质');
     END IF;
 
     next_quality := quality_order[v_quality_idx + 1];
 
-    -- 查找同名的下一品质物品
-    SELECT * INTO v_target_item
+    -- 随机选择一个下一品质的收藏品（按权重）
+    SELECT COALESCE(SUM(drop_weight), 100) INTO total_weight
     FROM public.items
-    WHERE name = v_item.name AND quality = next_quality
-    LIMIT 1;
+    WHERE quality = next_quality AND item_type = 'collection';
 
-    IF v_target_item IS NULL THEN
-        RETURN jsonb_build_object('success', false, 'message', '暂无' || v_item.name || '的' ||
-            CASE next_quality
-                WHEN 'white' THEN '普通'
-                WHEN 'green' THEN '稀有'
-                WHEN 'blue' THEN '珍奇'
-                WHEN 'purple' THEN '史诗'
-                WHEN 'orange' THEN '传说'
-                WHEN 'red' THEN '神圣'
-            END || '版本');
+    IF total_weight <= 0 OR NOT EXISTS (
+        SELECT 1 FROM public.items WHERE quality = next_quality AND item_type = 'collection'
+    ) THEN
+        RETURN jsonb_build_object('success', false, 'message', '暂无可合成的' || next_quality || '品质收藏品');
     END IF;
 
-    -- 扣除9个原物品
-    UPDATE public.inventory
-    SET quantity = quantity - 9
-    WHERE user_id = user_uuid AND item_id = p_item_id;
+    random_pick := floor(random() * total_weight) + 1;
+    remaining := random_pick;
 
-    DELETE FROM public.inventory
-    WHERE user_id = user_uuid AND item_id = p_item_id AND quantity <= 0;
+    FOR v_temp IN
+        SELECT id, name, quality, drop_weight
+        FROM public.items
+        WHERE quality = next_quality AND item_type = 'collection'
+        ORDER BY id
+    LOOP
+        remaining := remaining - COALESCE(v_temp.drop_weight, 100);
+        IF remaining <= 0 THEN
+            v_target_item := v_temp;
+            EXIT;
+        END IF;
+    END LOOP;
+
+    -- 如果没找到，随机选一个
+    IF v_target_item IS NULL THEN
+        SELECT * INTO v_target_item
+        FROM public.items
+        WHERE quality = next_quality AND item_type = 'collection'
+        ORDER BY random()
+        LIMIT 1;
+    END IF;
+
+    -- 扣除9个收藏品（每个物品ID扣1个）
+    FOR v_temp IN
+        SELECT unnest(p_item_ids) AS inv_id
+    LOOP
+        UPDATE public.inventory
+        SET quantity = quantity - 1
+        WHERE id = v_temp.inv_id AND user_id = user_uuid;
+    END LOOP;
+
+    -- 删除数量为0的记录
+    DELETE FROM public.inventory WHERE user_id = user_uuid AND quantity <= 0;
 
     -- 添加1个目标物品
     INSERT INTO public.inventory (user_id, item_id, quantity)
@@ -2179,7 +2216,7 @@ BEGIN
 
     RETURN jsonb_build_object(
         'success', true,
-        'message', '合成成功！9个' || v_item.name || '合成1个' || v_target_item.name,
+        'message', '合成成功！获得' || v_target_item.name,
         'item_id', v_target_item.id,
         'item_name', v_target_item.name,
         'item_quality', v_target_item.quality

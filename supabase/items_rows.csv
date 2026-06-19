@@ -34,7 +34,7 @@ id,name,quality,image_name,description,drop_weight,created_at,item_type
 86,灯,purple,,黑夜给了黑夜的人一道光,300,2026-06-19 02:43:39.827094+00,collection
 87,改名卡,purple,,使用后可以修改你的昵称,300,2026-06-19 12:00:00+00,consumable
 
-88,端午节福袋,orange,,打开后获得随机端午节收藏品,0,2026-06-19 12:00:00+00,consumable
+88,端午节福袋,purple,,打开后获得随机端午节收藏品,0,2026-06-19 12:00:00+00,consumable
 89,粽子,blue,,碧绿的外衣，糯米与叶香的缠绕（端午限定）,0,2026-06-19 12:00:00+00,collection
 90,艾草香囊,blue,,驱邪避疫，一缕清芬随身（端午限定）,0,2026-06-19 12:00:00+00,collection
 91,龙舟模型,blue,,乘风破浪，百舸争流（端午限定）,0,2026-06-19 12:00:00+00,collection

@@ -2,14 +2,15 @@
 // 版本信息与更新日志
 // ============================================
 
-export const VERSION = 'v0.3.0_beta';
+export const VERSION = 'v0.3.1_beta';
 
 export const CHANGELOG = [ {
-        version: 'v0.3.0_beta',
+        version: 'v0.3.1_beta',
         date: '2026-06-19',
         type: 'feature',
         features: [
             "新增彩票，快来试试手气吧~",
+            "新增收藏品合成，9个低品级可以合成一个高品级收藏品",
             "降低广告奖励为1000-5000",
         ]
     },

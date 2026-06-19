@@ -259,6 +259,6 @@ export async function claimDragonBoatOnline() {
 }
 
 // 收藏品合成
-export async function mergeCollections(itemId) {
-    return rpc('merge_collections', { p_item_id: itemId });
+export async function mergeCollections(itemIds) {
+    return rpc('merge_collections', { p_item_ids: itemIds });
 }

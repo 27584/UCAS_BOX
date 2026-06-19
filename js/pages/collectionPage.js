@@ -2,7 +2,7 @@ import { getCollectionProgress } from '../api.js';
 import { itemImageHTML, QUALITY_CONFIG, openItemDetail } from '../utils.js';
 import { createIcons, icons } from 'lucide';
 
-const PAGE_SIZE = 12;
+const PAGE_SIZE = 16;
 
 export const collectionPage = {
     items: [],
