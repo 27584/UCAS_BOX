@@ -2231,9 +2231,282 @@ LANGUAGE plpgsql
 AS $$
 BEGIN
     RETURN jsonb_build_object(
-        'min_version_code', 1,
-        'min_version', 'v0.3.2_beta',
+        'min_version_code', 301,
+        'min_version', 'v0.3.1_beta',
         'message', '当前版本过低，请更新（CTRL+SHIFT+F5刷新或寻求可靠途径）'
     );
+END;
+$$;
+
+-- ============================================
+-- 动态功能
+-- ============================================
+
+-- 动态帖子表
+CREATE TABLE IF NOT EXISTS public.posts (
+    id BIGSERIAL PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    content TEXT NOT NULL,
+    tags TEXT[] DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT NOW() AT TIME ZONE 'Asia/Shanghai',
+    updated_at TIMESTAMPTZ DEFAULT NOW() AT TIME ZONE 'Asia/Shanghai'
+);
+
+-- 评论表（支持嵌套）
+CREATE TABLE IF NOT EXISTS public.comments (
+    id BIGSERIAL PRIMARY KEY,
+    post_id BIGINT NOT NULL REFERENCES public.posts(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    parent_id BIGINT DEFAULT NULL REFERENCES public.comments(id) ON DELETE CASCADE,
+    content TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW() AT TIME ZONE 'Asia/Shanghai'
+);
+
+-- 点赞表（帖子+评论共用）
+CREATE TABLE IF NOT EXISTS public.likes (
+    id BIGSERIAL PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    target_type TEXT NOT NULL CHECK (target_type IN ('post', 'comment')),
+    target_id BIGINT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW() AT TIME ZONE 'Asia/Shanghai',
+    UNIQUE(user_id, target_type, target_id)
+);
+
+-- 创建索引
+CREATE INDEX IF NOT EXISTS idx_posts_user_id ON public.posts(user_id);
+CREATE INDEX IF NOT EXISTS idx_posts_created_at ON public.posts(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_comments_post_id ON public.comments(post_id);
+CREATE INDEX IF NOT EXISTS idx_comments_parent_id ON public.comments(parent_id);
+CREATE INDEX IF NOT EXISTS idx_likes_target ON public.likes(target_type, target_id);
+
+-- 发帖
+CREATE OR REPLACE FUNCTION public.create_post(p_content TEXT, p_tags TEXT[] DEFAULT '{}')
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    user_uuid UUID;
+    v_post_id BIGINT;
+BEGIN
+    user_uuid := auth.uid();
+    IF user_uuid IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '请先登录');
+    END IF;
+
+    IF LENGTH(p_content) < 1 OR LENGTH(p_content) > 2000 THEN
+        RETURN jsonb_build_object('success', false, 'message', '内容长度需在1-2000字符之间');
+    END IF;
+
+    INSERT INTO public.posts (user_id, content, tags)
+    VALUES (user_uuid, p_content, p_tags)
+    RETURNING id INTO v_post_id;
+
+    RETURN jsonb_build_object('success', true, 'post_id', v_post_id);
+END;
+$$;
+
+-- 获取帖子列表
+CREATE OR REPLACE FUNCTION public.get_posts(p_limit INT DEFAULT 20, p_offset INT DEFAULT 0, p_tag TEXT DEFAULT NULL)
+RETURNS TABLE(
+    post_id BIGINT,
+    user_id UUID,
+    user_nickname TEXT,
+    user_avatar TEXT,
+    content TEXT,
+    tags TEXT[],
+    created_at TIMESTAMPTZ,
+    likes_count BIGINT,
+    comments_count BIGINT,
+    is_liked BOOLEAN
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    user_uuid UUID;
+BEGIN
+    user_uuid := auth.uid();
+
+    RETURN QUERY
+    SELECT 
+        p.id AS post_id,
+        p.user_id,
+        pr.nickname AS user_nickname,
+        pr.avatar_url AS user_avatar,
+        p.content,
+        p.tags,
+        p.created_at,
+        (SELECT COUNT(*) FROM public.likes WHERE target_type = 'post' AND target_id = p.id) AS likes_count,
+        (SELECT COUNT(*) FROM public.comments WHERE post_id = p.id) AS comments_count,
+        EXISTS(SELECT 1 FROM public.likes WHERE user_id = user_uuid AND target_type = 'post' AND target_id = p.id) AS is_liked
+    FROM public.posts p
+    LEFT JOIN public.profiles pr ON p.user_id = pr.id
+    WHERE p_tag IS NULL OR p_tag = ANY(p.tags)
+    ORDER BY p.created_at DESC
+    LIMIT p_limit
+    OFFSET p_offset;
+END;
+$$;
+
+-- 点赞/取消点赞
+CREATE OR REPLACE FUNCTION public.toggle_like(p_target_type TEXT, p_target_id BIGINT)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    user_uuid UUID;
+    v_exists BOOLEAN;
+BEGIN
+    user_uuid := auth.uid();
+    IF user_uuid IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '请先登录');
+    END IF;
+
+    SELECT EXISTS(SELECT 1 FROM public.likes WHERE user_id = user_uuid AND target_type = p_target_type AND target_id = p_target_id) INTO v_exists;
+
+    IF v_exists THEN
+        DELETE FROM public.likes WHERE user_id = user_uuid AND target_type = p_target_type AND target_id = p_target_id;
+        RETURN jsonb_build_object('success', true, 'action', 'unliked');
+    ELSE
+        INSERT INTO public.likes (user_id, target_type, target_id) VALUES (user_uuid, p_target_type, p_target_id);
+        RETURN jsonb_build_object('success', true, 'action', 'liked');
+    END IF;
+END;
+$$;
+
+-- 发表评论
+CREATE OR REPLACE FUNCTION public.create_comment(p_post_id BIGINT, p_content TEXT, p_parent_id BIGINT DEFAULT NULL)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    user_uuid UUID;
+    v_comment_id BIGINT;
+BEGIN
+    user_uuid := auth.uid();
+    IF user_uuid IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '请先登录');
+    END IF;
+
+    IF LENGTH(p_content) < 1 OR LENGTH(p_content) > 500 THEN
+        RETURN jsonb_build_object('success', false, 'message', '评论长度需在1-500字符之间');
+    END IF;
+
+    INSERT INTO public.comments (post_id, user_id, parent_id, content)
+    VALUES (p_post_id, user_uuid, p_parent_id, p_content)
+    RETURNING id INTO v_comment_id;
+
+    RETURN jsonb_build_object('success', true, 'comment_id', v_comment_id);
+END;
+$$;
+
+-- 获取帖子评论（嵌套结构）
+CREATE OR REPLACE FUNCTION public.get_comments(p_post_id BIGINT)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    result JSONB;
+BEGIN
+    WITH RECURSIVE comment_tree AS (
+        -- 根评论
+        SELECT 
+            c.id,
+            c.post_id,
+            c.user_id,
+            c.parent_id,
+            c.content,
+            c.created_at,
+            pr.nickname AS user_nickname,
+            pr.avatar_url AS user_avatar,
+            (SELECT COUNT(*) FROM public.likes WHERE target_type = 'comment' AND target_id = c.id) AS likes_count,
+            EXISTS(SELECT 1 FROM public.likes WHERE user_id = auth.uid() AND target_type = 'comment' AND target_id = c.id) AS is_liked,
+            0 AS depth,
+            ARRAY[c.id] AS path
+        FROM public.comments c
+        LEFT JOIN public.profiles pr ON c.user_id = pr.id
+        WHERE c.post_id = p_post_id AND c.parent_id IS NULL
+
+        UNION ALL
+
+        -- 子评论
+        SELECT 
+            c.id,
+            c.post_id,
+            c.user_id,
+            c.parent_id,
+            c.content,
+            c.created_at,
+            pr.nickname AS user_nickname,
+            pr.avatar_url AS user_avatar,
+            (SELECT COUNT(*) FROM public.likes WHERE target_type = 'comment' AND target_id = c.id) AS likes_count,
+            EXISTS(SELECT 1 FROM public.likes WHERE user_id = auth.uid() AND target_type = 'comment' AND target_id = c.id) AS is_liked,
+            ct.depth + 1,
+            ct.path || c.id
+        FROM public.comments c
+        LEFT JOIN public.profiles pr ON c.user_id = pr.id
+        JOIN comment_tree ct ON c.parent_id = ct.id
+        WHERE c.post_id = p_post_id AND ct.depth < 3  -- 最多嵌套3层
+    )
+    SELECT jsonb_agg(
+        jsonb_build_object(
+            'id', id,
+            'user_id', user_id,
+            'user_nickname', user_nickname,
+            'user_avatar', user_avatar,
+            'parent_id', parent_id,
+            'content', content,
+            'created_at', created_at,
+            'likes_count', likes_count,
+            'is_liked', is_liked,
+            'depth', depth
+        ) ORDER BY path
+    ) INTO result
+    FROM comment_tree;
+
+    RETURN COALESCE(result, '[]'::jsonb);
+END;
+$$;
+
+-- 删除帖子（仅作者可删）
+CREATE OR REPLACE FUNCTION public.delete_post(p_post_id BIGINT)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    user_uuid UUID;
+BEGIN
+    user_uuid := auth.uid();
+    IF user_uuid IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '请先登录');
+    END IF;
+
+    DELETE FROM public.posts WHERE id = p_post_id AND user_id = user_uuid;
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('success', false, 'message', '无权删除或帖子不存在');
+    END IF;
+
+    RETURN jsonb_build_object('success', true);
+END;
+$$;
+
+-- 删除评论（仅作者可删）
+CREATE OR REPLACE FUNCTION public.delete_comment(p_comment_id BIGINT)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    user_uuid UUID;
+BEGIN
+    user_uuid := auth.uid();
+    IF user_uuid IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '请先登录');
+    END IF;
+
+    DELETE FROM public.comments WHERE id = p_comment_id AND user_id = user_uuid;
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('success', false, 'message', '无权删除或评论不存在');
+    END IF;
+
+    RETURN jsonb_build_object('success', true);
 END;
 $$;
