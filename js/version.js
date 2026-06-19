@@ -2,16 +2,18 @@
 // 版本信息与更新日志
 // ============================================
 
-export const VERSION = 'v0.2.6_beta';
+export const VERSION = 'v0.2.7_beta';
 
 export const CHANGELOG = [
       {
-        version: 'v0.2.6_beta',
+        version: 'v0.2.7_beta',
         date: '2026-06-19',
         type: 'feature',
         features: [
+            "降低了挂机奖励",
             "修复移动端图鉴不显示的问题",
             "修复市场筛选的问题",
+            "新增端午节活动！",
             "新增购买数量设置",
             "新增图鉴分页",
             "新增物品类型",

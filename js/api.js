@@ -223,3 +223,13 @@ export async function useRenameCard(newNickname) {
         p_new_nickname: newNickname
     });
 }
+
+// 使用端午节福袋
+export async function useDragonBoatBag() {
+    return rpc('use_dragon_boat_bag');
+}
+
+// 端午活动 - 更新在线时间并领取在线礼包
+export async function claimDragonBoatOnline() {
+    return rpc('claim_dragon_boat_online');
+}

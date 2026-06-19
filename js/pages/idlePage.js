@@ -6,7 +6,7 @@ import { createIcons, icons } from 'lucide';
 export const idlePage = {
     interval: null,
     lastClaim: null,
-    baseRate: 10,
+    baseRate: 1,
     boostRate: 0,
     boostLoaded: false,
 

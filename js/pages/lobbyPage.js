@@ -72,7 +72,7 @@ export const lobbyPage = {
                 btn.disabled = false;
                 countdownEl.style.display = 'none';
                 textEl.style.display = 'block';
-                textEl.textContent = '宝盒已就绪，点击开启！';
+                textEl.textContent = '盒子已就绪，点击开启！';
                 return;
             }
 

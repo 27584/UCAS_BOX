@@ -147,20 +147,40 @@ export function openItemDetail(item) {
 
     // 消耗品特殊操作
     const actionsDiv = document.getElementById('detail-actions');
-    if (item.item_type === 'consumable' && item.name === '改名卡') {
-        actionsDiv.style.display = 'block';
-        actionsDiv.innerHTML = `
-            <button class="btn btn-primary" id="use-rename-btn" style="width:100%;margin-top:16px;">
-                <i data-lucide="edit-3"></i>
-                <span>使用改名卡</span>
-            </button>
-        `;
-        _createIcons({ icons });
-        
-        document.getElementById('use-rename-btn').addEventListener('click', () => {
-            closeItemDetail();
-            setTimeout(() => window.openRenameModal && window.openRenameModal(), 100);
-        });
+    if (item.item_type === 'consumable') {
+        if (item.name === '改名卡') {
+            actionsDiv.style.display = 'block';
+            actionsDiv.innerHTML = `
+                <button class="btn btn-primary" id="use-rename-btn" style="width:100%;margin-top:16px;">
+                    <i data-lucide="edit-3"></i>
+                    <span>使用改名卡</span>
+                </button>
+            `;
+            _createIcons({ icons });
+
+            document.getElementById('use-rename-btn').addEventListener('click', () => {
+                closeItemDetail();
+                setTimeout(() => window.openRenameModal && window.openRenameModal(), 100);
+            });
+        } else if (item.name === '端午节福袋') {
+            actionsDiv.style.display = 'block';
+            actionsDiv.innerHTML = `
+                <button class="btn btn-primary" id="use-dragon-boat-btn" style="width:100%;margin-top:16px;">
+                    <i data-lucide="gift"></i>
+                    <span>打开福袋</span>
+                </button>
+            `;
+            _createIcons({ icons });
+
+            document.getElementById('use-dragon-boat-btn').addEventListener('click', async () => {
+                if (window.useDragonBoatBag) {
+                    closeItemDetail();
+                    setTimeout(() => window.useDragonBoatBag(), 100);
+                }
+            });
+        } else {
+            actionsDiv.style.display = 'none';
+        }
     } else {
         actionsDiv.style.display = 'none';
     }

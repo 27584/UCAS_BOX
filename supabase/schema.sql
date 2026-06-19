@@ -12,8 +12,60 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     last_open_at TIMESTAMPTZ DEFAULT '1970-01-01'::timestamptz,
     last_claim_at TIMESTAMPTZ DEFAULT now(),
     ad_claimed_at TIMESTAMPTZ DEFAULT NULL,
+    -- 端午活动：在线时间追踪
+    dragon_boat_online_total INT DEFAULT 0, -- 累计在线秒数
+    dragon_boat_last_update TIMESTAMPTZ DEFAULT NULL, -- 上次更新时间
+    dragon_boat_claimed_1min BOOLEAN DEFAULT false,
+    dragon_boat_claimed_10min BOOLEAN DEFAULT false,
+    dragon_boat_claimed_60min BOOLEAN DEFAULT false,
+    dragon_boat_daily_reset TIMESTAMPTZ DEFAULT NULL, -- 每日重置时间
     created_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- 为已存在的表添加端午活动字段（兼容旧版PostgreSQL）
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'dragon_boat_online_total') THEN
+        ALTER TABLE public.profiles ADD COLUMN dragon_boat_online_total INT DEFAULT 0;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'dragon_boat_last_update') THEN
+        ALTER TABLE public.profiles ADD COLUMN dragon_boat_last_update TIMESTAMPTZ DEFAULT NULL;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'dragon_boat_claimed_1min') THEN
+        ALTER TABLE public.profiles ADD COLUMN dragon_boat_claimed_1min BOOLEAN DEFAULT false;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'dragon_boat_claimed_10min') THEN
+        ALTER TABLE public.profiles ADD COLUMN dragon_boat_claimed_10min BOOLEAN DEFAULT false;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'dragon_boat_claimed_60min') THEN
+        ALTER TABLE public.profiles ADD COLUMN dragon_boat_claimed_60min BOOLEAN DEFAULT false;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'dragon_boat_daily_reset') THEN
+        ALTER TABLE public.profiles ADD COLUMN dragon_boat_daily_reset TIMESTAMPTZ DEFAULT NULL;
+    END IF;
+END $$;
+
+-- ============================================================
+-- 1.5 端午活动进度表（独立表）
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.dragon_boat_progress (
+    user_id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
+    online_total INT DEFAULT 0, -- 累计在线秒数
+    last_update TIMESTAMPTZ DEFAULT NULL, -- 上次更新时间
+    claimed_1min BOOLEAN DEFAULT false,
+    claimed_10min BOOLEAN DEFAULT false,
+    claimed_60min BOOLEAN DEFAULT false,
+    daily_reset DATE DEFAULT NULL -- 每日重置日期
+);
+
+-- RLS for dragon_boat_progress
+ALTER TABLE public.dragon_boat_progress ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users can view own dragon boat progress" ON public.dragon_boat_progress;
+CREATE POLICY "Users can view own dragon boat progress" ON public.dragon_boat_progress FOR SELECT USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can update own dragon boat progress" ON public.dragon_boat_progress;
+CREATE POLICY "Users can update own dragon boat progress" ON public.dragon_boat_progress FOR UPDATE USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can insert own dragon boat progress" ON public.dragon_boat_progress;
+CREATE POLICY "Users can insert own dragon boat progress" ON public.dragon_boat_progress FOR INSERT WITH CHECK (auth.uid() = user_id);
 
 -- ============================================================
 -- 2. 收藏品字典
@@ -22,7 +74,7 @@ CREATE TABLE IF NOT EXISTS public.items (
     id BIGSERIAL PRIMARY KEY,
     name TEXT NOT NULL,
     quality TEXT CHECK (quality IN ('white','green','blue','purple','orange','red')),
-    image_name TEXT NOT NULL,
+    image_name TEXT,
     description TEXT,
     drop_weight INT DEFAULT 100,
     item_type TEXT DEFAULT 'collection' CHECK (item_type IN ('collection', 'consumable', 'equipment', 'material', 'currency')),
@@ -202,7 +254,7 @@ DECLARE
     now_time TIMESTAMPTZ := now();
     diff_seconds NUMERIC;
     diff_minutes NUMERIC;
-    base_rate NUMERIC := 10;
+    base_rate NUMERIC := 1;
     boost_rate NUMERIC := 0;
     total_rate NUMERIC;
     reward BIGINT;
@@ -222,18 +274,18 @@ BEGIN
 
     SELECT COALESCE(SUM(
         CASE i.quality
-            WHEN 'white' THEN 1 * inv.quantity
-            WHEN 'green' THEN 5 * inv.quantity
-            WHEN 'blue' THEN 10 * inv.quantity
-            WHEN 'purple' THEN 20 * inv.quantity
-            WHEN 'orange' THEN 50 * inv.quantity
-            WHEN 'red' THEN 100 * inv.quantity
+            WHEN 'white' THEN 0 * inv.quantity
+            WHEN 'green' THEN 0 * inv.quantity
+            WHEN 'blue' THEN 1 * inv.quantity
+            WHEN 'purple' THEN 5 * inv.quantity
+            WHEN 'orange' THEN 10 * inv.quantity
+            WHEN 'red' THEN 30 * inv.quantity
             ELSE 0
         END
     ), 0) INTO boost_rate
     FROM public.inventory inv
     JOIN public.items i ON inv.item_id = i.id
-    WHERE inv.user_id = user_uuid;
+    WHERE inv.user_id = user_uuid AND i.item_type = 'collection';
 
     diff_seconds := GREATEST(EXTRACT(EPOCH FROM (now_time - last_claim)), 0);
     diff_seconds := LEAST(diff_seconds, 480 * 60); -- 最多计算8小时
@@ -286,23 +338,23 @@ BEGIN
         RAISE EXCEPTION '冷却中，还需等待 % 秒', (cooldown_seconds - EXTRACT(EPOCH FROM (now_time - last_open)))::INT;
     END IF;
 
-    -- 计算总权重（只计算收藏品类型）
+    -- 计算总权重（只计算有权重的物品）
     SELECT COALESCE(SUM(drop_weight), 0) INTO total_weight
     FROM public.items
-    WHERE item_type = 'collection';
+    WHERE drop_weight > 0;
 
     IF total_weight <= 0 THEN
-        RAISE EXCEPTION '暂无收藏品可掉落';
+        RAISE EXCEPTION '暂无物品可掉落';
     END IF;
 
-    -- 随机选择（只从收藏品中选择）
+    -- 随机选择
     random_pick := floor(random() * total_weight) + 1;
     remaining := random_pick;
 
     FOR selected_item IN
         SELECT id, name, quality, image_name, drop_weight
         FROM public.items
-        WHERE item_type = 'collection'
+        WHERE drop_weight > 0
         ORDER BY id
     LOOP
         remaining := remaining - selected_item.drop_weight;
@@ -434,10 +486,14 @@ DECLARE
     total_price BIGINT;
     buyer_shells BIGINT;
     buy_qty INT;
+    buyer_nickname TEXT;
 BEGIN
     IF buyer_uuid IS NULL THEN
         RAISE EXCEPTION '未登录';
     END IF;
+
+    -- 获取买家昵称
+    SELECT nickname INTO buyer_nickname FROM public.profiles WHERE id = buyer_uuid;
 
     SELECT mo.*, i.name AS item_name INTO order_rec
     FROM public.market_orders mo
@@ -501,7 +557,7 @@ BEGIN
         VALUES (
             order_rec.seller_id,
             '订单出售成功',
-            '你上架的「' || item_name || '」已被全部购买，获得 ' || total_price || ' 果壳币。'
+            '你上架的「' || item_name || '」已被「' || buyer_nickname || '」全部购买，获得 ' || total_price || ' 果壳币。'
         );
     ELSE
         -- 部分购买，减少订单数量
@@ -514,7 +570,7 @@ BEGIN
         VALUES (
             order_rec.seller_id,
             '订单部分出售',
-            '你上架的「' || item_name || '」被购买 ' || buy_qty || ' 件，获得 ' || total_price || ' 果壳币，剩余 ' || (order_rec.quantity - buy_qty) || ' 件。'
+            '你上架的「' || item_name || '」被「' || buyer_nickname || '」购买 ' || buy_qty || ' 件，获得 ' || total_price || ' 果壳币，剩余 ' || (order_rec.quantity - buy_qty) || ' 件。'
         );
     END IF;
 END;
@@ -805,18 +861,18 @@ BEGIN
 
     SELECT COALESCE(SUM(
         CASE i.quality
-            WHEN 'white' THEN 1 * inv.quantity
-            WHEN 'green' THEN 5 * inv.quantity
-            WHEN 'blue' THEN 10 * inv.quantity
-            WHEN 'purple' THEN 20 * inv.quantity
-            WHEN 'orange' THEN 50 * inv.quantity
-            WHEN 'red' THEN 100 * inv.quantity
+            WHEN 'white' THEN 0 * inv.quantity
+            WHEN 'green' THEN 0 * inv.quantity
+            WHEN 'blue' THEN 1 * inv.quantity
+            WHEN 'purple' THEN 2 * inv.quantity
+            WHEN 'orange' THEN 5 * inv.quantity
+            WHEN 'red' THEN 10 * inv.quantity
             ELSE 0
         END
     ), 0) INTO boost_rate
     FROM public.inventory inv
     JOIN public.items i ON inv.item_id = i.id
-    WHERE inv.user_id = user_uuid;
+    WHERE inv.user_id = user_uuid AND i.item_type = 'collection';
 
     RETURN boost_rate;
 END;
@@ -1252,5 +1308,249 @@ BEGIN
     INSERT INTO public.system_mails (user_id, title, content)
     VALUES (submitter_id, '投稿未通过',
         '您投稿的「' || item_name || '」未通过审核。原因：' || COALESCE(p_admin_note, '无'));
+END;
+$$;
+
+-- ============================================================
+-- 29. RPC 函数：使用端午节福袋
+-- ============================================================
+DROP FUNCTION IF EXISTS public.use_dragon_boat_bag();
+CREATE OR REPLACE FUNCTION public.use_dragon_boat_bag()
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+    bag_item_id BIGINT;
+    inv_id BIGINT;
+    selected_item RECORD;
+    total_weight NUMERIC;
+    random_pick NUMERIC;
+    remaining NUMERIC;
+    item_row RECORD;
+BEGIN
+    IF user_uuid IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '请先登录');
+    END IF;
+    
+    -- 查找端午节福袋物品定义
+    SELECT id INTO bag_item_id FROM public.items WHERE name = '端午节福袋' AND item_type = 'consumable';
+    
+    IF bag_item_id IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '端午节福袋不存在');
+    END IF;
+    
+    -- 检查用户是否拥有福袋
+    SELECT id INTO inv_id FROM public.inventory WHERE user_id = user_uuid AND item_id = bag_item_id;
+    
+    IF inv_id IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '你没有端午节福袋');
+    END IF;
+    
+    -- 计算端午收藏品的总权重
+    -- 如果drop_weight全为0，则使用固定权重：白色100，绿色80，蓝色50，紫色30，橙色15，红色5
+    SELECT COALESCE(SUM(
+        CASE 
+            WHEN i.drop_weight > 0 THEN i.drop_weight
+            WHEN i.quality = 'white' THEN 100
+            WHEN i.quality = 'green' THEN 80
+            WHEN i.quality = 'blue' THEN 50
+            WHEN i.quality = 'purple' THEN 30
+            WHEN i.quality = 'orange' THEN 15
+            WHEN i.quality = 'red' THEN 5
+            ELSE 50
+        END
+    ), 0) INTO total_weight
+    FROM public.items i
+    WHERE i.item_type = 'collection' AND i.name IN ('粽子', '艾草香囊', '龙舟模型', '五彩绳', '雄黄酒', '离骚');
+    
+    IF total_weight <= 0 THEN
+        RETURN jsonb_build_object('success', false, 'message', '端午节收藏品暂不可用');
+    END IF;
+    
+    -- 随机选择
+    random_pick := floor(random() * total_weight) + 1;
+    remaining := random_pick;
+    
+    FOR item_row IN
+        SELECT i.id, i.name, i.quality, i.image_name, 
+            CASE 
+                WHEN i.drop_weight > 0 THEN i.drop_weight
+                WHEN i.quality = 'white' THEN 100
+                WHEN i.quality = 'green' THEN 80
+                WHEN i.quality = 'blue' THEN 50
+                WHEN i.quality = 'purple' THEN 30
+                WHEN i.quality = 'orange' THEN 15
+                WHEN i.quality = 'red' THEN 5
+                ELSE 50
+            END AS effective_weight
+        FROM public.items i
+        WHERE i.item_type = 'collection' AND i.name IN ('粽子', '艾草香囊', '龙舟模型', '五彩绳', '雄黄酒', '《离骚》')
+        ORDER BY i.id
+    LOOP
+        remaining := remaining - item_row.effective_weight;
+        IF remaining <= 0 THEN
+            selected_item := item_row;
+            EXIT;
+        END IF;
+    END LOOP;
+    
+    IF selected_item IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '端午节福袋暂不可用');
+    END IF;
+    
+    -- 扣除一个福袋（只减数量，不删除整行）
+    UPDATE public.inventory SET quantity = quantity - 1 WHERE id = inv_id;
+
+    -- 如果数量为0，删除该行
+    DELETE FROM public.inventory WHERE id = inv_id AND quantity <= 0;
+    
+    -- 给用户随机收藏品
+    INSERT INTO public.inventory (user_id, item_id, quantity)
+    VALUES (user_uuid, selected_item.id, 1)
+    ON CONFLICT ON CONSTRAINT inventory_user_id_item_id_key
+    DO UPDATE SET quantity = public.inventory.quantity + 1;
+    
+    RETURN jsonb_build_object(
+        'success', true, 
+        'message', '恭喜获得「' || selected_item.name || '」！',
+        'item_id', selected_item.id,
+        'item_name', selected_item.name,
+        'item_quality', selected_item.quality,
+        'item_image', selected_item.image_name
+    );
+END;
+$$;
+
+-- ============================================================
+-- 30. RPC 函数：端午活动 - 更新在线时间并领取在线礼包
+-- ============================================================
+DROP FUNCTION IF EXISTS public.claim_dragon_boat_online();
+CREATE OR REPLACE FUNCTION public.claim_dragon_boat_online()
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+    now_time TIMESTAMPTZ := now();
+    is_dragon_boat BOOLEAN;
+    v_online_total INT;
+    v_last_update TIMESTAMPTZ;
+    v_daily_reset DATE;
+    bag_item_id BIGINT;
+    selected_item RECORD;
+    v_claimed_1min BOOLEAN;
+    v_claimed_10min BOOLEAN;
+    v_claimed_60min BOOLEAN;
+    claimed_1 BOOLEAN := false;
+    claimed_10 BOOLEAN := false;
+    claimed_60 BOOLEAN := false;
+BEGIN
+    IF user_uuid IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '请先登录');
+    END IF;
+    
+    -- 检查是否为端午期间（6月19日）
+    is_dragon_boat := CURRENT_DATE = '2026-06-19';
+    
+    IF NOT is_dragon_boat THEN
+        RETURN jsonb_build_object('success', false, 'message', '端午活动已结束', 'is_dragon_boat', false);
+    END IF;
+    
+    -- 获取或初始化活动进度
+    SELECT online_total, last_update, claimed_1min, claimed_10min, claimed_60min, daily_reset
+    INTO v_online_total, v_last_update, v_claimed_1min, v_claimed_10min, v_claimed_60min, v_daily_reset
+    FROM public.dragon_boat_progress
+    WHERE user_id = user_uuid;
+    
+    -- 如果没有记录，插入新记录
+    IF v_online_total IS NULL THEN
+        INSERT INTO public.dragon_boat_progress (user_id, online_total, last_update, claimed_1min, claimed_10min, claimed_60min, daily_reset)
+        VALUES (user_uuid, 0, now_time, false, false, false, CURRENT_DATE);
+        v_online_total := 0;
+        v_last_update := now_time;
+        v_claimed_1min := false;
+        v_claimed_10min := false;
+        v_claimed_60min := false;
+        v_daily_reset := CURRENT_DATE;
+    END IF;
+    
+    -- 检查是否需要重置（每日重置）
+    IF v_daily_reset IS NULL OR v_daily_reset < CURRENT_DATE THEN
+        UPDATE public.dragon_boat_progress 
+        SET claimed_1min = false,
+            claimed_10min = false,
+            claimed_60min = false,
+            daily_reset = CURRENT_DATE,
+            last_update = now_time
+        WHERE user_id = user_uuid;
+        v_claimed_1min := false;
+        v_claimed_10min := false;
+        v_claimed_60min := false;
+        v_daily_reset := CURRENT_DATE;
+    END IF;
+    
+    -- 计算新增在线时间（最多计算到60分钟）
+    IF v_last_update IS NOT NULL THEN
+        v_online_total := v_online_total + LEAST(EXTRACT(EPOCH FROM (now_time - v_last_update))::INT, 3600);
+    END IF;
+    v_online_total := LEAST(v_online_total, 3600);
+    
+    -- 更新在线时间
+    UPDATE public.dragon_boat_progress 
+    SET online_total = v_online_total,
+        last_update = now_time
+    WHERE user_id = user_uuid;
+    
+    -- 查找端午福袋物品定义
+    SELECT id INTO bag_item_id FROM public.items WHERE name = '端午节福袋' AND item_type = 'consumable';
+    
+    IF bag_item_id IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '端午节福袋不存在');
+    END IF;
+    
+    -- 检查并领取1分钟奖励
+    IF v_online_total >= 60 AND NOT v_claimed_1min THEN
+        INSERT INTO public.inventory (user_id, item_id, quantity)
+        VALUES (user_uuid, bag_item_id, 1)
+        ON CONFLICT ON CONSTRAINT inventory_user_id_item_id_key
+        DO UPDATE SET quantity = public.inventory.quantity + 1;
+        
+        UPDATE public.dragon_boat_progress SET claimed_1min = true WHERE user_id = user_uuid;
+        claimed_1 := true;
+    END IF;
+    
+    -- 检查并领取10分钟奖励
+    IF v_online_total >= 600 AND NOT v_claimed_10min THEN
+        INSERT INTO public.inventory (user_id, item_id, quantity)
+        VALUES (user_uuid, bag_item_id, 1)
+        ON CONFLICT ON CONSTRAINT inventory_user_id_item_id_key
+        DO UPDATE SET quantity = public.inventory.quantity + 1;
+        
+        UPDATE public.dragon_boat_progress SET claimed_10min = true WHERE user_id = user_uuid;
+        claimed_10 := true;
+    END IF;
+    
+    -- 检查并领取60分钟奖励
+    IF v_online_total >= 3600 AND NOT v_claimed_60min THEN
+        INSERT INTO public.inventory (user_id, item_id, quantity)
+        VALUES (user_uuid, bag_item_id, 1)
+        ON CONFLICT ON CONSTRAINT inventory_user_id_item_id_key
+        DO UPDATE SET quantity = public.inventory.quantity + 1;
+        
+        UPDATE public.dragon_boat_progress SET claimed_60min = true WHERE user_id = user_uuid;
+        claimed_60 := true;
+    END IF;
+    
+    -- 更新返回结果
+    RETURN jsonb_build_object(
+        'success', true,
+        'online_total', v_online_total,
+        'claimed_1min', claimed_1 OR v_claimed_1min,
+        'claimed_10min', claimed_10 OR v_claimed_10min,
+        'claimed_60min', claimed_60 OR v_claimed_60min
+    );
 END;
 $$;

@@ -358,6 +358,366 @@
     flex-shrink: 0;
 }
 
+/* ========== 端午活动 ========== */
+.dragon-boat-activity {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(6, 78, 59, 0.2));
+    border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.dragon-boat-activity .activity-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    color: var(--accent-gold);
+}
+
+.dragon-boat-activity .activity-header svg {
+    width: 24px;
+    height: 24px;
+}
+
+.dragon-boat-activity .activity-header h3 {
+    flex: 1;
+    margin: 0;
+    font-size: 1.1rem;
+}
+
+.dragon-boat-activity .activity-timer {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    background: rgba(0,0,0,0.3);
+    padding: 4px 10px;
+    border-radius: 12px;
+}
+
+.dragon-boat-activity .activity-rewards {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.dragon-boat-activity .reward-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 10px;
+    border: 1px solid transparent;
+    transition: all 0.2s;
+}
+
+.dragon-boat-activity .reward-item.reward-available {
+    border-color: var(--accent-gold);
+    background: rgba(234, 179, 8, 0.1);
+}
+
+.dragon-boat-activity .reward-item.reward-claimed {
+    opacity: 0.5;
+}
+
+.dragon-boat-activity .reward-icon {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(34, 197, 94, 0.2);
+    border-radius: 8px;
+    color: #22c55e;
+}
+
+.dragon-boat-activity .reward-icon svg {
+    width: 20px;
+    height: 20px;
+}
+
+.dragon-boat-activity .reward-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.dragon-boat-activity .reward-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+}
+
+.dragon-boat-activity .reward-desc {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.dragon-boat-activity .btn-claim-reward {
+    min-width: 70px;
+}
+
+/* ========== 活动页 ========== */
+.activity-page {
+    min-height: 100vh;
+    padding: 24px;
+    padding-bottom: 100px;
+}
+
+.activity-page .particle-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.activity-content {
+    max-width: 600px;
+    margin: 0 auto;
+    position: relative;
+    z-index: 1;
+}
+
+.activity-hero {
+    text-align: center;
+    margin-bottom: 24px;
+}
+
+.activity-hero .activity-badge {
+    display: inline-block;
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+    color: white;
+    padding: 4px 16px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 12px;
+}
+
+.activity-hero h1 {
+    font-family: var(--font-display);
+    font-size: 2rem;
+    color: var(--accent-gold);
+    margin-bottom: 8px;
+}
+
+.activity-hero .activity-date {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.activity-card {
+    margin-bottom: 16px;
+}
+
+.activity-card-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 16px;
+}
+
+.activity-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.activity-icon svg {
+    width: 24px;
+    height: 24px;
+}
+
+.activity-icon.dragon {
+    background: linear-gradient(135deg, #22c55e22, #16a34a33);
+    color: #22c55e;
+}
+
+.activity-icon.clock {
+    background: linear-gradient(135deg, #3b82f622, #3b82f633);
+    color: #3b82f6;
+}
+
+.activity-icon.info {
+    background: linear-gradient(135deg, #f59e0b22, #f59e0b33);
+    color: #f59e0b;
+}
+
+.activity-card-title h2 {
+    font-size: 1.1rem;
+    margin: 0 0 4px 0;
+    color: var(--text-primary);
+}
+
+.activity-card-title p {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin: 0;
+}
+
+.activity-items {
+    margin-bottom: 12px;
+}
+
+.activity-item-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+}
+
+.activity-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+}
+
+.activity-item .item-icon-placeholder {
+    width: 56px;
+    height: 56px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.activity-item span {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.activity-tip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 8px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.activity-tip svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
+.online-rewards {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.online-reward-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 10px;
+    border: 1px solid transparent;
+    transition: all 0.2s;
+}
+
+.online-reward-item.available {
+    border-color: var(--accent-gold);
+    background: rgba(234, 179, 8, 0.1);
+}
+
+.online-reward-item.claimed {
+    opacity: 0.5;
+}
+
+.online-reward-time {
+    font-weight: 600;
+    color: var(--text-primary);
+    min-width: 90px;
+}
+
+.online-reward-arrow {
+    color: var(--text-muted);
+}
+
+.online-reward-arrow svg {
+    width: 16px;
+    height: 16px;
+}
+
+.online-reward-gift {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #22c55e;
+    font-size: 0.9rem;
+}
+
+.online-reward-gift svg {
+    width: 18px;
+    height: 18px;
+}
+
+.online-status {
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+}
+
+.online-status strong {
+    color: var(--accent-gold);
+}
+
+.activity-rules {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.rule-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.rule-number {
+    width: 24px;
+    height: 24px;
+    background: var(--accent-gold);
+    color: var(--bg-primary);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.rule-item span:last-child {
+    flex: 1;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+/* 活动导航高亮 */
+.nav-link-activity {
+    color: #22c55e !important;
+}
+
+.nav-link-activity svg {
+    color: #22c55e;
+}
+
 /* ========== 背包页 ========== */
 .inventory-page .page-header {
     margin-bottom: 24px;
