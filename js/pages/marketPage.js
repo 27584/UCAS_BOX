@@ -8,6 +8,7 @@ const PAGE_SIZE = 10;
 export const marketPage = {
     orders: [],
     inventory: [],
+    inventoryMap: {},
     myId: null,
     tab: 'browse',
     page: 1,
@@ -89,17 +90,26 @@ export const marketPage = {
         content.innerHTML = '<div class="skeleton" style="height:200px;"></div>';
 
         try {
-            const data = await getMarketOrders(
-                this.page,
-                PAGE_SIZE,
-                this.filterQuality || null,
-                this.filterSort,
-                this.filterSearch || null,
-                this.filterType || null
-            );
+            // 同时加载市场订单和用户背包
+            const [data, inventory] = await Promise.all([
+                getMarketOrders(
+                    this.page,
+                    PAGE_SIZE,
+                    this.filterQuality || null,
+                    this.filterSort,
+                    this.filterSearch || null,
+                    this.filterType || null
+                ),
+                getInventory()
+            ]);
             
             this.orders = data || [];
             this.totalCount = data[0]?.total_count || 0;
+            // 保存背包数据用于查找拥有数量
+            this.inventoryMap = {};
+            (inventory || []).forEach(item => {
+                this.inventoryMap[item.item_id] = item.quantity;
+            });
             this.renderBrowse(content);
         } catch (e) {
             console.error(e);
@@ -179,14 +189,9 @@ export const marketPage = {
             btn.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 const id = parseInt(btn.dataset.id);
-                btn.disabled = true;
-                try {
-                    await buyMarketOrder(id);
-                    showToast('购买成功！', 'success');
-                    await updateGlobalShells();
-                    this.loadBrowseData();
-                } catch (e) {
-                    btn.disabled = false;
+                const order = this.orders.find(o => o.order_id === id);
+                if (order) {
+                    this.openBuyModal(order);
                 }
             });
         });
@@ -203,7 +208,7 @@ export const marketPage = {
                         image_name: order.item_image,
                         description: order.item_description,
                         item_type: order.item_type,
-                        owned: 0
+                        owned: this.inventoryMap?.[itemId] || 0
                     });
                 }
             });
@@ -385,5 +390,121 @@ export const marketPage = {
                 }
             </div>
         `;
+    },
+
+    openBuyModal(order) {
+        const pricePerUnit = order.price_per_unit;
+        let quantity = 1;
+        const self = this;
+
+        const modalHtml = `
+            <div id="buy-modal" class="modal" style="display:flex;">
+                <div class="modal-overlay" id="buy-overlay"></div>
+                <div class="modal-content buy-modal-card">
+                    <button class="btn-close" id="buy-close"><i data-lucide="x"></i></button>
+                    <div class="buy-header">
+                        <h3>确认购买</h3>
+                    </div>
+                    <div class="buy-body">
+                        <div class="buy-item-info">
+                            <div class="buy-item-name">${order.item_name}</div>
+                            <div class="buy-item-price">
+                                <i data-lucide="gem" style="color:#f59e0b;"></i>
+                                <span id="buy-total-price">${formatNumber(pricePerUnit)}</span> 果壳币
+                            </div>
+                        </div>
+                        <div class="buy-quantity-selector">
+                            <span class="buy-quantity-label">购买数量</span>
+                            <div class="buy-quantity-controls">
+                                <button class="qty-btn" id="qty-minus">
+                                    <i data-lucide="minus"></i>
+                                </button>
+                                <input type="number" id="buy-quantity" value="1" min="1" max="${order.quantity}">
+                                <button class="qty-btn" id="qty-plus">
+                                    <i data-lucide="plus"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="buy-hint">
+                            购买后物品将直接放入您的背包
+                        </div>
+                    </div>
+                    <div class="buy-footer">
+                        <button id="buy-cancel" class="btn btn-secondary">取消</button>
+                        <button id="buy-confirm" class="btn btn-primary">
+                            <i data-lucide="shopping-cart"></i>
+                            确认购买
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        createIcons({ icons });
+
+        const modal = document.getElementById('buy-modal');
+        const quantityInput = document.getElementById('buy-quantity');
+        const totalPriceEl = document.getElementById('buy-total-price');
+        const minusBtn = document.getElementById('qty-minus');
+        const plusBtn = document.getElementById('qty-plus');
+        const confirmBtn = document.getElementById('buy-confirm');
+        const cancelBtn = document.getElementById('buy-cancel');
+        const closeBtn = document.getElementById('buy-close');
+        const overlay = document.getElementById('buy-overlay');
+
+        function closeModal() {
+            modal.remove();
+        }
+
+        function updatePrice() {
+            const total = pricePerUnit * quantity;
+            totalPriceEl.textContent = formatNumber(total);
+            quantityInput.value = quantity;
+        }
+
+        closeBtn.addEventListener('click', closeModal);
+        cancelBtn.addEventListener('click', closeModal);
+        overlay.addEventListener('click', closeModal);
+
+        minusBtn.addEventListener('click', () => {
+            if (quantity > 1) {
+                quantity--;
+                updatePrice();
+            }
+        });
+
+        plusBtn.addEventListener('click', () => {
+            if (quantity < order.quantity) {
+                quantity++;
+                updatePrice();
+            }
+        });
+
+        quantityInput.addEventListener('change', () => {
+            let val = parseInt(quantityInput.value) || 1;
+            if (val < 1) val = 1;
+            if (val > order.quantity) val = order.quantity;
+            quantity = val;
+            updatePrice();
+        });
+
+        confirmBtn.addEventListener('click', async () => {
+            confirmBtn.disabled = true;
+            confirmBtn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> 购买中...';
+            createIcons({ icons });
+
+            try {
+                await buyMarketOrder(order.order_id, quantity);
+                showToast(`购买成功 ${quantity} 件！`, 'success');
+                await updateGlobalShells();
+                self.loadBrowseData();
+                closeModal();
+            } catch (e) {
+                showToast('购买失败', 'error');
+                confirmBtn.disabled = false;
+                confirmBtn.innerHTML = '<i data-lucide="shopping-cart"></i> 确认购买';
+                createIcons({ icons });
+            }
+        });
     }
 };

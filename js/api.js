@@ -92,8 +92,8 @@ export async function cancelMarketOrder(orderId) {
     return rpc('cancel_market_order', { p_order_id: orderId });
 }
 
-export async function buyMarketOrder(orderId) {
-    return rpc('buy_market_order', { p_order_id: orderId });
+export async function buyMarketOrder(orderId, quantity = null) {
+    return rpc('buy_market_order', { p_order_id: orderId, p_quantity: quantity });
 }
 
 export async function getCollectionProgress() {

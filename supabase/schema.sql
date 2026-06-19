@@ -419,8 +419,8 @@ $$;
 -- ============================================================
 -- 11. RPC 函数：购买订单
 -- ============================================================
-DROP FUNCTION IF EXISTS public.buy_market_order(BIGINT);
-CREATE OR REPLACE FUNCTION public.buy_market_order(p_order_id BIGINT)
+DROP FUNCTION IF EXISTS public.buy_market_order(BIGINT, INT);
+CREATE OR REPLACE FUNCTION public.buy_market_order(p_order_id BIGINT, p_quantity INT DEFAULT NULL)
 RETURNS VOID
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -430,6 +430,7 @@ DECLARE
     order_rec RECORD;
     total_price BIGINT;
     buyer_shells BIGINT;
+    buy_qty INT;
 BEGIN
     IF buyer_uuid IS NULL THEN
         RAISE EXCEPTION '未登录';
@@ -448,7 +449,14 @@ BEGIN
         RAISE EXCEPTION '不能购买自己的订单';
     END IF;
 
-    total_price := order_rec.price_per_unit * order_rec.quantity;
+    -- 默认购买全部
+    buy_qty := COALESCE(p_quantity, order_rec.quantity);
+    
+    IF buy_qty <= 0 OR buy_qty > order_rec.quantity THEN
+        RAISE EXCEPTION '购买数量无效';
+    END IF;
+
+    total_price := order_rec.price_per_unit * buy_qty;
 
     -- 锁定买家余额
     SELECT shells INTO buyer_shells
@@ -472,22 +480,38 @@ BEGIN
 
     -- 给买家物品
     INSERT INTO public.inventory (user_id, item_id, quantity)
-    VALUES (buyer_uuid, order_rec.item_id, order_rec.quantity)
+    VALUES (buyer_uuid, order_rec.item_id, buy_qty)
     ON CONFLICT ON CONSTRAINT inventory_user_id_item_id_key
     DO UPDATE SET quantity = public.inventory.quantity + EXCLUDED.quantity;
 
-    -- 完成订单
-    UPDATE public.market_orders
-    SET status = 'completed'
-    WHERE id = p_order_id;
+    -- 如果购买全部，完成订单；否则减少订单数量
+    IF buy_qty >= order_rec.quantity THEN
+        -- 完成订单
+        UPDATE public.market_orders
+        SET status = 'completed'
+        WHERE id = p_order_id;
 
-    -- 给卖家发送系统邮件
-    INSERT INTO public.system_mails (user_id, title, content)
-    VALUES (
-        order_rec.seller_id,
-        '订单出售成功',
-        '你上架的物品已被购买，获得 ' || total_price || ' 果壳币。'
-    );
+        -- 给卖家发送系统邮件
+        INSERT INTO public.system_mails (user_id, title, content)
+        VALUES (
+            order_rec.seller_id,
+            '订单出售成功',
+            '你上架的物品已被全部购买，获得 ' || total_price || ' 果壳币。'
+        );
+    ELSE
+        -- 部分购买，减少订单数量
+        UPDATE public.market_orders
+        SET quantity = quantity - buy_qty
+        WHERE id = p_order_id;
+
+        -- 给卖家发送系统邮件
+        INSERT INTO public.system_mails (user_id, title, content)
+        VALUES (
+            order_rec.seller_id,
+            '订单部分出售',
+            '你上架的物品被购买 ' || buy_qty || ' 件，获得 ' || total_price || ' 果壳币，剩余 ' || (order_rec.quantity - buy_qty) || ' 件。'
+        );
+    END IF;
 END;
 $$;
 

@@ -638,3 +638,196 @@ select.form-input {
         display: none;
     }
 }
+
+/* 购买确认弹窗 */
+.buy-modal-card {
+    background: var(--bg-secondary);
+    border-radius: 20px;
+    padding: 0;
+    max-width: 380px;
+    width: 90%;
+    text-align: center;
+    overflow: hidden;
+}
+
+.buy-modal-card .btn-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: all 0.2s;
+    z-index: 10;
+}
+
+.buy-modal-card .btn-close:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: var(--text-primary);
+}
+
+.buy-header {
+    padding: 24px 24px 16px;
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(245, 158, 11, 0.05));
+    border-bottom: 1px solid var(--border-color);
+}
+
+.buy-header h3 {
+    margin: 0;
+    font-size: 1.25rem;
+    color: var(--text-primary);
+}
+
+.buy-body {
+    padding: 24px;
+}
+
+.buy-item-info {
+    margin-bottom: 16px;
+}
+
+.buy-item-name {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 12px;
+}
+
+.buy-item-price {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-radius: 12px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #f59e0b;
+}
+
+.buy-item-price svg {
+    width: 20px;
+    height: 20px;
+}
+
+.buy-hint {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    padding: 12px 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 8px;
+}
+
+.buy-quantity-selector {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 12px;
+    margin-bottom: 16px;
+}
+
+.buy-quantity-label {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.buy-quantity-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.buy-quantity-controls input {
+    width: 60px;
+    padding: 8px 12px;
+    text-align: center;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    -moz-appearance: textfield;
+}
+
+.buy-quantity-controls input::-webkit-outer-spin-button,
+.buy-quantity-controls input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.qty-btn {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-radius: 8px;
+    color: #f59e0b;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.qty-btn:hover {
+    background: rgba(245, 158, 11, 0.2);
+    border-color: #f59e0b;
+}
+
+.qty-btn:active {
+    transform: scale(0.95);
+}
+
+.qty-btn svg {
+    width: 18px;
+    height: 18px;
+}
+
+.buy-footer {
+    padding: 16px 24px 24px;
+    display: flex;
+    gap: 12px;
+}
+
+.buy-footer .btn {
+    flex: 1;
+    padding: 14px 20px;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.buy-footer .btn svg {
+    width: 18px;
+    height: 18px;
+}
+
+.buy-footer .btn-secondary {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+}
+
+.buy-footer .btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+}
+
+.spin {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
