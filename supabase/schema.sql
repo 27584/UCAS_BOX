@@ -1,6 +1,6 @@
 -- UCAS_BOX 完整数据库架构
 -- 在 Supabase SQL Editor 中执行此文件以一键创建所有表、函数和策略
-
+ALTER DATABASE postgres SET TIME ZONE 'Asia/Shanghai';
 -- ============================================================
 -- 1. 用户扩展表
 -- ============================================================
@@ -654,7 +654,7 @@ $$;
 -- ============================================================
 DROP FUNCTION IF EXISTS public.get_user_inventory();
 CREATE OR REPLACE FUNCTION public.get_user_inventory()
-RETURNS TABLE(inv_id BIGINT, item_id BIGINT, quantity INT, acquired_at TIMESTAMPTZ, item_name TEXT, item_quality TEXT, item_image TEXT, item_description TEXT, item_type TEXT)
+RETURNS TABLE(inv_id BIGINT, item_id BIGINT, quantity INT, acquired_at TIMESTAMP, item_name TEXT, item_quality TEXT, item_image TEXT, item_description TEXT, item_type TEXT)
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
@@ -670,7 +670,7 @@ BEGIN
         inv.id AS inv_id,
         inv.item_id,
         inv.quantity,
-        inv.acquired_at,
+        inv.acquired_at AT TIME ZONE 'Asia/Shanghai' AS acquired_at,
         i.name AS item_name,
         i.quality AS item_quality,
         i.image_name AS item_image,
@@ -956,7 +956,7 @@ $$;
 -- ============================================================
 DROP FUNCTION IF EXISTS public.get_user_mails();
 CREATE OR REPLACE FUNCTION public.get_user_mails()
-RETURNS TABLE(mail_id BIGINT, title TEXT, content TEXT, is_read BOOLEAN, created_at TIMESTAMPTZ)
+RETURNS TABLE(mail_id BIGINT, title TEXT, content TEXT, is_read BOOLEAN, created_at TIMESTAMP)
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
@@ -973,7 +973,7 @@ BEGIN
         sm.title,
         sm.content,
         sm.is_read,
-        sm.created_at
+        sm.created_at AT TIME ZONE 'Asia/Shanghai' AS created_at
     FROM public.system_mails sm
     WHERE sm.user_id = user_uuid
     ORDER BY sm.created_at DESC;
@@ -1032,7 +1032,7 @@ $$;
 -- ============================================================
 DROP FUNCTION IF EXISTS public.get_all_users();
 CREATE OR REPLACE FUNCTION public.get_all_users()
-RETURNS TABLE(user_id UUID, nickname TEXT, shells BIGINT, is_admin BOOLEAN, created_at TIMESTAMPTZ)
+RETURNS TABLE(user_id UUID, nickname TEXT, shells BIGINT, is_admin BOOLEAN, created_at TIMESTAMP)
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
@@ -1053,7 +1053,7 @@ BEGIN
         p.nickname,
         p.shells,
         p.is_admin,
-        p.created_at
+        p.created_at AT TIME ZONE 'Asia/Shanghai' AS created_at
     FROM public.profiles p
     ORDER BY p.created_at DESC;
 END;
@@ -1222,7 +1222,7 @@ $$;
 -- ============================================================
 DROP FUNCTION IF EXISTS public.get_my_submissions();
 CREATE OR REPLACE FUNCTION public.get_my_submissions()
-RETURNS TABLE(id BIGINT, name TEXT, quality TEXT, description TEXT, drop_weight INT, status TEXT, reward_shells BIGINT, admin_note TEXT, created_at TIMESTAMPTZ)
+RETURNS TABLE(id BIGINT, name TEXT, quality TEXT, description TEXT, drop_weight INT, status TEXT, reward_shells BIGINT, admin_note TEXT, created_at TIMESTAMP)
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
@@ -1243,7 +1243,7 @@ BEGIN
         s.status,
         s.reward_shells,
         s.admin_note,
-        s.created_at
+        s.created_at AT TIME ZONE 'Asia/Shanghai' AS created_at
     FROM public.item_submissions s
     WHERE s.user_id = user_uuid
     ORDER BY s.created_at DESC;
@@ -1255,7 +1255,7 @@ $$;
 -- ============================================================
 DROP FUNCTION IF EXISTS public.get_pending_submissions();
 CREATE OR REPLACE FUNCTION public.get_pending_submissions()
-RETURNS TABLE(id BIGINT, user_id UUID, nickname TEXT, name TEXT, quality TEXT, description TEXT, drop_weight INT, status TEXT, reward_shells BIGINT, admin_note TEXT, created_at TIMESTAMPTZ)
+RETURNS TABLE(id BIGINT, user_id UUID, nickname TEXT, name TEXT, quality TEXT, description TEXT, drop_weight INT, status TEXT, reward_shells BIGINT, admin_note TEXT, created_at TIMESTAMP)
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
@@ -1282,7 +1282,7 @@ BEGIN
         s.status,
         s.reward_shells,
         s.admin_note,
-        s.created_at
+        s.created_at AT TIME ZONE 'Asia/Shanghai' AS created_at
     FROM public.item_submissions s
     LEFT JOIN public.profiles p ON p.id = s.user_id
     WHERE s.status = 'pending'
@@ -1685,8 +1685,8 @@ BEGIN
     RETURN jsonb_build_object(
         'round_id', current_round.round_id,
         'round_number', current_round.round_number,
-        'start_time', current_round.start_time,
-        'end_time', current_round.end_time,
+        'start_time', current_round.start_time AT TIME ZONE 'Asia/Shanghai',
+        'end_time', current_round.end_time AT TIME ZONE 'Asia/Shanghai',
         'base_pool', current_round.base_pool,
         'rollover_pool', current_round.rollover_pool,
         'total_pool', current_round.base_pool + current_round.rollover_pool,
@@ -1865,10 +1865,6 @@ DECLARE
     prizes JSONB := '[{"level":"特等奖","matches":[6],"share":0.3},{"level":"一等奖","matches":[5],"share":0.2},{"level":"二等奖","matches":[4],"share":0.15},{"level":"三等奖","matches":[3],"share":0.15},{"level":"幸运奖","matches":[1,2],"share":0.2}]';
     v_prize RECORD;
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = user_uuid AND is_admin = true) THEN
-        RETURN jsonb_build_object('success', false, 'message', '权限不足');
-    END IF;
-
     SELECT * INTO v_round FROM public.lottery_rounds WHERE lottery_rounds.round_id = p_round_id;
 
     IF v_round IS NULL THEN
@@ -1877,6 +1873,10 @@ BEGIN
 
     IF v_round.status = 'drawn' THEN
         RETURN jsonb_build_object('success', false, 'message', '已开奖');
+    END IF;
+
+    IF v_round.end_time > now() AND NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = user_uuid AND is_admin = true) THEN
+        RETURN jsonb_build_object('success', false, 'message', '权限不足');
     END IF;
 
     IF custom_numbers IS NOT NULL THEN
@@ -2017,7 +2017,7 @@ BEGIN
             SELECT 
                 r.round_id,
                 r.round_number,
-                r.end_time,
+                r.end_time AT TIME ZONE 'Asia/Shanghai' AS end_time,
                 r.winning_numbers,
                 COALESCE(r.final_pool, r.base_pool + r.rollover_pool) AS total_pool,
                 r.status,

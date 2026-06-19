@@ -1,4 +1,4 @@
-import { claimDragonBoatOnline, useDragonBoatBag, getInventory, getLotteryRound, buyLotteryTicket, getLotteryHistory, getUserLotteryTickets } from '../api.js';
+import { claimDragonBoatOnline, useDragonBoatBag, getInventory, getLotteryRound, buyLotteryTicket, getLotteryHistory, getUserLotteryTickets, drawLotteryRound } from '../api.js';
 import { createParticles, showToast, itemImageHTML, openItemDetail, QUALITY_CONFIG } from '../utils.js';
 import { updateGlobalShells } from '../auth.js';
 import { createIcons, icons } from 'lucide';
@@ -245,6 +245,12 @@ export const activityPage = {
                 const tickets = await getUserLotteryTickets(this.currentRound.round_id);
                 this.updateMyTickets(tickets);
             }
+
+            this.startLotteryTimer();
+
+            if (this.currentRound && this.currentRound.time_left === 0 && this.currentRound.status !== 'drawn') {
+                setTimeout(() => this.autoDrawLottery(), 1000);
+            }
         } catch (e) {
             console.error('加载彩票数据失败:', e);
         }
@@ -280,8 +286,22 @@ export const activityPage = {
             if (this.currentRound && this.currentRound.time_left > 0) {
                 this.currentRound.time_left--;
                 this.updateLotteryTime();
+                if (this.currentRound.time_left === 0) {
+                    this.autoDrawLottery();
+                }
             }
         }, 1000);
+    },
+
+    async autoDrawLottery() {
+        try {
+            const result = await drawLotteryRound(this.currentRound.round_id);
+            if (result.success) {
+                await this.loadLotteryData();
+            }
+        } catch (e) {
+            console.error('自动开奖失败:', e);
+        }
     },
 
     async buyTicket() {
