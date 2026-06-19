@@ -181,6 +181,13 @@ body::before {
     justify-content: space-around;
     align-items: center;
     z-index: 100;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+
+.bottom-nav::-webkit-scrollbar {
+    display: none;
 }
 
 .bottom-nav .nav-link {
@@ -188,6 +195,7 @@ body::before {
     padding: 6px 8px;
     font-size: 0.7rem;
     gap: 4px;
+    flex-shrink: 0;
 }
 
 .bottom-nav .nav-link svg {

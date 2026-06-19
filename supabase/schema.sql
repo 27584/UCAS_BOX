@@ -581,8 +581,8 @@ BEGIN
     AND (p_search IS NULL OR i.name ILIKE '%' || p_search || '%' OR p.nickname ILIKE '%' || p_search || '%')
     ORDER BY
         CASE COALESCE(p_sort, 'newest')
-            WHEN 'price-low' THEN mo.price_per_unit
-            WHEN 'price-high' THEN -mo.price_per_unit
+            WHEN 'price-low' THEN -mo.price_per_unit
+            WHEN 'price-high' THEN mo.price_per_unit
             WHEN 'quality' THEN
                 CASE i.quality
                     WHEN 'red' THEN 1
