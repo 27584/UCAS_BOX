@@ -1525,8 +1525,8 @@ BEGIN
         RETURN jsonb_build_object('success', false, 'message', '请先登录');
     END IF;
     
-    -- 检查是否为端午期间（6月19日）
-    is_dragon_boat := CURRENT_DATE = '2026-06-19';
+    -- 检查是否为端午期间（6月19日至21日）
+    is_dragon_boat := CURRENT_DATE BETWEEN '2026-06-19' AND '2026-06-21';
     
     IF NOT is_dragon_boat THEN
         RETURN jsonb_build_object('success', false, 'message', '端午活动已结束', 'is_dragon_boat', false);
