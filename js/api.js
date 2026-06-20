@@ -420,6 +420,18 @@ export async function getFollowing(userId, limit = 50, offset = 0) {
 }
 
 // ============================================
+// 搜索
+// ============================================
+
+export async function searchPosts(query, limit = 20, offset = 0) {
+    return rpc('search_posts', { p_query: query, p_limit: limit, p_offset: offset });
+}
+
+export async function searchUsers(query, limit = 20, offset = 0) {
+    return rpc('search_users', { p_query: query, p_limit: limit, p_offset: offset });
+}
+
+// ============================================
 // 用户设置
 // ============================================
 

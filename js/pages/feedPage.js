@@ -1,4 +1,4 @@
-import { getPosts, createPost, toggleLike, getComments, createComment, deletePost, deleteComment } from '../api.js';
+import { getPosts, createPost, toggleLike, getComments, createComment, deletePost, deleteComment, searchPosts, searchUsers } from '../api.js';
 import { showToast, formatNumber, timeAgo, showConfirm, userBadgeHTML } from '../utils.js';
 import { createIcons, icons } from 'lucide';
 import { router } from '../router.js';
@@ -16,6 +16,8 @@ export const feedPage = {
     currentPostId: null,
     replyToCommentId: null,
     selectedTags: [],
+    searchType: 'posts',
+    searchTimer: null,
 
     render(container) {
         this.attachEvents(container);
@@ -74,6 +76,34 @@ export const feedPage = {
         if (loadMoreBtn) {
             loadMoreBtn.addEventListener('click', () => this.loadPosts());
         }
+
+        // 搜索
+        const searchInput = document.getElementById('feed-search-input');
+        if (searchInput) {
+            searchInput.addEventListener('input', () => {
+                clearTimeout(this.searchTimer);
+                this.searchTimer = setTimeout(() => {
+                    this.handleSearch();
+                }, 300);
+            });
+            searchInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    clearTimeout(this.searchTimer);
+                    this.handleSearch();
+                }
+            });
+        }
+
+        // 搜索 tab 切换
+        document.querySelectorAll('.search-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.search-tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                this.searchType = tab.dataset.searchType;
+                const query = document.getElementById('feed-search-input')?.value.trim();
+                if (query) this.handleSearch();
+            });
+        });
 
         // 评论弹窗关闭
         const closeBtn = document.getElementById('comments-close');
@@ -545,5 +575,62 @@ export const feedPage = {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    },
+
+    async handleSearch() {
+        const query = document.getElementById('feed-search-input')?.value.trim();
+        const list = document.getElementById('feed-list');
+        if (!list) return;
+
+        // 清空搜索词时恢复帖子列表
+        if (!query) {
+            document.querySelectorAll('.feed-filter-bar .filter-btn').forEach(b => {
+                b.classList.toggle('active', b.dataset.tag === this.currentTag);
+            });
+            this.renderPosts();
+            const loadMore = document.getElementById('load-more');
+            if (loadMore) loadMore.style.display = this.hasMore ? 'block' : 'none';
+            return;
+        }
+
+        list.innerHTML = '<div class="skeleton" style="height:60px;"></div>'.repeat(3);
+        const loadMore = document.getElementById('load-more');
+        if (loadMore) loadMore.style.display = 'none';
+
+        try {
+            if (this.searchType === 'posts') {
+                const results = await searchPosts(query, 20, 0);
+                if (results && results.length > 0) {
+                    list.innerHTML = results.map(post => this.renderPostItem(post)).join('');
+                    this.bindPostEvents();
+                } else {
+                    list.innerHTML = '<div class="feed-empty"><i data-lucide="search" style="width:48;height:48;color:var(--text-muted);"></i><p>未找到相关帖子</p></div>';
+                }
+            } else {
+                const results = await searchUsers(query, 20, 0);
+                if (results && results.length > 0) {
+                    list.innerHTML = results.map(user => `
+                        <div class="user-search-result" data-user-id="${user.user_id}">
+                            <div class="user-search-avatar">${(user.nickname || '?').charAt(0).toUpperCase()}</div>
+                            <div class="user-search-info">
+                                <div class="user-search-name">${user.nickname || '无名旅者'}${userBadgeHTML(user)}</div>
+                                <div class="user-search-time">加入于 ${new Date(user.created_at).toLocaleDateString('zh-CN')}</div>
+                            </div>
+                        </div>
+                    `).join('');
+                    // 点击跳转用户主页
+                    list.querySelectorAll('.user-search-result').forEach(el => {
+                        el.addEventListener('click', () => {
+                            router.navigate(`user/${el.dataset.userId}`);
+                        });
+                    });
+                } else {
+                    list.innerHTML = '<div class="feed-empty"><i data-lucide="users" style="width:48;height:48;color:var(--text-muted);"></i><p>未找到相关用户</p></div>';
+                }
+            }
+        } catch (e) {
+            list.innerHTML = '<div class="feed-empty"><p>搜索失败</p></div>';
+        }
+        createIcons({ icons });
     }
 };

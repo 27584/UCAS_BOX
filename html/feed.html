@@ -28,7 +28,7 @@
         </div>
     </div>
 
-    <!-- 标签筛选 -->
+    <!-- 标签筛选 + 搜索 -->
     <div class="feed-filter-bar">
         <button class="filter-btn active" data-tag="">全部</button>
         <button class="filter-btn" data-tag="日常">日常</button>
@@ -37,6 +37,14 @@
         <button class="filter-btn" data-tag="求助">求助</button>
         <button class="filter-btn" data-tag="吐槽">吐槽</button>
         <button class="filter-btn" data-tag="分享">分享</button>
+        <div class="feed-search-bar">
+            <i data-lucide="search" class="search-icon"></i>
+            <input type="text" id="feed-search-input" placeholder="搜索帖子或用户..." />
+            <div class="search-tabs">
+                <button class="search-tab active" data-search-type="posts">帖子</button>
+                <button class="search-tab" data-search-type="users">用户</button>
+            </div>
+        </div>
     </div>
 
     <!-- 帖子列表 -->

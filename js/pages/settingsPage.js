@@ -27,7 +27,7 @@ export const settingsPage = {
     async loadSettings() {
         try {
             const settings = await getUserSettingsFull();
-            this.settings = settings || { show_collections_publicly: true, allow_follow: true, allow_stranger_dm: true };
+            this.settings = settings || { show_collections_publicly: true, allow_follow: true, allow_stranger_dm: true, allow_search: true };
             this.renderSettings();
         } catch (e) {
             showToast('加载设置失败', 'error');
@@ -76,6 +76,21 @@ export const settingsPage = {
                 } catch (e) {
                     showToast('保存失败', 'error');
                     toggleDm.checked = !e.target.checked;
+                }
+            });
+        }
+
+        // 允许被搜索设置
+        const toggleSearch = document.getElementById('toggle-allow-search');
+        if (toggleSearch) {
+            toggleSearch.checked = this.settings.allow_search !== false;
+            toggleSearch.addEventListener('change', async (e) => {
+                try {
+                    await updateProfileSetting('allow_search', e.target.checked);
+                    showToast('设置已保存', 'success');
+                } catch (e) {
+                    showToast('保存失败', 'error');
+                    toggleSearch.checked = !e.target.checked;
                 }
             });
         }

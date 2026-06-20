@@ -2991,6 +2991,96 @@ END;
 $$;
 
 
+-- 搜索帖子（全文搜索 content 和 tags）
+DROP FUNCTION IF EXISTS public.search_posts(TEXT, INT, INT);
+CREATE OR REPLACE FUNCTION public.search_posts(
+    p_query TEXT,
+    p_limit INT DEFAULT 20,
+    p_offset INT DEFAULT 0
+)
+RETURNS TABLE(
+    post_id BIGINT,
+    user_id UUID,
+    user_nickname TEXT,
+    user_avatar TEXT,
+    user_is_admin BOOLEAN,
+    user_is_bot BOOLEAN,
+    content TEXT,
+    tags TEXT[],
+    created_at TIMESTAMPTZ,
+    likes_count BIGINT,
+    comments_count BIGINT,
+    is_liked BOOLEAN
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_user_uuid UUID;
+BEGIN
+    v_user_uuid := auth.uid();
+    RETURN QUERY
+    SELECT 
+        p.id AS post_id,
+        p.user_id,
+        pr.nickname AS user_nickname,
+        NULL::TEXT AS user_avatar,
+        COALESCE(pr.is_admin, false) AS user_is_admin,
+        COALESCE(pr.is_bot, false) AS user_is_bot,
+        p.content,
+        p.tags,
+        p.created_at,
+        (SELECT COUNT(*) FROM public.likes l WHERE l.target_type = 'post' AND l.target_id = p.id) AS likes_count,
+        (SELECT COUNT(*) FROM public.comments c WHERE c.post_id = p.id) AS comments_count,
+        EXISTS(SELECT 1 FROM public.likes l WHERE l.user_id = v_user_uuid AND l.target_type = 'post' AND l.target_id = p.id) AS is_liked
+    FROM public.posts p
+    LEFT JOIN public.profiles pr ON p.user_id = pr.id
+    WHERE p.content ILIKE '%' || p_query || '%'
+       OR EXISTS (SELECT 1 FROM unnest(p.tags) t WHERE t ILIKE '%' || p_query || '%')
+    ORDER BY p.created_at DESC
+    LIMIT p_limit
+    OFFSET p_offset;
+END;
+$$;
+
+
+-- 搜索用户（昵称/邮箱），尊重 allow_search 隐私设置
+DROP FUNCTION IF EXISTS public.search_users(TEXT, INT, INT);
+CREATE OR REPLACE FUNCTION public.search_users(
+    p_query TEXT,
+    p_limit INT DEFAULT 20,
+    p_offset INT DEFAULT 0
+)
+RETURNS TABLE(
+    user_id UUID,
+    nickname TEXT,
+    is_admin BOOLEAN,
+    is_bot BOOLEAN,
+    created_at TIMESTAMPTZ
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        p.id AS user_id,
+        p.nickname,
+        COALESCE(p.is_admin, false) AS is_admin,
+        COALESCE(p.is_bot, false) AS is_bot,
+        p.created_at
+    FROM public.profiles p
+    LEFT JOIN public.user_settings s ON p.id = s.user_id
+    LEFT JOIN auth.users au ON p.id = au.id
+    WHERE (p.nickname ILIKE '%' || p_query || '%' OR au.email ILIKE '%' || p_query || '%')
+      AND COALESCE(s.allow_search, true) = true
+    ORDER BY p.created_at DESC
+    LIMIT p_limit
+    OFFSET p_offset;
+END;
+$$;
+
+
 -- 点赞/取消点赞
 CREATE OR REPLACE FUNCTION public.toggle_like(p_target_type TEXT, p_target_id BIGINT)
 RETURNS JSONB
@@ -3297,6 +3387,7 @@ CREATE TABLE IF NOT EXISTS public.user_settings (
     show_collections_publicly BOOLEAN DEFAULT true NOT NULL,
     allow_follow BOOLEAN DEFAULT true NOT NULL,
     allow_stranger_dm BOOLEAN DEFAULT true NOT NULL,
+    allow_search BOOLEAN DEFAULT true NOT NULL,
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );
@@ -3324,6 +3415,9 @@ BEGIN
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_settings' AND column_name = 'allow_stranger_dm') THEN
         ALTER TABLE public.user_settings ADD COLUMN allow_stranger_dm BOOLEAN DEFAULT true NOT NULL;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_settings' AND column_name = 'allow_search') THEN
+        ALTER TABLE public.user_settings ADD COLUMN allow_search BOOLEAN DEFAULT true NOT NULL;
     END IF;
 END $$;
 
@@ -3688,19 +3782,21 @@ BEGIN
     END IF;
     
     -- 只允许设置白名单中的字段
-    IF p_key IN ('show_collections_publicly', 'allow_follow', 'allow_stranger_dm') THEN
+    IF p_key IN ('show_collections_publicly', 'allow_follow', 'allow_stranger_dm', 'allow_search') THEN
         -- 使用 upsert 模式，如果记录不存在则插入，存在则更新
-        INSERT INTO public.user_settings (user_id, show_collections_publicly, allow_follow, allow_stranger_dm, updated_at)
+        INSERT INTO public.user_settings (user_id, show_collections_publicly, allow_follow, allow_stranger_dm, allow_search, updated_at)
         VALUES (user_uuid, 
                 CASE WHEN p_key = 'show_collections_publicly' THEN p_value ELSE true END,
                 CASE WHEN p_key = 'allow_follow' THEN p_value ELSE true END,
                 CASE WHEN p_key = 'allow_stranger_dm' THEN p_value ELSE true END,
+                CASE WHEN p_key = 'allow_search' THEN p_value ELSE true END,
                 now())
         ON CONFLICT (user_id) 
         DO UPDATE SET 
             show_collections_publicly = CASE WHEN p_key = 'show_collections_publicly' THEN p_value ELSE user_settings.show_collections_publicly END,
             allow_follow = CASE WHEN p_key = 'allow_follow' THEN p_value ELSE user_settings.allow_follow END,
             allow_stranger_dm = CASE WHEN p_key = 'allow_stranger_dm' THEN p_value ELSE user_settings.allow_stranger_dm END,
+            allow_search = CASE WHEN p_key = 'allow_search' THEN p_value ELSE user_settings.allow_search END,
             updated_at = now();
     ELSE
         RAISE EXCEPTION '不支持的设置项';
@@ -3922,7 +4018,8 @@ CREATE OR REPLACE FUNCTION public.get_user_settings_full()
 RETURNS TABLE(
     show_collections_publicly BOOLEAN,
     allow_follow BOOLEAN,
-    allow_stranger_dm BOOLEAN
+    allow_stranger_dm BOOLEAN,
+    allow_search BOOLEAN
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -3938,13 +4035,14 @@ BEGIN
     SELECT 
         COALESCE(s.show_collections_publicly, true),
         COALESCE(s.allow_follow, true),
-        COALESCE(s.allow_stranger_dm, true)
+        COALESCE(s.allow_stranger_dm, true),
+        COALESCE(s.allow_search, true)
     FROM public.user_settings s
     WHERE s.user_id = user_uuid;
     
     -- 如果没有设置记录，返回默认值
     IF NOT FOUND THEN
-        RETURN QUERY SELECT true, true, true;
+        RETURN QUERY SELECT true, true, true, true;
     END IF;
 END;
 $$;
