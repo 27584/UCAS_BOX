@@ -267,3 +267,35 @@ export async function mergeCollections(itemIds) {
 export async function getMinVersion() {
     return rpc('get_min_version');
 }
+
+// ============================================
+// 动态功能
+// ============================================
+
+export async function createPost(content, tags = []) {
+    return rpc('create_post', { p_content: content, p_tags: tags });
+}
+
+export async function getPosts(limit = 20, offset = 0, tag = null) {
+    return rpc('get_posts', { p_limit: limit, p_offset: offset, p_tag: tag });
+}
+
+export async function toggleLike(targetType, targetId) {
+    return rpc('toggle_like', { p_target_type: targetType, p_target_id: targetId });
+}
+
+export async function createComment(postId, content, parentId = null) {
+    return rpc('create_comment', { p_post_id: postId, p_content: content, p_parent_id: parentId });
+}
+
+export async function getComments(postId) {
+    return rpc('get_comments', { p_post_id: postId });
+}
+
+export async function deletePost(postId) {
+    return rpc('delete_post', { p_post_id: postId });
+}
+
+export async function deleteComment(commentId) {
+    return rpc('delete_comment', { p_comment_id: commentId });
+}

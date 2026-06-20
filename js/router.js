@@ -9,6 +9,7 @@ import { mailPage } from './pages/mailPage.js';
 import { adminPage } from './pages/adminPage.js';
 import { submitPage } from './pages/submitPage.js';
 import { activityPage } from './pages/activityPage.js';
+import { feedPage } from './pages/feedPage.js';
 import { requireAuth, updateNavVisibility, updateGlobalShells, updateMailBadge } from './auth.js';
 import { currentUser } from './supabaseClient.js';
 
@@ -24,6 +25,7 @@ const routes = {
     admin: adminPage,
     submit: submitPage,
     activity: activityPage,
+    feed: feedPage,
 };
 
 async function loadTemplate(name) {

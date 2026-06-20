@@ -40,6 +40,20 @@ export function formatNumber(n) {
     return n.toLocaleString('zh-CN');
 }
 
+export function timeAgo(dateStr) {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diff = Math.floor((now - date) / 1000);
+
+    if (diff < 60) return '刚刚';
+    if (diff < 3600) return `${Math.floor(diff / 60)}分钟前`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}小时前`;
+    if (diff < 604800) return `${Math.floor(diff / 86400)}天前`;
+    if (diff < 2592000) return `${Math.floor(diff / 604800)}周前`;
+    
+    return date.toLocaleDateString('zh-CN');
+}
+
 export function formatCountdown(seconds) {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
@@ -61,6 +75,69 @@ export function showToast(message, type = 'info') {
         toast.classList.remove('show');
         setTimeout(() => toast.remove(), 300);
     }, 3000);
+}
+
+// 自定义确认对话框
+export function showConfirm(message) {
+    return new Promise((resolve) => {
+        // 移除已存在的确认框
+        const existing = document.getElementById('confirm-modal');
+        if (existing) existing.remove();
+
+        const overlay = document.createElement('div');
+        overlay.id = 'confirm-modal';
+        overlay.innerHTML = `
+            <div class="confirm-overlay"></div>
+            <div class="confirm-dialog">
+                <div class="confirm-message">${message}</div>
+                <div class="confirm-buttons">
+                    <button class="btn btn-secondary" id="confirm-cancel">取消</button>
+                    <button class="btn btn-danger" id="confirm-ok">确定</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+
+        // 添加样式
+        if (!document.getElementById('confirm-styles')) {
+            const style = document.createElement('style');
+            style.id = 'confirm-styles';
+            style.textContent = `
+                #confirm-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 10000; display: flex; align-items: center; justify-content: center; }
+                #confirm-modal .confirm-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); }
+                #confirm-modal .confirm-dialog { position: relative; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 16px; padding: 24px; min-width: 280px; box-shadow: 0 20px 60px rgba(0,0,0,0.4); }
+                #confirm-modal .confirm-message { text-align: center; margin-bottom: 24px; color: var(--text-primary); font-size: 16px; }
+                #confirm-modal .confirm-buttons { display: flex; gap: 12px; }
+                #confirm-modal .confirm-buttons .btn { flex: 1; padding: 12px 16px; border-radius: 8px; font-size: 14px; border: none; cursor: pointer; }
+                #confirm-modal .btn-secondary { background: var(--bg-tertiary); color: var(--text-secondary); }
+                #confirm-modal .btn-secondary:hover { background: var(--bg-hover); }
+                #confirm-modal .btn-danger { background: var(--error-color, #ef4444); color: white; }
+                #confirm-modal .btn-danger:hover { opacity: 0.9; }
+            `;
+            document.head.appendChild(style);
+        }
+
+        // 动画
+        requestAnimationFrame(() => {
+            overlay.querySelector('.confirm-dialog').style.transform = 'scale(1)';
+            overlay.querySelector('.confirm-dialog').style.opacity = '1';
+        });
+
+        document.getElementById('confirm-cancel').addEventListener('click', () => {
+            overlay.remove();
+            resolve(false);
+        });
+
+        document.getElementById('confirm-ok').addEventListener('click', () => {
+            overlay.remove();
+            resolve(true);
+        });
+
+        overlay.querySelector('.confirm-overlay').addEventListener('click', () => {
+            overlay.remove();
+            resolve(false);
+        });
+    });
 }
 
 export function itemImageHTML(name, quality, imageName, size = 64) {

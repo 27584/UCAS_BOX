@@ -1553,12 +1553,15 @@ BEGIN
     -- 检查是否需要重置（每日重置）
     IF v_daily_reset IS NULL OR v_daily_reset < CURRENT_DATE THEN
         UPDATE public.dragon_boat_progress 
-        SET claimed_1min = false,
+        SET online_total = 0,
+            claimed_1min = false,
             claimed_10min = false,
             claimed_60min = false,
             daily_reset = CURRENT_DATE,
             last_update = now_time
         WHERE user_id = user_uuid;
+        v_online_total := 0;
+        v_last_update := now_time;
         v_claimed_1min := false;
         v_claimed_10min := false;
         v_claimed_60min := false;
@@ -1862,7 +1865,7 @@ DECLARE
     v_total_prize_distributed BIGINT;
     v_prize_pool_share BIGINT;
     
-    prizes JSONB := '[{"level":"特等奖","matches":[6],"share":0.3},{"level":"一等奖","matches":[5],"share":0.2},{"level":"二等奖","matches":[4],"share":0.15},{"level":"三等奖","matches":[3],"share":0.15},{"level":"幸运奖","matches":[1,2],"share":0.2}]';
+    prizes JSONB := '[{"level":"特等奖","matches":[6],"share":0.53},{"level":"一等奖","matches":[5],"share":0.25},{"level":"二等奖","matches":[4],"share":0.15},{"level":"三等奖","matches":[3],"share":0.05},{"level":"幸运奖","matches":[1,2],"share":0.02}]';
     v_prize RECORD;
 BEGIN
     SELECT * INTO v_round FROM public.lottery_rounds WHERE lottery_rounds.round_id = p_round_id;
@@ -2160,14 +2163,12 @@ BEGIN
 
     next_quality := quality_order[v_quality_idx + 1];
 
-    -- 随机选择一个下一品质的收藏品（按权重）
-    SELECT COALESCE(SUM(drop_weight), 100) INTO total_weight
+    -- 随机选择一个下一品质的收藏品（按权重，与开盒算法一致）
+    SELECT COALESCE(SUM(drop_weight), 0) INTO total_weight
     FROM public.items
-    WHERE quality = next_quality AND item_type = 'collection';
+    WHERE quality = next_quality AND item_type = 'collection' AND drop_weight > 0;
 
-    IF total_weight <= 0 OR NOT EXISTS (
-        SELECT 1 FROM public.items WHERE quality = next_quality AND item_type = 'collection'
-    ) THEN
+    IF total_weight <= 0 THEN
         RETURN jsonb_build_object('success', false, 'message', '暂无可合成的' || next_quality || '品质收藏品');
     END IF;
 
@@ -2177,24 +2178,15 @@ BEGIN
     FOR v_temp IN
         SELECT id, name, quality, drop_weight
         FROM public.items
-        WHERE quality = next_quality AND item_type = 'collection'
+        WHERE quality = next_quality AND item_type = 'collection' AND drop_weight > 0
         ORDER BY id
     LOOP
-        remaining := remaining - COALESCE(v_temp.drop_weight, 100);
+        remaining := remaining - v_temp.drop_weight;
         IF remaining <= 0 THEN
             v_target_item := v_temp;
             EXIT;
         END IF;
     END LOOP;
-
-    -- 如果没找到，随机选一个
-    IF v_target_item IS NULL THEN
-        SELECT * INTO v_target_item
-        FROM public.items
-        WHERE quality = next_quality AND item_type = 'collection'
-        ORDER BY random()
-        LIMIT 1;
-    END IF;
 
     -- 扣除9个收藏品（每个物品ID扣1个）
     FOR v_temp IN
@@ -2231,9 +2223,9 @@ LANGUAGE plpgsql
 AS $$
 BEGIN
     RETURN jsonb_build_object(
-        'min_version_code', 301,
-        'min_version', 'v0.3.1_beta',
-        'message', '当前版本过低，请更新（CTRL+SHIFT+F5刷新或寻求可靠途径）'
+        'min_version_code', 2,
+        'min_version', 'v0.4.0_beta',
+        'message', '当前版本过低，可能无法正常游玩，请更新（CTRL+SHIFT+F5刷新浏览器或寻求可靠途径）'
     );
 END;
 $$;
@@ -2248,9 +2240,26 @@ CREATE TABLE IF NOT EXISTS public.posts (
     user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     content TEXT NOT NULL,
     tags TEXT[] DEFAULT '{}',
-    created_at TIMESTAMPTZ DEFAULT NOW() AT TIME ZONE 'Asia/Shanghai',
-    updated_at TIMESTAMPTZ DEFAULT NOW() AT TIME ZONE 'Asia/Shanghai'
+    created_at TIMESTAMPTZ DEFAULT TIMEZONE('Asia/Shanghai', NOW()),
+    updated_at TIMESTAMPTZ DEFAULT TIMEZONE('Asia/Shanghai', NOW())
 );
+ALTER TABLE public.posts ENABLE ROW LEVEL SECURITY;
+
+-- 所有人可读帖子
+DROP POLICY IF EXISTS "posts select all" ON public.posts;
+CREATE POLICY "posts select all" ON public.posts FOR SELECT USING (true);
+
+-- 登录用户只能插入自己id的帖子（解决42501报错）
+DROP POLICY IF EXISTS "users insert own posts" ON public.posts;
+CREATE POLICY "users insert own posts" ON public.posts FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- 仅作者可编辑
+DROP POLICY IF EXISTS "users update own posts" ON public.posts;
+CREATE POLICY "users update own posts" ON public.posts FOR UPDATE USING (auth.uid() = user_id);
+
+-- 仅作者可删除
+DROP POLICY IF EXISTS "users delete own posts" ON public.posts;
+CREATE POLICY "users delete own posts" ON public.posts FOR DELETE USING (auth.uid() = user_id);
 
 -- 评论表（支持嵌套）
 CREATE TABLE IF NOT EXISTS public.comments (
@@ -2259,7 +2268,7 @@ CREATE TABLE IF NOT EXISTS public.comments (
     user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     parent_id BIGINT DEFAULT NULL REFERENCES public.comments(id) ON DELETE CASCADE,
     content TEXT NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW() AT TIME ZONE 'Asia/Shanghai'
+    created_at TIMESTAMPTZ DEFAULT TIMEZONE('Asia/Shanghai', NOW())
 );
 
 -- 点赞表（帖子+评论共用）
@@ -2268,7 +2277,7 @@ CREATE TABLE IF NOT EXISTS public.likes (
     user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     target_type TEXT NOT NULL CHECK (target_type IN ('post', 'comment')),
     target_id BIGINT NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW() AT TIME ZONE 'Asia/Shanghai',
+    created_at TIMESTAMPTZ DEFAULT TIMEZONE('Asia/Shanghai', NOW()),
     UNIQUE(user_id, target_type, target_id)
 );
 
@@ -2305,8 +2314,13 @@ BEGIN
 END;
 $$;
 
--- 获取帖子列表
-CREATE OR REPLACE FUNCTION public.get_posts(p_limit INT DEFAULT 20, p_offset INT DEFAULT 0, p_tag TEXT DEFAULT NULL)
+
+DROP FUNCTION IF EXISTS public.get_posts(INT, INT, TEXT);
+CREATE OR REPLACE FUNCTION public.get_posts(
+    p_limit INT DEFAULT 20,
+    p_offset INT DEFAULT 0,
+    p_tag TEXT DEFAULT NULL
+)
 RETURNS TABLE(
     post_id BIGINT,
     user_id UUID,
@@ -2320,32 +2334,34 @@ RETURNS TABLE(
     is_liked BOOLEAN
 )
 LANGUAGE plpgsql
+SECURITY DEFINER
 AS $$
 DECLARE
-    user_uuid UUID;
+    v_user_uuid UUID;
 BEGIN
-    user_uuid := auth.uid();
+    v_user_uuid := auth.uid();
 
     RETURN QUERY
     SELECT 
         p.id AS post_id,
         p.user_id,
         pr.nickname AS user_nickname,
-        pr.avatar_url AS user_avatar,
+        NULL::TEXT AS user_avatar,
         p.content,
         p.tags,
         p.created_at,
-        (SELECT COUNT(*) FROM public.likes WHERE target_type = 'post' AND target_id = p.id) AS likes_count,
-        (SELECT COUNT(*) FROM public.comments WHERE post_id = p.id) AS comments_count,
-        EXISTS(SELECT 1 FROM public.likes WHERE user_id = user_uuid AND target_type = 'post' AND target_id = p.id) AS is_liked
+        (SELECT COUNT(*) FROM public.likes l WHERE l.target_type = 'post' AND l.target_id = p.id) AS likes_count,
+        (SELECT COUNT(*) FROM public.comments c WHERE c.post_id = p.id) AS comments_count,
+        EXISTS(SELECT 1 FROM public.likes l WHERE l.user_id = v_user_uuid AND l.target_type = 'post' AND l.target_id = p.id) AS is_liked
     FROM public.posts p
     LEFT JOIN public.profiles pr ON p.user_id = pr.id
-    WHERE p_tag IS NULL OR p_tag = ANY(p.tags)
+    WHERE (p_tag IS NULL OR p_tag = '') OR p_tag = ANY(p.tags)
     ORDER BY p.created_at DESC
     LIMIT p_limit
     OFFSET p_offset;
 END;
 $$;
+
 
 -- 点赞/取消点赞
 CREATE OR REPLACE FUNCTION public.toggle_like(p_target_type TEXT, p_target_id BIGINT)
@@ -2398,28 +2414,29 @@ BEGIN
     RETURN jsonb_build_object('success', true, 'comment_id', v_comment_id);
 END;
 $$;
-
--- 获取帖子评论（嵌套结构）
+DROP FUNCTION IF EXISTS public.get_comments(BIGINT);
 CREATE OR REPLACE FUNCTION public.get_comments(p_post_id BIGINT)
 RETURNS JSONB
 LANGUAGE plpgsql
+SECURITY DEFINER
 AS $$
 DECLARE
+    v_login_uid UUID := auth.uid();
     result JSONB;
 BEGIN
     WITH RECURSIVE comment_tree AS (
         -- 根评论
         SELECT 
-            c.id,
-            c.post_id,
-            c.user_id,
-            c.parent_id,
-            c.content,
-            c.created_at,
+            c.id AS cid,
+            c.post_id AS cpost_id,
+            c.user_id AS cuser_id,
+            c.parent_id AS cparent_id,
+            c.content AS ccontent,
+            c.created_at AS ccreated_at,
             pr.nickname AS user_nickname,
-            pr.avatar_url AS user_avatar,
-            (SELECT COUNT(*) FROM public.likes WHERE target_type = 'comment' AND target_id = c.id) AS likes_count,
-            EXISTS(SELECT 1 FROM public.likes WHERE user_id = auth.uid() AND target_type = 'comment' AND target_id = c.id) AS is_liked,
+            NULL::TEXT AS user_avatar,
+            (SELECT COUNT(*) FROM public.likes l WHERE l.target_type = 'comment' AND l.target_id = c.id) AS likes_count,
+            EXISTS(SELECT 1 FROM public.likes l WHERE l.user_id = v_login_uid AND l.target_type = 'comment' AND l.target_id = c.id) AS is_liked,
             0 AS depth,
             ARRAY[c.id] AS path
         FROM public.comments c
@@ -2430,38 +2447,38 @@ BEGIN
 
         -- 子评论
         SELECT 
-            c.id,
-            c.post_id,
-            c.user_id,
-            c.parent_id,
-            c.content,
-            c.created_at,
+            c.id AS cid,
+            c.post_id AS cpost_id,
+            c.user_id AS cuser_id,
+            c.parent_id AS cparent_id,
+            c.content AS ccontent,
+            c.created_at AS ccreated_at,
             pr.nickname AS user_nickname,
-            pr.avatar_url AS user_avatar,
-            (SELECT COUNT(*) FROM public.likes WHERE target_type = 'comment' AND target_id = c.id) AS likes_count,
-            EXISTS(SELECT 1 FROM public.likes WHERE user_id = auth.uid() AND target_type = 'comment' AND target_id = c.id) AS is_liked,
+            NULL::TEXT AS user_avatar,
+            (SELECT COUNT(*) FROM public.likes l WHERE l.target_type = 'comment' AND l.target_id = c.id) AS likes_count,
+            EXISTS(SELECT 1 FROM public.likes l WHERE l.user_id = v_login_uid AND l.target_type = 'comment' AND l.target_id = c.id) AS is_liked,
             ct.depth + 1,
             ct.path || c.id
         FROM public.comments c
         LEFT JOIN public.profiles pr ON c.user_id = pr.id
-        JOIN comment_tree ct ON c.parent_id = ct.id
-        WHERE c.post_id = p_post_id AND ct.depth < 3  -- 最多嵌套3层
+        JOIN comment_tree ct ON c.parent_id = ct.cid
+        WHERE c.post_id = p_post_id AND ct.depth < 3
     )
     SELECT jsonb_agg(
         jsonb_build_object(
-            'id', id,
-            'user_id', user_id,
-            'user_nickname', user_nickname,
-            'user_avatar', user_avatar,
-            'parent_id', parent_id,
-            'content', content,
-            'created_at', created_at,
-            'likes_count', likes_count,
-            'is_liked', is_liked,
-            'depth', depth
-        ) ORDER BY path
+            'id', ct.cid,
+            'user_id', ct.cuser_id,
+            'user_nickname', ct.user_nickname,
+            'user_avatar', ct.user_avatar,
+            'parent_id', ct.cparent_id,
+            'content', ct.ccontent,
+            'created_at', ct.ccreated_at,
+            'likes_count', ct.likes_count,
+            'is_liked', ct.is_liked,
+            'depth', ct.depth
+        ) ORDER BY ct.path
     ) INTO result
-    FROM comment_tree;
+    FROM comment_tree ct;
 
     RETURN COALESCE(result, '[]'::jsonb);
 END;
@@ -2510,3 +2527,21 @@ BEGIN
     RETURN jsonb_build_object('success', true);
 END;
 $$;
+
+-- comments 权限
+ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "comments select all" ON public.comments;
+CREATE POLICY "comments select all" ON public.comments FOR SELECT USING (true);
+DROP POLICY IF EXISTS "users insert own comments" ON public.comments;
+CREATE POLICY "users insert own comments" ON public.comments FOR INSERT WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS "users delete own comments" ON public.comments;
+CREATE POLICY "users delete own comments" ON public.comments FOR DELETE USING (auth.uid() = user_id);
+
+-- likes 权限
+ALTER TABLE public.likes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "likes select all" ON public.likes;
+CREATE POLICY "likes select all" ON public.likes FOR SELECT USING (true);
+DROP POLICY IF EXISTS "users insert own likes" ON public.likes;
+CREATE POLICY "users insert own likes" ON public.likes FOR INSERT WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS "users delete own likes" ON public.likes;
+CREATE POLICY "users delete own likes" ON public.likes FOR DELETE USING (auth.uid() = user_id);

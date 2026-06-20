@@ -1,0 +1,76 @@
+<div class="feed-page">
+    <div class="page-header">
+        <h2><i data-lucide="message-circle"></i> 动态</h2>
+    </div>
+
+    <!-- 发帖区域 -->
+    <div class="post-create-card">
+        <div class="post-create-input">
+            <textarea id="post-content" class="form-input" placeholder="分享你的想法..." maxlength="2000" rows="3"></textarea>
+            <div class="post-create-footer">
+                <div class="post-tags-select">
+                    <span class="tag-label">标签：</span>
+                    <button class="tag-btn" data-tag="日常">日常</button>
+                    <button class="tag-btn" data-tag="开盒">开盒</button>
+                    <button class="tag-btn" data-tag="交易">交易</button>
+                    <button class="tag-btn" data-tag="求助">求助</button>
+                    <button class="tag-btn" data-tag="吐槽">吐槽</button>
+                    <button class="tag-btn" data-tag="分享">分享</button>
+                </div>
+                <div class="post-create-actions">
+                    <span class="char-count"><span id="char-count">0</span>/2000</span>
+                    <button class="btn btn-primary" id="btn-create-post">
+                        <i data-lucide="send"></i>
+                        发布
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 标签筛选 -->
+    <div class="feed-filter-bar">
+        <button class="filter-btn active" data-tag="">全部</button>
+        <button class="filter-btn" data-tag="日常">日常</button>
+        <button class="filter-btn" data-tag="开盒">开盒</button>
+        <button class="filter-btn" data-tag="交易">交易</button>
+        <button class="filter-btn" data-tag="求助">求助</button>
+        <button class="filter-btn" data-tag="吐槽">吐槽</button>
+        <button class="filter-btn" data-tag="分享">分享</button>
+    </div>
+
+    <!-- 帖子列表 -->
+    <div class="feed-list" id="feed-list">
+        <div class="skeleton" style="height:200px;"></div>
+        <div class="skeleton" style="height:200px;"></div>
+    </div>
+
+    <!-- 加载更多 -->
+    <div class="load-more" id="load-more" style="display:none;">
+        <button class="btn btn-secondary" id="btn-load-more">
+            <i data-lucide="chevron-down"></i>
+            加载更多
+        </button>
+    </div>
+</div>
+
+<!-- 评论弹窗 -->
+<div id="comments-modal" class="modal" style="display:none;">
+    <div class="modal-overlay" id="comments-overlay"></div>
+    <div class="modal-content comments-modal-content">
+        <button class="btn-close" id="comments-close"><i data-lucide="x"></i></button>
+        <div class="comments-header">
+            <h3><i data-lucide="message-circle"></i> 评论</h3>
+        </div>
+        <div class="comments-list" id="comments-list">
+            <!-- 评论内容 -->
+        </div>
+        <div class="comment-create">
+            <textarea id="comment-input" class="form-input" placeholder="写下你的评论..." maxlength="500" rows="2"></textarea>
+            <button class="btn btn-primary btn-sm" id="btn-submit-comment">
+                <i data-lucide="send"></i>
+                发送
+            </button>
+        </div>
+    </div>
+</div>
