@@ -440,7 +440,8 @@ export async function updateProfileSetting(settingKey, settingValue) {
 }
 
 export async function getUserSettingsFull() {
-    return rpc('get_user_settings_full');
+    const result = await rpc('get_user_settings_full');
+    return Array.isArray(result) ? result[0] : result;
 }
 
 export async function checkAllowFollow(userId) {
