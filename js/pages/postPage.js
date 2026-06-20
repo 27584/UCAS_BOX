@@ -128,9 +128,7 @@ export const postPage = {
                         返回
                     </button>
                     ${isOwner ? `
-                        <button class="btn-icon btn-delete" id="btn-delete-post">
-                            <i data-lucide="trash-2"></i>
-                        </button>
+                        <button class="btn-delete-post" id="btn-delete-post">删除</button>
                     ` : ''}
                 </div>
                 
