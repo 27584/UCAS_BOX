@@ -1,5 +1,5 @@
 import { claimDragonBoatOnline, useDragonBoatBag, getInventory, getLotteryRound, buyLotteryTicket, getLotteryHistory, getUserLotteryTickets, drawLotteryRound } from '../api.js';
-import { createParticles, showToast, itemImageHTML, openItemDetail, QUALITY_CONFIG } from '../utils.js';
+import { createParticles, showToast, itemImageHTML, openItemDetail, QUALITY_CONFIG, initItemImages } from '../utils.js';
 import { updateGlobalShells } from '../auth.js';
 import { createIcons, icons } from 'lucide';
 
@@ -268,8 +268,10 @@ export const activityPage = {
     },
 
     updateLotteryTime() {
+        const el = document.getElementById('lottery-time-left');
+        if (!el) return;
         if (!this.currentRound || !this.currentRound.time_left) {
-            document.getElementById('lottery-time-left').textContent = '--';
+            el.textContent = '--';
             return;
         }
 
@@ -277,7 +279,7 @@ export const activityPage = {
         const h = Math.floor(seconds / 3600);
         const m = Math.floor((seconds % 3600) / 60);
         const s = seconds % 60;
-        document.getElementById('lottery-time-left').textContent = 
+        el.textContent = 
             h.toString().padStart(2, '0') + ':' + m.toString().padStart(2, '0') + ':' + s.toString().padStart(2, '0');
     },
 

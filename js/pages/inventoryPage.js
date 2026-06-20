@@ -1,5 +1,5 @@
 import { getInventory, mergeCollections } from '../api.js';
-import { itemImageHTML, QUALITY_CONFIG, openItemDetail, showToast } from '../utils.js';
+import { itemImageHTML, QUALITY_CONFIG, openItemDetail, showToast, initItemImages } from '../utils.js';
 import { createIcons, icons } from 'lucide';
 
 export const inventoryPage = {
@@ -316,6 +316,7 @@ export const inventoryPage = {
                 </div>
             `;
         }).join('');
+        initItemImages();
 
         grid.querySelectorAll('.item-card').forEach(card => {
             card.addEventListener('click', () => {

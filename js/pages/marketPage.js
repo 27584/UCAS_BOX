@@ -1,5 +1,5 @@
 import { getMarketOrders, getInventory, buyMarketOrder, cancelMarketOrder, placeMarketOrder, getProfile } from '../api.js';
-import { itemImageHTML, formatNumber, showToast, QUALITY_CONFIG, ITEM_TYPE_CONFIG, openItemDetail } from '../utils.js';
+import { itemImageHTML, formatNumber, showToast, QUALITY_CONFIG, ITEM_TYPE_CONFIG, openItemDetail, initItemImages } from '../utils.js';
 import { createIcons, icons } from 'lucide';
 import { updateGlobalShells } from '../auth.js';
 
@@ -181,6 +181,7 @@ export const marketPage = {
                 ${this.orders.map(order => this.orderCard(order, false)).join('')}
             </div>
         `;
+        initItemImages();
 
         const totalPages = Math.ceil(this.totalCount / PAGE_SIZE);
         this.renderPagination(totalPages);
@@ -279,6 +280,7 @@ export const marketPage = {
                 ${myOrders.map(order => this.orderCard(order, true)).join('')}
             </div>
         `;
+        initItemImages();
 
         container.querySelectorAll('.btn-cancel').forEach(btn => {
             btn.addEventListener('click', async () => {
@@ -340,6 +342,7 @@ export const marketPage = {
                 <div class="sell-item-qty">拥有: ${inv.quantity}</div>
             </div>
         `).join('');
+        initItemImages();
 
         grid.querySelectorAll('.sell-item-card').forEach(card => {
             card.addEventListener('click', () => {

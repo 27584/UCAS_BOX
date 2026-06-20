@@ -79,6 +79,12 @@
                     <input type="text" class="form-input" id="item-desc" placeholder="物品描述" />
                 </div>
                 <div class="form-group">
+                    <label class="form-label">图像链接（可选，支持外链）</label>
+                    <input type="text" class="form-input" id="item-image" placeholder="留空使用默认，填 https://... 使用外链" />
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
                     <label class="form-label">权重（越小越稀有）</label>
                     <input type="number" class="form-input" id="item-weight" placeholder="100" value="100" />
                 </div>
@@ -87,6 +93,11 @@
                 <i data-lucide="plus"></i>
                 <span>添加物品</span>
             </button>
+        </div>
+
+        <div class="item-search-bar">
+            <i data-lucide="search"></i>
+            <input type="text" class="form-input" id="item-search" placeholder="搜索物品名称或品质..." />
         </div>
 
         <div class="item-list" id="item-list">

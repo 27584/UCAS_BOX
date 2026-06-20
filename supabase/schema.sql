@@ -218,6 +218,7 @@ CREATE TABLE IF NOT EXISTS public.item_submissions (
     quality TEXT CHECK (quality IN ('white','green','blue','purple','orange','red')) NOT NULL,
     description TEXT NOT NULL,
     drop_weight INT DEFAULT 100,
+    image_name TEXT DEFAULT '',
     status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
     reward_shells BIGINT DEFAULT 0,
     admin_note TEXT,
@@ -1069,7 +1070,7 @@ BEGIN
     SELECT
         p.id AS user_id,
         p.nickname,
-        COALESCE(au.email, '') AS email,
+        COALESCE(au.email, '')::TEXT AS email,
         p.shells,
         p.is_admin,
         p.is_bot,
@@ -1189,6 +1190,50 @@ END;
 $$;
 
 -- ============================================================
+-- 22b. RPC 函数：编辑物品定义（管理员）
+-- ============================================================
+DROP FUNCTION IF EXISTS public.admin_update_item_definition(BIGINT, TEXT, TEXT, TEXT, TEXT, INT, TEXT);
+DROP FUNCTION IF EXISTS public.admin_update_item_definition(BIGINT, TEXT, TEXT, TEXT, TEXT, TEXT, INT);
+CREATE OR REPLACE FUNCTION public.admin_update_item_definition(
+    p_item_id BIGINT,
+    p_name TEXT,
+    p_quality TEXT,
+    p_item_type TEXT,
+    p_image_name TEXT,
+    p_description TEXT,
+    p_drop_weight INT
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+BEGIN
+    IF user_uuid IS NULL THEN
+        RAISE EXCEPTION '未登录';
+    END IF;
+
+    IF NOT public.check_admin() THEN
+        RAISE EXCEPTION '无权限';
+    END IF;
+
+    UPDATE public.items
+    SET name = p_name,
+        quality = p_quality,
+        image_name = p_image_name,
+        description = p_description,
+        drop_weight = p_drop_weight,
+        item_type = p_item_type
+    WHERE id = p_item_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '物品不存在';
+    END IF;
+END;
+$$;
+
+-- ============================================================
 -- 23. RPC 函数：获取系统统计（管理员）
 -- ============================================================
 DROP FUNCTION IF EXISTS public.get_system_stats();
@@ -1239,8 +1284,8 @@ BEGIN
         RAISE EXCEPTION '未登录';
     END IF;
 
-    INSERT INTO public.item_submissions (user_id, name, quality, description, drop_weight)
-    VALUES (user_uuid, p_name, p_quality, p_description, p_drop_weight)
+    INSERT INTO public.item_submissions (user_id, name, quality, description, drop_weight, image_name)
+    VALUES (user_uuid, p_name, p_quality, p_description, p_drop_weight, p_image_name)
     RETURNING id INTO new_id;
 
     RETURN new_id;
@@ -1252,7 +1297,7 @@ $$;
 -- ============================================================
 DROP FUNCTION IF EXISTS public.get_my_submissions();
 CREATE OR REPLACE FUNCTION public.get_my_submissions()
-RETURNS TABLE(id BIGINT, name TEXT, quality TEXT, description TEXT, drop_weight INT, status TEXT, reward_shells BIGINT, admin_note TEXT, created_at TIMESTAMP)
+RETURNS TABLE(id BIGINT, name TEXT, quality TEXT, image_name TEXT, description TEXT, drop_weight INT, status TEXT, reward_shells BIGINT, admin_note TEXT, created_at TIMESTAMP)
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
@@ -1268,6 +1313,7 @@ BEGIN
         s.id,
         s.name,
         s.quality,
+        s.image_name,
         s.description,
         s.drop_weight,
         s.status,
@@ -1285,7 +1331,7 @@ $$;
 -- ============================================================
 DROP FUNCTION IF EXISTS public.get_pending_submissions();
 CREATE OR REPLACE FUNCTION public.get_pending_submissions(p_page INT DEFAULT 1, p_limit INT DEFAULT 20)
-RETURNS TABLE(id BIGINT, user_id UUID, nickname TEXT, name TEXT, quality TEXT, description TEXT, drop_weight INT, status TEXT, reward_shells BIGINT, admin_note TEXT, created_at TIMESTAMP, total_count BIGINT)
+RETURNS TABLE(id BIGINT, user_id UUID, nickname TEXT, name TEXT, quality TEXT, image_name TEXT, description TEXT, drop_weight INT, status TEXT, reward_shells BIGINT, admin_note TEXT, created_at TIMESTAMP, total_count BIGINT)
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
@@ -1310,13 +1356,14 @@ BEGIN
         p.nickname,
         s.name,
         s.quality,
+        s.image_name,
         s.description,
         s.drop_weight,
         s.status,
         s.reward_shells,
         s.admin_note,
         s.created_at AT TIME ZONE 'Asia/Shanghai' AS created_at,
-        (SELECT COUNT(*) FROM public.item_submissions WHERE status = 'pending')::BIGINT AS total_count
+        (SELECT COUNT(*) FROM public.item_submissions WHERE item_submissions.status = 'pending')::BIGINT AS total_count
     FROM public.item_submissions s
     LEFT JOIN public.profiles p ON p.id = s.user_id
     WHERE s.status = 'pending'
@@ -1343,6 +1390,7 @@ DECLARE
     item_quality TEXT;
     item_description TEXT;
     item_drop_weight INT;
+    item_image_name TEXT;
 BEGIN
     IF user_uuid IS NULL THEN
         RAISE EXCEPTION '未登录';
@@ -1352,8 +1400,8 @@ BEGIN
         RAISE EXCEPTION '无权限';
     END IF;
 
-    SELECT s.user_id, s.name, s.quality, s.description, s.drop_weight, p.nickname
-    INTO submitter_id, item_name, item_quality, item_description, item_drop_weight, submitter_nickname
+    SELECT s.user_id, s.name, s.quality, s.description, s.drop_weight, s.image_name, p.nickname
+    INTO submitter_id, item_name, item_quality, item_description, item_drop_weight, item_image_name, submitter_nickname
     FROM public.item_submissions s
     LEFT JOIN public.profiles p ON p.id = s.user_id
     WHERE s.id = p_submission_id AND s.status = 'pending';
@@ -1363,7 +1411,7 @@ BEGIN
     END IF;
 
     INSERT INTO public.items (name, quality, image_name, description, drop_weight)
-    VALUES (item_name, item_quality, '', item_description, item_drop_weight);
+    VALUES (item_name, item_quality, item_image_name, item_description, item_drop_weight);
 
     UPDATE public.item_submissions
     SET status = 'approved', reward_shells = p_reward_shells, updated_at = now()

@@ -20,6 +20,7 @@ export const submitPage = {
         const quality = document.getElementById('submit-quality').value;
         const description = document.getElementById('submit-desc').value.trim();
         const weight = parseInt(document.getElementById('submit-weight').value) || 100;
+        const imageName = (document.getElementById('submit-image')?.value || '').trim();
 
         if (!name) {
             showToast('请输入物品名称', 'error');
@@ -31,11 +32,13 @@ export const submitPage = {
         }
 
         try {
-            await submitItem(name, quality, description, weight);
+            await submitItem(name, quality, description, weight, imageName);
             showToast('投稿成功，等待审核', 'success');
             document.getElementById('submit-name').value = '';
             document.getElementById('submit-desc').value = '';
             document.getElementById('submit-weight').value = '100';
+            const imgEl = document.getElementById('submit-image');
+            if (imgEl) imgEl.value = '';
             await this.loadSubmissions();
         } catch (e) {
             showToast('投稿失败', 'error');

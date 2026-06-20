@@ -1,5 +1,5 @@
 import { getCollectionProgress } from '../api.js';
-import { itemImageHTML, QUALITY_CONFIG, openItemDetail } from '../utils.js';
+import { itemImageHTML, QUALITY_CONFIG, openItemDetail, initItemImages } from '../utils.js';
 import { createIcons, icons } from 'lucide';
 
 const PAGE_SIZE = 16;
@@ -110,6 +110,7 @@ export const collectionPage = {
                 </div>
             `;
         }).join('');
+        initItemImages();
 
         this.renderPagination(totalPages);
 

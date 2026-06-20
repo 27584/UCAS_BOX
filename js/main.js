@@ -1,7 +1,7 @@
 import { initAuth, resendVerificationEmail } from './auth.js';
 import { router } from './router.js';
 import { createIcons, icons } from 'lucide';
-import { showToast, itemImageHTML, openItemDetail, QUALITY_CONFIG } from './utils.js';
+import { showToast, itemImageHTML, openItemDetail, QUALITY_CONFIG, initItemImages } from './utils.js';
 import { useRenameCard, useDragonBoatBag, getMinVersion } from './api.js';
 import { formatNumber } from './utils.js';
 import { VERSION, VERSION_CODE } from './version.js';
@@ -25,13 +25,22 @@ async function bootstrap() {
     // 初始化图标
     createIcons({ icons });
 
-    // 每次路由切换后刷新图标
+    // 每次路由切换后刷新图标和物品图片
     window.addEventListener('hashchange', () => {
-        setTimeout(() => createIcons({ icons }), 50);
+        setTimeout(() => {
+            createIcons({ icons });
+        }, 50);
+        // 延迟更长时间确保页面内容已渲染
+        setTimeout(() => {
+            initItemImages();
+        }, 300);
     });
 
-    // 全局每秒刷新一次图标（应对动态内容）
-    setInterval(() => createIcons({ icons }), 2000);
+    // 全局每秒刷新一次图标和物品图片（应对动态内容）
+    setInterval(() => {
+        createIcons({ icons });
+        initItemImages();
+    }, 2000);
 }
 
 // 版本检测

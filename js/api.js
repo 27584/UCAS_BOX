@@ -265,13 +265,26 @@ export async function adminAddItemDefinition(name, quality, imageName, descripti
     });
 }
 
+export async function adminUpdateItemDefinition(itemId, name, quality, itemType, imageName, description, dropWeight) {
+    return rpc('admin_update_item_definition', {
+        p_item_id: itemId,
+        p_name: name,
+        p_quality: quality,
+        p_item_type: itemType,
+        p_image_name: imageName,
+        p_description: description,
+        p_drop_weight: dropWeight
+    });
+}
+
 // 投稿 API
-export async function submitItem(name, quality, description, dropWeight = 100) {
+export async function submitItem(name, quality, description, dropWeight = 100, imageName = '') {
     return rpc('submit_item', {
         p_name: name,
         p_quality: quality,
         p_description: description,
-        p_drop_weight: dropWeight
+        p_drop_weight: dropWeight,
+        p_image_name: imageName
     });
 }
 

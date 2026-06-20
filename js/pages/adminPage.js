@@ -1,8 +1,8 @@
-import { checkAdmin, getAllUsers, getUserDetail, getUserInventory, getSystemStats, adminGetItems, adminAddItem, adminAddItemDefinition, getItems, getPendingSubmissions, approveSubmission, rejectSubmission, getLotteryRound, drawLotteryRound, getLotteryHistory, adminBotReplenish, getAllBotsWithConfig, updateBotConfig, adminBotListItem, adminBotCancelOrder, getBotOrders } from '../api.js';
+import { checkAdmin, getAllUsers, getUserDetail, getUserInventory, getSystemStats, adminGetItems, adminAddItem, adminAddItemDefinition, adminUpdateItemDefinition, getItems, getPendingSubmissions, approveSubmission, rejectSubmission, getLotteryRound, drawLotteryRound, getLotteryHistory, adminBotReplenish, getAllBotsWithConfig, updateBotConfig, adminBotListItem, adminBotCancelOrder, getBotOrders } from '../api.js';
 import { supabase } from '../supabaseClient.js';
 import { router } from '../router.js';
 import { createIcons, icons } from 'lucide';
-import { showToast, QUALITY_CONFIG, renderPagination, bindPagination } from '../utils.js';
+import { showToast, QUALITY_CONFIG, renderPagination, bindPagination, itemImageHTML, initItemImages } from '../utils.js';
 
 export const adminPage = {
     users: [],
@@ -72,6 +72,14 @@ export const adminPage = {
         // 新增物品按钮
         const addItemBtn = container.querySelector('#btn-add-item');
         if (addItemBtn) addItemBtn.addEventListener('click', () => this.addItem());
+
+        // 物品搜索
+        const itemSearch = container.querySelector('#item-search');
+        if (itemSearch) {
+            itemSearch.addEventListener('input', (e) => {
+                this.renderItems(e.target.value.trim());
+            });
+        }
 
         // 彩票开奖按钮
         const drawBtn = container.querySelector('#btn-admin-draw');
@@ -226,29 +234,40 @@ export const adminPage = {
         const user = this.users.find(u => u.user_id === userId);
         if (!user) return;
 
-        const modalHtml = `
-            <div id="user-detail-modal" class="modal" style="display:flex;">
-                <div class="modal-overlay"></div>
-                <div class="modal-content user-detail-content">
-                    <div class="modal-header">
-                        <h3>用户详情</h3>
-                        <button class="modal-close-btn">&times;</button>
-                    </div>
-                    <div class="user-detail-body">
-                        <div class="user-detail-loading">
-                            <i data-lucide="loader-2" class="spin"></i> 加载中...
+        // 如果已有弹窗（切页），只更新loading状态，不重建
+        const existingModal = document.getElementById('user-detail-modal');
+        if (existingModal) {
+            const body = existingModal.querySelector('.user-detail-body');
+            if (body) {
+                body.innerHTML = '<div class="user-detail-loading"><i data-lucide="loader-2" class="spin"></i> 加载中...</div>';
+                createIcons({ icons });
+            }
+        } else {
+            const modalHtml = `
+                <div id="user-detail-modal" class="modal" style="display:flex;">
+                    <div class="modal-overlay"></div>
+                    <div class="modal-content user-detail-content">
+                        <div class="modal-header">
+                            <h3>用户详情</h3>
+                            <button class="modal-close-btn">&times;</button>
+                        </div>
+                        <div class="user-detail-body">
+                            <div class="user-detail-loading">
+                                <i data-lucide="loader-2" class="spin"></i> 加载中...
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
-        `;
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            const modal = document.getElementById('user-detail-modal');
+            const closeModal = () => modal.remove();
+            modal.querySelector('.modal-overlay').addEventListener('click', closeModal);
+            modal.querySelector('.modal-close-btn').addEventListener('click', closeModal);
+            createIcons({ icons });
+        }
 
-        document.body.insertAdjacentHTML('beforeend', modalHtml);
         const modal = document.getElementById('user-detail-modal');
-        const closeModal = () => modal.remove();
-        modal.querySelector('.modal-overlay').addEventListener('click', closeModal);
-        modal.querySelector('.modal-close-btn').addEventListener('click', closeModal);
-        createIcons({ icons });
 
         const renderDetail = (detail, inventory) => {
             const body = modal.querySelector('.user-detail-body');
@@ -371,7 +390,7 @@ export const adminPage = {
         }
     },
 
-    renderItems() {
+    renderItems(filterText = '') {
         const list = document.getElementById('item-list');
         if (!list) return;
         if (this.items.length === 0) {
@@ -379,17 +398,41 @@ export const adminPage = {
             return;
         }
 
-        let html = this.items.map(item => {
+        const filtered = filterText
+            ? this.items.filter(item => {
+                const qLabel = (QUALITY_CONFIG[item.quality] || QUALITY_CONFIG.white).label;
+                const search = filterText.toLowerCase();
+                return (item.name || '').toLowerCase().includes(search) ||
+                    qLabel.includes(search) ||
+                    (item.quality || '').toLowerCase().includes(search);
+            })
+            : this.items;
+
+        if (filtered.length === 0) {
+            list.innerHTML = '<div class="empty-state"><p>无匹配物品</p></div>';
+            return;
+        }
+
+        let html = filtered.map(item => {
             const cfg = QUALITY_CONFIG[item.quality] || QUALITY_CONFIG.white;
             return `
                 <div class="item-admin-card">
                     <div class="item-quality-bar" style="background:${cfg.color}"></div>
-                    <div class="item-info">
-                        <span class="item-name">${item.name}</span>
-                        <span class="item-quality" style="color:${cfg.color}">${cfg.label}</span>
+                    <div class="item-admin-row">
+                        ${itemImageHTML(item.name, item.quality, item.image_name, 48)}
+                        <div class="item-info">
+                            <span class="item-name">${item.name}</span>
+                            <span class="item-quality" style="color:${cfg.color}">${cfg.label}</span>
+                        </div>
                     </div>
                     <div class="item-meta">
                         <span>权重: ${item.drop_weight}</span>
+                        <span>ID: ${item.item_id}</span>
+                    </div>
+                    <div class="item-actions">
+                        <button class="btn btn-secondary btn-sm btn-edit-item" data-item-id="${item.item_id}">
+                            <i data-lucide="edit-3"></i> 编辑
+                        </button>
                     </div>
                 </div>
             `;
@@ -398,7 +441,132 @@ export const adminPage = {
         html += renderPagination(this.itemPage, this.itemTotal, this.itemLimit);
 
         list.innerHTML = html;
+        createIcons({ icons });
+        initItemImages();
+
         bindPagination(list, (page) => this.loadItems(page));
+        list.querySelectorAll('.btn-edit-item').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const itemId = parseInt(btn.dataset.itemId);
+                this.editItem(itemId);
+            });
+        });
+    },
+
+    editItem(itemId) {
+        const item = this.items.find(i => i.item_id === itemId);
+        if (!item) return;
+
+        const existing = document.getElementById('item-edit-modal');
+        if (existing) existing.remove();
+
+        const qualities = [
+            { v: 'white', l: '普通' }, { v: 'green', l: '稀有' },
+            { v: 'blue', l: '珍奇' }, { v: 'purple', l: '史诗' },
+            { v: 'orange', l: '传说' }, { v: 'red', l: '神圣' }
+        ];
+
+        const itemTypes = [
+            { v: 'collection', l: '收藏品' },
+            { v: 'consumable', l: '消耗品' },
+            { v: 'equipment', l: '装备' },
+            { v: 'material', l: '材料' },
+            { v: 'currency', l: '货币' }
+        ];
+
+        const modalHtml = `
+            <div id="item-edit-modal" class="modal" style="display:flex;">
+                <div class="modal-overlay"></div>
+                <div class="modal-content" style="max-width:480px;">
+                    <div class="modal-header">
+                        <h3>编辑物品 #${item.item_id}</h3>
+                        <button class="modal-close-btn">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label class="form-label">名称</label>
+                            <input type="text" class="form-input" id="edit-item-name" value="${this.escHtml(item.name)}" />
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">品质</label>
+                            <select class="form-input" id="edit-item-quality">
+                                ${qualities.map(q => `<option value="${q.v}" ${item.quality === q.v ? 'selected' : ''}>${q.l}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">类型</label>
+                            <select class="form-input" id="edit-item-type">
+                                ${itemTypes.map(t => `<option value="${t.v}" ${item.item_type === t.v ? 'selected' : ''}>${t.l}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">图像链接</label>
+                            <input type="text" class="form-input" id="edit-item-image" value="${this.escHtml(item.image_name || '')}" placeholder="留空使用默认，外链填 https://..." />
+                            <div style="margin-top:8px;text-align:center;">
+                                <img id="edit-item-preview" src="${this.escHtml(item.image_name || '')}" alt="预览" style="max-width:100%;max-height:120px;object-fit:contain;border-radius:8px;display:${item.image_name ? 'block' : 'none'};" onerror="this.style.display='none';" />
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">描述</label>
+                            <input type="text" class="form-input" id="edit-item-desc" value="${this.escHtml(item.description || '')}" />
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">权重</label>
+                            <input type="number" class="form-input" id="edit-item-weight" value="${item.drop_weight}" />
+                        </div>
+                        <button class="btn btn-primary" id="btn-save-item" style="width:100%;margin-top:8px;">保存</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        const modal = document.getElementById('item-edit-modal');
+        const closeModal = () => modal.remove();
+        modal.querySelector('.modal-overlay').addEventListener('click', closeModal);
+        modal.querySelector('.modal-close-btn').addEventListener('click', closeModal);
+
+        // 图片预览实时更新
+        const imgInput = modal.querySelector('#edit-item-image');
+        const imgPreview = modal.querySelector('#edit-item-preview');
+        if (imgInput && imgPreview) {
+            imgInput.addEventListener('input', () => {
+                const url = imgInput.value.trim();
+                if (url) {
+                    imgPreview.src = url;
+                    imgPreview.style.display = 'block';
+                } else {
+                    imgPreview.style.display = 'none';
+                }
+            });
+        }
+
+        document.getElementById('btn-save-item').addEventListener('click', async () => {
+            const name = document.getElementById('edit-item-name').value.trim();
+            const quality = document.getElementById('edit-item-quality').value;
+            const itemType = document.getElementById('edit-item-type').value;
+            const imageName = document.getElementById('edit-item-image').value.trim();
+            const description = document.getElementById('edit-item-desc').value.trim();
+            const weight = parseInt(document.getElementById('edit-item-weight').value);
+            const weightVal = isNaN(weight) ? 100 : weight;
+
+            if (!name) { showToast('名称不能为空', 'error'); return; }
+
+            try {
+                await adminUpdateItemDefinition(itemId, name, quality, itemType, imageName, description, weightVal);
+                showToast('保存成功', 'success');
+                closeModal();
+                this.loadItems(this.itemPage);
+            } catch (e) {
+                showToast('保存失败', 'error');
+            }
+        });
+    },
+
+    escHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
     },
 
     async addItem() {
@@ -406,12 +574,15 @@ export const adminPage = {
         const qualityEl = document.getElementById('item-quality');
         const descEl = document.getElementById('item-desc');
         const weightEl = document.getElementById('item-weight');
+        const imageEl = document.getElementById('item-image');
         if (!nameEl || !qualityEl || !descEl || !weightEl) return;
 
         const name = nameEl.value.trim();
         const quality = qualityEl.value;
         const description = descEl.value.trim();
-        const weight = parseInt(weightEl.value) || 100;
+        const w = parseInt(weightEl.value);
+        const weight = isNaN(w) ? 100 : w;
+        const imageName = (imageEl?.value || '').trim();
 
         if (!name) {
             showToast('请输入物品名称', 'error');
@@ -419,10 +590,11 @@ export const adminPage = {
         }
 
         try {
-            await adminAddItemDefinition(name, quality, '', description, weight);
+            await adminAddItemDefinition(name, quality, imageName, description, weight);
             showToast('添加成功', 'success');
             nameEl.value = '';
             descEl.value = '';
+            if (imageEl) imageEl.value = '';
             await this.loadStats();
             this.loadItems();
         } catch (e) {
@@ -462,6 +634,7 @@ export const adminPage = {
                     <div class="submission-quality-bar" style="background:${cfg.color}"></div>
                     <div class="submission-info">
                         <div class="submission-header">
+                            ${itemImageHTML(sub.name, sub.quality, sub.image_name, 40)}
                             <span class="submission-name">${sub.name}</span>
                             <span style="color:${cfg.color}">${cfg.label}</span>
                         </div>
@@ -483,6 +656,7 @@ export const adminPage = {
         html += renderPagination(this.subPage, this.subTotal, this.subLimit);
 
         list.innerHTML = html;
+        initItemImages();
 
         this.attachSubmissionActions();
         bindPagination(list, (page) => this.loadSubmissions(page));

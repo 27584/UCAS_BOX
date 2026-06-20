@@ -2514,40 +2514,96 @@
     color: var(--text-primary);
 }
 
+.item-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 10px;
+}
+
 .item-admin-card {
     background: var(--bg-glass);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     padding: 12px 16px;
-    margin-bottom: 8px;
     display: flex;
-    align-items: center;
-    gap: 12px;
+    flex-direction: column;
+    gap: 8px;
+    position: relative;
+    overflow: hidden;
 }
 
-.item-quality-bar {
+.item-admin-card .item-quality-bar {
+    position: absolute;
+    left: 0;
+    top: 0;
     width: 4px;
-    height: 32px;
-    border-radius: 2px;
+    height: 100%;
+    border-radius: 0;
+}
+
+.item-admin-card .item-admin-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-left: 8px;
 }
 
 .item-admin-card .item-info {
-    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-left: 8px;
 }
 
 .item-admin-card .item-name {
-    display: block;
     font-weight: 600;
     color: var(--text-primary);
 }
 
 .item-admin-card .item-quality {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: var(--bg-secondary);
+    white-space: nowrap;
 }
 
-.item-meta {
+.item-admin-card .item-meta {
     font-size: 0.75rem;
     color: var(--text-muted);
+    display: flex;
+    gap: 12px;
+    padding-left: 8px;
+}
+
+.item-admin-card .item-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding-left: 8px;
+}
+
+.item-search-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-glass);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 8px 12px;
+    margin-bottom: 12px;
+}
+
+.item-search-bar i {
+    color: var(--text-muted);
+    width: 16px;
+    height: 16px;
+}
+
+.item-search-bar .form-input {
+    border: none;
+    background: transparent;
+    padding: 0;
+    flex: 1;
 }
 
 /* 投稿页面 */

@@ -144,14 +144,49 @@ export function itemImageHTML(name, quality, imageName, size = 64) {
     const cfg = QUALITY_CONFIG[quality] || QUALITY_CONFIG.white;
     const escapedName = escapeHtml(name);
     const initial = escapedName.charAt(0);
-    const safeImageName = escapeHtml(imageName).replace(/[^a-zA-Z0-9._-]/g, '_');
-    const imgPath = `assets/items/${safeImageName}`;
+    // 支持 http/https URL 和 data:image/xxx;base64,... 格式
+    const isUrl = imageName && (/^https?:\/\//i.test(imageName) || /^data:image\//i.test(imageName));
+    const hasImage = isUrl || (imageName && imageName.trim());
+    const imgPath = isUrl ? imageName : hasImage ? `assets/items/${escapeHtml(imageName).replace(/[^a-zA-Z0-9._-]/g, '_')}` : '';
     return `
-        <div class="item-icon" style="position:relative;width:${size}px;height:${size}px;">
-            <img src="${imgPath}" alt="${escapedName}" style="width:100%;height:100%;object-fit:contain;border-radius:12px;display:none;" onload="this.style.display='block';this.nextElementSibling.style.display='none';" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
-            <div style="width:100%;height:100%;background:linear-gradient(135deg, ${cfg.color}22, ${cfg.color}11);border:2px solid ${cfg.color}55;box-shadow:0 0 12px ${cfg.glow};border-radius:12px;display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:${size * 0.45}px;color:${cfg.color};font-weight:700;">${initial}</div>
+        <div class="item-icon" style="position:relative;width:${size}px;height:${size}px;overflow:hidden;border-radius:12px;flex-shrink:0;">
+            <div class="item-fallback" style="width:100%;height:100%;background:linear-gradient(135deg, ${cfg.color}22, ${cfg.color}11);border:2px solid ${cfg.color}55;box-shadow:0 0 12px ${cfg.glow};display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:${size * 0.45}px;color:${cfg.color};font-weight:700;">${initial}</div>
+            ${hasImage ? `<img src="${imgPath}" alt="${escapedName}" class="item-image" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:12px;display:none;z-index:1;">` : ''}
         </div>
     `;
+}
+
+export function initItemImages() {
+    // 使用 requestAnimationFrame 确保 DOM 已完全渲染
+    requestAnimationFrame(() => {
+        document.querySelectorAll('.item-icon .item-image:not([data-initialized])').forEach(img => {
+            img.setAttribute('data-initialized', 'true');
+            const icon = img.closest('.item-icon');
+            const fallback = icon?.querySelector('.item-fallback');
+            if (!icon || !fallback) return;
+            
+            const handleLoad = () => {
+                img.style.display = 'block';
+                fallback.style.display = 'none';
+            };
+            
+            const handleError = () => {
+                img.style.display = 'none';
+                fallback.style.display = 'flex';
+            };
+            
+            if (img.complete) {
+                if (img.naturalWidth > 0) {
+                    handleLoad();
+                } else {
+                    handleError();
+                }
+            } else {
+                img.addEventListener('load', handleLoad);
+                img.addEventListener('error', handleError);
+            }
+        });
+    });
 }
 
 export function createParticles(container, count = 20) {

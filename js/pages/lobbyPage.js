@@ -1,5 +1,5 @@
 import { openBox, getProfile } from '../api.js';
-import { formatCountdown, itemImageHTML, showToast, QUALITY_CONFIG } from '../utils.js';
+import { formatCountdown, itemImageHTML, showToast, QUALITY_CONFIG, initItemImages } from '../utils.js';
 import { createIcons, icons } from 'lucide';
 import { updateGlobalShells } from '../auth.js';
 
@@ -96,6 +96,7 @@ export const lobbyPage = {
 
         glow.style.background = cfg.color;
         placeholder.innerHTML = itemImageHTML(item.out_item_name, item.out_item_quality, item.out_item_image, 96);
+        initItemImages();
         nameEl.textContent = item.out_item_name;
         nameEl.style.color = cfg.color;
         qualityEl.textContent = cfg.label;
