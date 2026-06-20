@@ -39,9 +39,14 @@
         <button class="tab-btn" data-tab="items">物品管理</button>
         <button class="tab-btn" data-tab="submissions">投稿审核</button>
         <button class="tab-btn" data-tab="lottery">彩票管理</button>
+        <button class="tab-btn" data-tab="bots">机器人管理</button>
     </div>
 
     <div class="tab-content" id="tab-users">
+        <div class="user-search-bar">
+            <i data-lucide="search" class="search-icon"></i>
+            <input type="text" class="form-input" id="user-search-input" placeholder="搜索用户（昵称或ID）..." />
+        </div>
         <div class="user-list" id="user-list">
             <div class="skeleton" style="height:60px;"></div>
             <div class="skeleton" style="height:60px;"></div>
@@ -150,5 +155,20 @@
                 <div class="skeleton" style="height:60px;"></div>
             </div>
         </div>
+    </div>
+
+    <div class="tab-content" id="tab-bots" style="display:none;">
+        <div class="bot-header-row">
+            <h3>机器人卖家</h3>
+            <div class="bot-header-actions">
+                <button class="btn btn-primary" id="btn-bot-replenish">
+                    <i data-lucide="refresh-cw"></i> 立刻补货
+                </button>
+            </div>
+        </div>
+        <p class="info-text" style="margin-bottom:16px;">
+            机器人即 is_bot=true 的用户，每小时自动按配置上架商品。展开可修改配置、查看挂单、手动上下架。
+        </p>
+        <div id="bot-list"></div>
     </div>
 </div>

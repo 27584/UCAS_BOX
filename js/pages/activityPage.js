@@ -238,7 +238,8 @@ export const activityPage = {
             this.currentRound = await getLotteryRound();
             this.updateLotteryInfo();
             
-            const history = await getLotteryHistory(10);
+            const result = await getLotteryHistory(1, 10);
+            const history = result?.rounds || [];
             this.updateLotteryHistory(history);
 
             if (this.currentRound && this.currentRound.round_id) {

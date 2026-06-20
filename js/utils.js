@@ -271,3 +271,52 @@ export function closeItemDetail() {
     const modal = document.getElementById('item-detail-modal');
     if (modal) modal.style.display = 'none';
 }
+
+// ============================================
+// 分页组件
+// ============================================
+export function renderPagination(currentPage, totalCount, limit, onClick) {
+    const totalPages = Math.max(1, Math.ceil(totalCount / limit));
+    if (totalPages <= 1) return '';
+
+    const pages = [];
+    const maxVisible = 5;
+    let start = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+    let end = Math.min(totalPages, start + maxVisible - 1);
+    if (end - start + 1 < maxVisible) {
+        start = Math.max(1, end - maxVisible + 1);
+    }
+
+    if (start > 1) pages.push(`<button class="page-btn" data-page="1">1</button>`);
+    if (start > 2) pages.push(`<span class="page-ellipsis">...</span>`);
+
+    for (let i = start; i <= end; i++) {
+        pages.push(`<button class="page-btn ${i === currentPage ? 'active' : ''}" data-page="${i}">${i}</button>`);
+    }
+
+    if (end < totalPages - 1) pages.push(`<span class="page-ellipsis">...</span>`);
+    if (end < totalPages) pages.push(`<button class="page-btn" data-page="${totalPages}">${totalPages}</button>`);
+
+    return `
+        <div class="pagination">
+            <button class="page-btn" data-page="${currentPage - 1}" ${currentPage <= 1 ? 'disabled' : ''}>
+                <i data-lucide="chevron-left"></i>
+            </button>
+            ${pages.join('')}
+            <button class="page-btn" data-page="${currentPage + 1}" ${currentPage >= totalPages ? 'disabled' : ''}>
+                <i data-lucide="chevron-right"></i>
+            </button>
+            <span class="page-ellipsis">共 ${totalCount} 条</span>
+        </div>
+    `;
+}
+
+export function bindPagination(container, onClick) {
+    if (!container) return;
+    container.querySelectorAll('.page-btn:not([disabled])').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const page = parseInt(btn.dataset.page);
+            if (page > 0) onClick(page);
+        });
+    });
+}

@@ -1,18 +1,26 @@
 import { getMails, markMailRead } from '../api.js';
 import { createIcons, icons } from 'lucide';
-import { showToast } from '../utils.js';
+import { showToast, renderPagination, bindPagination } from '../utils.js';
 
 export const mailPage = {
     mails: [],
+    page: 1,
+    limit: 20,
+    totalCount: 0,
 
     render(container) {
-        this.loadMails();
+        this.loadMails(1);
     },
 
-    async loadMails() {
+    async loadMails(page) {
+        this.page = page;
         const list = document.getElementById('mail-list');
         try {
-            this.mails = await getMails();
+            const data = await getMails(page, this.limit);
+            this.mails = data || [];
+            if (data.length > 0) {
+                this.totalCount = parseInt(data[0].total_count) || 0;
+            }
             this.renderList();
         } catch (e) {
             if (list) {
@@ -39,7 +47,7 @@ export const mailPage = {
             return;
         }
 
-        list.innerHTML = this.mails.map((mail, idx) => {
+        let html = this.mails.map((mail, idx) => {
             const date = new Date(mail.created_at).toLocaleString('zh-CN');
             return `
                 <div class="mail-item ${mail.is_read ? 'read' : 'unread'} animate-fade-in-up" data-mail-id="${mail.mail_id}" style="animation-delay:${idx * 0.05}s">
@@ -52,6 +60,10 @@ export const mailPage = {
                 </div>
             `;
         }).join('');
+
+        html += renderPagination(this.page, this.totalCount, this.limit);
+
+        list.innerHTML = html;
 
         list.querySelectorAll('.mail-item').forEach(item => {
             item.addEventListener('click', async () => {
@@ -71,6 +83,7 @@ export const mailPage = {
             });
         });
 
+        bindPagination(list, (page) => this.loadMails(page));
         createIcons({ icons });
     }
 };

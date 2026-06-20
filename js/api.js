@@ -108,8 +108,8 @@ export async function getIdleBoost() {
     return rpc('get_idle_boost');
 }
 
-export async function getMails() {
-    return rpc('get_user_mails');
+export async function getMails(page = 1, limit = 20) {
+    return rpc('get_user_mails', { p_page: page, p_limit: limit });
 }
 
 export async function markMailRead(mailId) {
@@ -124,8 +124,8 @@ export async function buyLotteryTicket(numbers, quantity) {
     return rpc('buy_lottery_ticket', { p_numbers: numbers, p_quantity: quantity });
 }
 
-export async function getLotteryHistory(limit) {
-    return rpc('get_lottery_history', { limit_num: limit });
+export async function getLotteryHistory(page = 1, limit = 10) {
+    return rpc('get_lottery_history', { p_page: page, p_limit: limit });
 }
 
 export async function getUserLotteryTickets(roundId) {
@@ -179,16 +179,72 @@ export async function checkAdmin() {
     return rpc('check_admin');
 }
 
-export async function getAllUsers() {
-    return rpc('get_all_users');
+export async function adminBotReplenish() {
+    return rpc('admin_bot_replenish');
+}
+
+export async function getAllBotsWithConfig() {
+    return rpc('get_all_bots_with_config');
+}
+
+export async function updateBotConfig(config) {
+    return rpc('update_bot_config', {
+        p_bot_id: config.bot_id,
+        p_enabled: config.enabled,
+        p_min_orders: config.min_orders,
+        p_max_orders: config.max_orders,
+        p_qualities: config.qualities,
+        p_price_white: config.price_white,
+        p_price_green: config.price_green,
+        p_price_blue: config.price_blue,
+        p_price_purple: config.price_purple,
+        p_price_orange: config.price_orange,
+        p_price_red: config.price_red,
+        p_qty_white: config.qty_white,
+        p_qty_green: config.qty_green,
+        p_qty_blue: config.qty_blue,
+        p_qty_purple: config.qty_purple,
+        p_qty_orange: config.qty_orange,
+        p_qty_red: config.qty_red,
+        p_price_fluctuation: config.price_fluctuation,
+    });
+}
+
+export async function adminBotListItem(itemId, botId, quantity, price) {
+    return rpc('admin_bot_list_item', {
+        p_item_id: itemId,
+        p_bot_id: botId,
+        p_quantity: quantity,
+        p_price: price,
+    });
+}
+
+export async function adminBotCancelOrder(orderId) {
+    return rpc('admin_bot_cancel_order', { p_order_id: orderId });
+}
+
+export async function getBotOrders(botId) {
+    return rpc('get_bot_orders', { p_bot_id: botId });
+}
+
+export async function getAllUsers(page = 1, limit = 20) {
+    return rpc('get_all_users', { p_page: page, p_limit: limit });
+}
+
+export async function getUserDetail(userId) {
+    return rpc('admin_get_user_detail', { p_user_id: userId });
+}
+
+export async function getUserInventory(userId, page = 1, limit = 20) {
+    return rpc('admin_get_user_inventory', { p_user_id: userId, p_page: page, p_limit: limit });
 }
 
 export async function getSystemStats() {
     return rpc('get_system_stats');
 }
 
-export async function adminGetItems() {
-    return rpc('admin_get_items');
+export async function adminGetItems(page = 1, limit = 50) {
+    return rpc('admin_get_items', { p_page: page, p_limit: limit });
 }
 
 export async function adminAddItem(userId, itemId, quantity = 1) {
@@ -223,8 +279,8 @@ export async function getMySubmissions() {
     return rpc('get_my_submissions');
 }
 
-export async function getPendingSubmissions() {
-    return rpc('get_pending_submissions');
+export async function getPendingSubmissions(page = 1, limit = 20) {
+    return rpc('get_pending_submissions', { p_page: page, p_limit: limit });
 }
 
 export async function approveSubmission(submissionId, rewardShells) {

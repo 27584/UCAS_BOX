@@ -1,6 +1,13 @@
 -- UCAS_BOX 完整数据库架构
 -- 在 Supabase SQL Editor 中执行此文件以一键创建所有表、函数和策略
 ALTER DATABASE postgres SET TIME ZONE 'Asia/Shanghai';
+
+-- 清理旧的机器人相关对象（兼容历史版本）
+DROP TABLE IF EXISTS public.bot_accounts CASCADE;
+DROP TABLE IF EXISTS public.bot_state CASCADE;
+DROP FUNCTION IF EXISTS public.ensure_bot_users CASCADE;
+DROP FUNCTION IF EXISTS public.bot_place_market_order CASCADE;
+
 -- ============================================================
 -- 1. 用户扩展表
 -- ============================================================
@@ -773,6 +780,7 @@ RETURNS TABLE(
     item_description TEXT,
     item_type TEXT,
     seller_nickname TEXT,
+    seller_is_bot BOOLEAN,
     total_count BIGINT
 )
 LANGUAGE plpgsql
@@ -800,6 +808,7 @@ BEGIN
         i.description AS item_description,
         i.item_type AS item_type,
         p.nickname AS seller_nickname,
+        COALESCE(p.is_bot, false) AS seller_is_bot,
         (
             SELECT COUNT(*) FROM public.market_orders mo2
             JOIN public.items i2 ON mo2.item_id = i2.id
@@ -955,17 +964,20 @@ $$;
 -- 16. RPC 函数：获取用户邮件
 -- ============================================================
 DROP FUNCTION IF EXISTS public.get_user_mails();
-CREATE OR REPLACE FUNCTION public.get_user_mails()
-RETURNS TABLE(mail_id BIGINT, title TEXT, content TEXT, is_read BOOLEAN, created_at TIMESTAMP)
+CREATE OR REPLACE FUNCTION public.get_user_mails(p_page INT DEFAULT 1, p_limit INT DEFAULT 20)
+RETURNS TABLE(mail_id BIGINT, title TEXT, content TEXT, is_read BOOLEAN, created_at TIMESTAMP, total_count BIGINT)
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
     user_uuid UUID := auth.uid();
+    v_offset INT;
 BEGIN
     IF user_uuid IS NULL THEN
         RAISE EXCEPTION '未登录';
     END IF;
+
+    v_offset := (GREATEST(p_page, 1) - 1) * GREATEST(p_limit, 1);
 
     RETURN QUERY
     SELECT
@@ -973,10 +985,13 @@ BEGIN
         sm.title,
         sm.content,
         sm.is_read,
-        sm.created_at AT TIME ZONE 'Asia/Shanghai' AS created_at
+        sm.created_at AT TIME ZONE 'Asia/Shanghai' AS created_at,
+        (SELECT COUNT(*) FROM public.system_mails WHERE user_id = user_uuid)::BIGINT AS total_count
     FROM public.system_mails sm
     WHERE sm.user_id = user_uuid
-    ORDER BY sm.created_at DESC;
+    ORDER BY sm.created_at DESC
+    LIMIT p_limit
+    OFFSET v_offset;
 END;
 $$;
 
@@ -1031,13 +1046,14 @@ $$;
 -- 19. RPC 函数：获取所有用户（管理员）
 -- ============================================================
 DROP FUNCTION IF EXISTS public.get_all_users();
-CREATE OR REPLACE FUNCTION public.get_all_users()
-RETURNS TABLE(user_id UUID, nickname TEXT, shells BIGINT, is_admin BOOLEAN, created_at TIMESTAMP)
+CREATE OR REPLACE FUNCTION public.get_all_users(p_page INT DEFAULT 1, p_limit INT DEFAULT 20)
+RETURNS TABLE(user_id UUID, nickname TEXT, email TEXT, shells BIGINT, is_admin BOOLEAN, is_bot BOOLEAN, created_at TIMESTAMP, total_count BIGINT)
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
     user_uuid UUID := auth.uid();
+    v_offset INT;
 BEGIN
     IF user_uuid IS NULL THEN
         RAISE EXCEPTION '未登录';
@@ -1047,15 +1063,23 @@ BEGIN
         RAISE EXCEPTION '无权限';
     END IF;
 
+    v_offset := (GREATEST(p_page, 1) - 1) * GREATEST(p_limit, 1);
+
     RETURN QUERY
     SELECT
         p.id AS user_id,
         p.nickname,
+        COALESCE(au.email, '') AS email,
         p.shells,
         p.is_admin,
-        p.created_at AT TIME ZONE 'Asia/Shanghai' AS created_at
+        p.is_bot,
+        p.created_at AT TIME ZONE 'Asia/Shanghai' AS created_at,
+        (SELECT COUNT(*) FROM public.profiles)::BIGINT AS total_count
     FROM public.profiles p
-    ORDER BY p.created_at DESC;
+    LEFT JOIN auth.users au ON p.id = au.id
+    ORDER BY p.created_at DESC
+    LIMIT p_limit
+    OFFSET v_offset;
 END;
 $$;
 
@@ -1099,13 +1123,14 @@ $$;
 -- 21. RPC 函数：获取所有收藏品（管理员）
 -- ============================================================
 DROP FUNCTION IF EXISTS public.admin_get_items();
-CREATE OR REPLACE FUNCTION public.admin_get_items()
-RETURNS TABLE(item_id BIGINT, name TEXT, quality TEXT, image_name TEXT, description TEXT, drop_weight INT, item_type TEXT)
+CREATE OR REPLACE FUNCTION public.admin_get_items(p_page INT DEFAULT 1, p_limit INT DEFAULT 50)
+RETURNS TABLE(item_id BIGINT, name TEXT, quality TEXT, image_name TEXT, description TEXT, drop_weight INT, item_type TEXT, total_count BIGINT)
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
     user_uuid UUID := auth.uid();
+    v_offset INT;
 BEGIN
     IF user_uuid IS NULL THEN
         RAISE EXCEPTION '未登录';
@@ -1115,10 +1140,15 @@ BEGIN
         RAISE EXCEPTION '无权限';
     END IF;
 
+    v_offset := (GREATEST(p_page, 1) - 1) * GREATEST(p_limit, 1);
+
     RETURN QUERY
-    SELECT i.id AS item_id, i.name, i.quality, i.image_name, i.description, i.drop_weight, i.item_type
+    SELECT i.id AS item_id, i.name, i.quality, i.image_name, i.description, i.drop_weight, i.item_type,
+        (SELECT COUNT(*) FROM public.items)::BIGINT AS total_count
     FROM public.items i
-    ORDER BY i.id;
+    ORDER BY i.id
+    LIMIT p_limit
+    OFFSET v_offset;
 END;
 $$;
 
@@ -1254,13 +1284,14 @@ $$;
 -- 26. RPC 函数：获取待审核投稿（管理员）
 -- ============================================================
 DROP FUNCTION IF EXISTS public.get_pending_submissions();
-CREATE OR REPLACE FUNCTION public.get_pending_submissions()
-RETURNS TABLE(id BIGINT, user_id UUID, nickname TEXT, name TEXT, quality TEXT, description TEXT, drop_weight INT, status TEXT, reward_shells BIGINT, admin_note TEXT, created_at TIMESTAMP)
+CREATE OR REPLACE FUNCTION public.get_pending_submissions(p_page INT DEFAULT 1, p_limit INT DEFAULT 20)
+RETURNS TABLE(id BIGINT, user_id UUID, nickname TEXT, name TEXT, quality TEXT, description TEXT, drop_weight INT, status TEXT, reward_shells BIGINT, admin_note TEXT, created_at TIMESTAMP, total_count BIGINT)
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
     user_uuid UUID := auth.uid();
+    v_offset INT;
 BEGIN
     IF user_uuid IS NULL THEN
         RAISE EXCEPTION '未登录';
@@ -1269,6 +1300,8 @@ BEGIN
     IF NOT public.check_admin() THEN
         RAISE EXCEPTION '无权限';
     END IF;
+
+    v_offset := (GREATEST(p_page, 1) - 1) * GREATEST(p_limit, 1);
 
     RETURN QUERY
     SELECT
@@ -1282,11 +1315,14 @@ BEGIN
         s.status,
         s.reward_shells,
         s.admin_note,
-        s.created_at AT TIME ZONE 'Asia/Shanghai' AS created_at
+        s.created_at AT TIME ZONE 'Asia/Shanghai' AS created_at,
+        (SELECT COUNT(*) FROM public.item_submissions WHERE status = 'pending')::BIGINT AS total_count
     FROM public.item_submissions s
     LEFT JOIN public.profiles p ON p.id = s.user_id
     WHERE s.status = 'pending'
-    ORDER BY s.created_at ASC;
+    ORDER BY s.created_at ASC
+    LIMIT p_limit
+    OFFSET v_offset;
 END;
 $$;
 
@@ -2003,51 +2039,59 @@ $$;
 -- 34. RPC 函数：彩票 - 获取往期开奖记录
 -- ============================================================
 DROP FUNCTION IF EXISTS public.get_lottery_history(limit_num INT);
-CREATE OR REPLACE FUNCTION public.get_lottery_history(limit_num INT)
+DROP FUNCTION IF EXISTS public.get_lottery_history(limit_num INT, p_page INT);
+CREATE OR REPLACE FUNCTION public.get_lottery_history(p_page INT DEFAULT 1, p_limit INT DEFAULT 10)
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
     user_uuid UUID := auth.uid();
+    v_offset INT;
+    v_total BIGINT;
 BEGIN
-    IF limit_num IS NULL OR limit_num <= 0 THEN
-        limit_num := 10;
-    END IF;
+    v_offset := (GREATEST(p_page, 1) - 1) * GREATEST(p_limit, 1);
+    SELECT COUNT(*) INTO v_total FROM public.lottery_rounds WHERE status = 'drawn';
 
-    RETURN (
-        SELECT jsonb_agg(row) FROM (
-            SELECT 
-                r.round_id,
-                r.round_number,
-                r.end_time AT TIME ZONE 'Asia/Shanghai' AS end_time,
-                r.winning_numbers,
-                COALESCE(r.final_pool, r.base_pool + r.rollover_pool) AS total_pool,
-                r.status,
-                (SELECT jsonb_agg(
-                    jsonb_build_object(
-                        'prize_level', lr.prize_level,
-                        'pool_share', lr.pool_share,
-                        'total_winners', lr.total_winners,
-                        'total_people', lr.total_people,
-                        'rollover_amount', lr.rollover_amount
-                    )
-                ) FROM public.lottery_results lr WHERE lr.round_id = r.round_id) AS results,
-                (SELECT jsonb_agg(
-                    jsonb_build_object(
-                        'numbers', lt.numbers,
-                        'quantity', lt.quantity,
-                        'is_winning', lt.is_winning,
-                        'prize_level', lt.prize_level,
-                        'prize_amount', lt.prize_amount
-                    )
-                ) FROM public.lottery_tickets lt 
-                 WHERE lt.round_id = r.round_id AND lt.user_id = user_uuid) AS user_tickets
-            FROM public.lottery_rounds r
-            WHERE r.status = 'drawn'
-            ORDER BY r.round_id DESC
-            LIMIT limit_num
-        ) AS row
+    RETURN jsonb_build_object(
+        'total_count', v_total,
+        'page', p_page,
+        'limit', p_limit,
+        'rounds', (
+            SELECT jsonb_agg(row) FROM (
+                SELECT 
+                    r.round_id,
+                    r.round_number,
+                    r.end_time AT TIME ZONE 'Asia/Shanghai' AS end_time,
+                    r.winning_numbers,
+                    COALESCE(r.final_pool, r.base_pool + r.rollover_pool) AS total_pool,
+                    r.status,
+                    (SELECT jsonb_agg(
+                        jsonb_build_object(
+                            'prize_level', lr.prize_level,
+                            'pool_share', lr.pool_share,
+                            'total_winners', lr.total_winners,
+                            'total_people', lr.total_people,
+                            'rollover_amount', lr.rollover_amount
+                        )
+                    ) FROM public.lottery_results lr WHERE lr.round_id = r.round_id) AS results,
+                    (SELECT jsonb_agg(
+                        jsonb_build_object(
+                            'numbers', lt.numbers,
+                            'quantity', lt.quantity,
+                            'is_winning', lt.is_winning,
+                            'prize_level', lt.prize_level,
+                            'prize_amount', lt.prize_amount
+                        )
+                    ) FROM public.lottery_tickets lt 
+                     WHERE lt.round_id = r.round_id AND lt.user_id = user_uuid) AS user_tickets
+                FROM public.lottery_rounds r
+                WHERE r.status = 'drawn'
+                ORDER BY r.round_id DESC
+                LIMIT p_limit
+                OFFSET v_offset
+            ) AS row
+        )
     );
 END;
 $$;
@@ -2216,6 +2260,536 @@ BEGIN
 END;
 $$;
 
+-- 为已存在的 profiles 表添加机器人标记
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'is_bot') THEN
+        ALTER TABLE public.profiles ADD COLUMN is_bot BOOLEAN DEFAULT false;
+    END IF;
+END $$;
+
+-- ============================================================
+-- 机器人配置表（关联 profiles.id，机器人即 is_bot=true 的 profile）
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.bot_configs (
+    bot_id UUID PRIMARY KEY REFERENCES public.profiles(id) ON DELETE CASCADE,
+    enabled BOOLEAN DEFAULT true,               -- 是否启用自动补货
+    min_orders INT DEFAULT 2,                   -- 最低挂单数（低于此数自动补）
+    max_orders INT DEFAULT 6,                   -- 最高挂单数（超过此数不补）
+    qualities TEXT[] DEFAULT ARRAY['white','green','blue','purple'], -- 允许的品质
+    -- 各品质基价（果壳币）
+    price_white INT DEFAULT 80,
+    price_green INT DEFAULT 800,
+    price_blue INT DEFAULT 7000,
+    price_purple INT DEFAULT 65000,
+    price_orange INT DEFAULT 300000,
+    price_red INT DEFAULT 1000000,
+    -- 各品质数量范围（格式: 'min,max'）
+    qty_white TEXT DEFAULT '1,3',
+    qty_green TEXT DEFAULT '1,3',
+    qty_blue TEXT DEFAULT '1,3',
+    qty_purple TEXT DEFAULT '1,1',
+    qty_orange TEXT DEFAULT '1,1',
+    qty_red TEXT DEFAULT '1,1',
+    -- 价格浮动百分比（0.9=±10%）
+    price_fluctuation NUMERIC DEFAULT 0.2,
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE public.bot_configs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Bot configs admin all" ON public.bot_configs;
+CREATE POLICY "Bot configs admin all" ON public.bot_configs FOR ALL USING (true);
+
+-- 将机器人写入 auth.users（和普通用户完全一样）
+DO $$
+BEGIN
+    INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_user_meta_data, created_at, updated_at) VALUES
+        ('66666666-6666-6666-6666-666666666666', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', '66666666-6666-6666-6666-666666666666@ucasbox.local', '__bot_no_login__', now(), '{"nickname":"黑心小贩","is_bot":true}'::jsonb, now(), now())
+    ON CONFLICT (id) DO NOTHING;
+    INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_user_meta_data, created_at, updated_at) VALUES
+        ('77777777-7777-7777-7777-777777777777', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', '77777777-7777-7777-7777-777777777777@ucasbox.local', '__bot_no_login__', now(), '{"nickname":"小卖部","is_bot":true}'::jsonb, now(), now())
+    ON CONFLICT (id) DO NOTHING;
+    INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_user_meta_data, created_at, updated_at) VALUES
+        ('88888888-8888-8888-8888-888888888888', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', '88888888-8888-8888-8888-888888888888@ucasbox.local', '__bot_no_login__', now(), '{"nickname":"小盒子喵喵喵","is_bot":true}'::jsonb, now(), now())
+    ON CONFLICT (id) DO NOTHING;
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'auth.users insert skipped (RLS or permission): %', SQLERRM;
+END $$;
+
+-- 插入机器人到 profiles，同时插入默认配置
+DO $$
+BEGIN
+    -- 黑心小贩
+    INSERT INTO public.profiles (id, nickname, shells, is_admin, is_bot)
+    VALUES ('66666666-6666-6666-6666-666666666666', '黑心小贩', 999999999, false, true)
+    ON CONFLICT (id) DO UPDATE SET nickname = EXCLUDED.nickname, is_bot = true;
+    INSERT INTO public.bot_configs (bot_id) VALUES ('66666666-6666-6666-6666-666666666666')
+    ON CONFLICT DO NOTHING;
+    -- 小卖部
+    INSERT INTO public.profiles (id, nickname, shells, is_admin, is_bot)
+    VALUES ('77777777-7777-7777-7777-777777777777', '小卖部', 999999999, false, true)
+    ON CONFLICT (id) DO UPDATE SET nickname = EXCLUDED.nickname, is_bot = true;
+    INSERT INTO public.bot_configs (bot_id) VALUES ('77777777-7777-7777-7777-777777777777')
+    ON CONFLICT DO NOTHING;
+    -- 小盒子喵喵喵
+    INSERT INTO public.profiles (id, nickname, shells, is_admin, is_bot)
+    VALUES ('88888888-8888-8888-8888-888888888888', '小盒子喵喵喵', 999999999, false, true)
+    ON CONFLICT (id) DO UPDATE SET nickname = EXCLUDED.nickname, is_bot = true;
+    INSERT INTO public.bot_configs (bot_id) VALUES ('88888888-8888-8888-8888-888888888888')
+    ON CONFLICT DO NOTHING;
+END $$;
+
+-- ============================================================
+-- 管理员：获取所有机器人（含配置与当前挂单）
+-- ============================================================
+DROP FUNCTION IF EXISTS public.get_all_bots_with_config();
+CREATE OR REPLACE FUNCTION public.get_all_bots_with_config()
+RETURNS TABLE(
+    bot_id UUID,
+    nickname TEXT,
+    shells BIGINT,
+    enabled BOOLEAN,
+    min_orders INT,
+    max_orders INT,
+    qualities TEXT[],
+    price_white INT, price_green INT, price_blue INT,
+    price_purple INT, price_orange INT, price_red INT,
+    qty_white TEXT, qty_green TEXT, qty_blue TEXT,
+    qty_purple TEXT, qty_orange TEXT, qty_red TEXT,
+    price_fluctuation NUMERIC,
+    active_order_count BIGINT,
+    updated_at TIMESTAMPTZ
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        ba.id AS bot_id,
+        ba.nickname,
+        ba.shells,
+        COALESCE(bc.enabled, true) AS enabled,
+        COALESCE(bc.min_orders, 2) AS min_orders,
+        COALESCE(bc.max_orders, 6) AS max_orders,
+        COALESCE(bc.qualities, ARRAY['white','green','blue','purple']) AS qualities,
+        COALESCE(bc.price_white, 80) AS price_white,
+        COALESCE(bc.price_green, 800) AS price_green,
+        COALESCE(bc.price_blue, 7000) AS price_blue,
+        COALESCE(bc.price_purple, 65000) AS price_purple,
+        COALESCE(bc.price_orange, 300000) AS price_orange,
+        COALESCE(bc.price_red, 1000000) AS price_red,
+        COALESCE(bc.qty_white, '1,3') AS qty_white,
+        COALESCE(bc.qty_green, '1,3') AS qty_green,
+        COALESCE(bc.qty_blue, '1,3') AS qty_blue,
+        COALESCE(bc.qty_purple, '1,1') AS qty_purple,
+        COALESCE(bc.qty_orange, '1,1') AS qty_orange,
+        COALESCE(bc.qty_red, '1,1') AS qty_red,
+        COALESCE(bc.price_fluctuation, 0.2) AS price_fluctuation,
+        (SELECT COUNT(*) FROM public.market_orders mo
+         WHERE mo.seller_id = ba.id AND mo.status = 'active') AS active_order_count,
+        bc.updated_at
+    FROM public.profiles ba
+    LEFT JOIN public.bot_configs bc ON ba.id = bc.bot_id
+    WHERE ba.is_bot = true
+    ORDER BY ba.id;
+END;
+$$;
+
+-- ============================================================
+-- 管理员：更新机器人配置
+-- ============================================================
+DROP FUNCTION IF EXISTS public.update_bot_config(
+    UUID, BOOLEAN, INT, INT, TEXT[],
+    INT, INT, INT, INT, INT, INT,
+    TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, NUMERIC
+);
+CREATE OR REPLACE FUNCTION public.update_bot_config(
+    p_bot_id UUID,
+    p_enabled BOOLEAN,
+    p_min_orders INT,
+    p_max_orders INT,
+    p_qualities TEXT[],
+    p_price_white INT, p_price_green INT, p_price_blue INT,
+    p_price_purple INT, p_price_orange INT, p_price_red INT,
+    p_qty_white TEXT, p_qty_green TEXT, p_qty_blue TEXT,
+    p_qty_purple TEXT, p_qty_orange TEXT, p_qty_red TEXT,
+    p_price_fluctuation NUMERIC
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    is_admin BOOLEAN;
+BEGIN
+    SELECT COALESCE(p.is_admin, false) INTO is_admin
+    FROM public.profiles p WHERE p.id = auth.uid();
+
+    IF NOT is_admin THEN
+        RETURN jsonb_build_object('success', false, 'message', '无管理员权限');
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM public.bot_configs WHERE bot_id = p_bot_id) THEN
+        RETURN jsonb_build_object('success', false, 'message', '机器人不存在');
+    END IF;
+
+    INSERT INTO public.bot_configs (
+        bot_id, enabled, min_orders, max_orders, qualities,
+        price_white, price_green, price_blue,
+        price_purple, price_orange, price_red,
+        qty_white, qty_green, qty_blue,
+        qty_purple, qty_orange, qty_red,
+        price_fluctuation, updated_at
+    )
+    VALUES (
+        p_bot_id, p_enabled, p_min_orders, p_max_orders, p_qualities,
+        p_price_white, p_price_green, p_price_blue,
+        p_price_purple, p_price_orange, p_price_red,
+        p_qty_white, p_qty_green, p_qty_blue,
+        p_qty_purple, p_qty_orange, p_qty_red,
+        p_price_fluctuation, now()
+    )
+    ON CONFLICT (bot_id) DO UPDATE SET
+        enabled = EXCLUDED.enabled,
+        min_orders = EXCLUDED.min_orders,
+        max_orders = EXCLUDED.max_orders,
+        qualities = EXCLUDED.qualities,
+        price_white = EXCLUDED.price_white,
+        price_green = EXCLUDED.price_green,
+        price_blue = EXCLUDED.price_blue,
+        price_purple = EXCLUDED.price_purple,
+        price_orange = EXCLUDED.price_orange,
+        price_red = EXCLUDED.price_red,
+        qty_white = EXCLUDED.qty_white,
+        qty_green = EXCLUDED.qty_green,
+        qty_blue = EXCLUDED.qty_blue,
+        qty_purple = EXCLUDED.qty_purple,
+        qty_orange = EXCLUDED.qty_orange,
+        qty_red = EXCLUDED.qty_red,
+        price_fluctuation = EXCLUDED.price_fluctuation,
+        updated_at = now();
+
+    RETURN jsonb_build_object('success', true, 'message', '配置已更新');
+END;
+$$;
+
+-- ============================================================
+-- 管理员：手动上架物品给机器人
+-- ============================================================
+DROP FUNCTION IF EXISTS public.admin_bot_list_item(BIGINT, UUID, INT, BIGINT);
+CREATE OR REPLACE FUNCTION public.admin_bot_list_item(
+    p_item_id BIGINT,
+    p_bot_id UUID,
+    p_quantity INT,
+    p_price BIGINT
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    is_admin BOOLEAN;
+    item_name TEXT;
+    new_order_id BIGINT;
+BEGIN
+    SELECT COALESCE(p.is_admin, false) INTO is_admin
+    FROM public.profiles p WHERE p.id = auth.uid();
+
+    IF NOT is_admin THEN
+        RETURN jsonb_build_object('success', false, 'message', '无管理员权限');
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM public.bot_configs WHERE bot_id = p_bot_id) THEN
+        RETURN jsonb_build_object('success', false, 'message', '机器人不存在');
+    END IF;
+
+    SELECT name INTO item_name FROM public.items WHERE id = p_item_id;
+    IF item_name IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '物品不存在');
+    END IF;
+
+    -- 给机器人背包加物品
+    INSERT INTO public.inventory (user_id, item_id, quantity)
+    VALUES (p_bot_id, p_item_id, p_quantity)
+    ON CONFLICT ON CONSTRAINT inventory_user_id_item_id_key
+    DO UPDATE SET quantity = public.inventory.quantity + EXCLUDED.quantity;
+
+    -- 上架
+    INSERT INTO public.market_orders (seller_id, item_id, quantity, price_per_unit, type, status)
+    VALUES (p_bot_id, p_item_id, p_quantity, p_price, 'sell', 'active')
+    RETURNING id INTO new_order_id;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'message', '已上架「' || item_name || '」×' || p_quantity,
+        'order_id', new_order_id
+    );
+END;
+$$;
+
+-- ============================================================
+-- 管理员：下架机器人的指定订单
+-- ============================================================
+DROP FUNCTION IF EXISTS public.admin_bot_cancel_order(BIGINT);
+CREATE OR REPLACE FUNCTION public.admin_bot_cancel_order(p_order_id BIGINT)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    is_admin BOOLEAN;
+    rec RECORD;
+BEGIN
+    SELECT COALESCE(p.is_admin, false) INTO is_admin
+    FROM public.profiles p WHERE p.id = auth.uid();
+
+    IF NOT is_admin THEN
+        RETURN jsonb_build_object('success', false, 'message', '无管理员权限');
+    END IF;
+
+    SELECT mo.* INTO rec
+    FROM public.market_orders mo
+    JOIN public.bot_configs bc ON mo.seller_id = bc.bot_id
+    WHERE mo.id = p_order_id AND mo.status = 'active';
+
+    IF rec IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '订单不存在或非机器人订单');
+    END IF;
+
+    UPDATE public.market_orders SET status = 'cancelled' WHERE id = p_order_id;
+
+    -- 物品退回机器人背包（不退款）
+    INSERT INTO public.inventory (user_id, item_id, quantity)
+    VALUES (rec.seller_id, rec.item_id, rec.quantity)
+    ON CONFLICT ON CONSTRAINT inventory_user_id_item_id_key
+    DO UPDATE SET quantity = public.inventory.quantity + EXCLUDED.quantity;
+
+    RETURN jsonb_build_object('success', true, 'message', '已下架该订单');
+END;
+$$;
+
+-- ============================================================
+-- 机器人：按配置自动补货（每小时由 pg_cron 调用）
+-- ============================================================
+DROP FUNCTION IF EXISTS public.bot_replenish();
+CREATE OR REPLACE FUNCTION public.bot_replenish()
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    bot_rec RECORD;
+    cfg RECORD;
+    item_rec RECORD;
+    total_weight NUMERIC;
+    rand_pick NUMERIC;
+    remaining NUMERIC;
+    qty INT;
+    qty_min INT;
+    qty_max INT;
+    price BIGINT;
+    base_price INT;
+    price_flu NUMERIC;
+    items_added INT := 0;
+    total_added INT := 0;
+BEGIN
+    FOR cfg IN
+        SELECT bc.bot_id, bc.enabled,
+               bc.min_orders, bc.max_orders, bc.qualities,
+               bc.price_white, bc.price_green, bc.price_blue,
+               bc.price_purple, bc.price_orange, bc.price_red,
+               bc.qty_white, bc.qty_green, bc.qty_blue,
+               bc.qty_purple, bc.qty_orange, bc.qty_red,
+               bc.price_fluctuation
+        FROM public.bot_configs bc
+        WHERE bc.enabled = true
+    LOOP
+        DECLARE
+            current_count INT;
+        BEGIN
+            SELECT COUNT(*) INTO current_count
+            FROM public.market_orders
+            WHERE seller_id = cfg.bot_id AND status = 'active';
+
+            -- 低于最低挂单数才补
+            IF current_count >= cfg.min_orders THEN
+                CONTINUE;
+            END IF;
+
+            -- 随机决定补几件
+            FOR i IN 1..(1 + floor(random() * 3))::INT LOOP
+                SELECT COUNT(*) INTO current_count
+                FROM public.market_orders
+                WHERE seller_id = cfg.bot_id AND status = 'active';
+
+                IF current_count >= cfg.max_orders THEN
+                    EXIT;
+                END IF;
+
+                -- 按配置的品质范围和权重抽取
+                SELECT COALESCE(SUM(drop_weight), 0) INTO total_weight
+                FROM public.items
+                WHERE drop_weight > 0
+                  AND item_type = 'collection'
+                  AND quality = ANY(cfg.qualities);
+
+                IF total_weight <= 0 THEN
+                    EXIT;
+                END IF;
+
+                rand_pick := floor(random() * total_weight) + 1;
+                remaining := rand_pick;
+
+                FOR item_rec IN
+                    SELECT id, name, quality, drop_weight
+                    FROM public.items
+                    WHERE drop_weight > 0
+                      AND item_type = 'collection'
+                      AND quality = ANY(cfg.qualities)
+                    ORDER BY id
+                LOOP
+                    remaining := remaining - item_rec.drop_weight;
+                    IF remaining <= 0 THEN
+                        EXIT;
+                    END IF;
+                END LOOP;
+
+                -- 解析数量范围
+                EXECUTE format('SELECT (regexp_matches(%L, ''(\d+),(\d+)''))[1]::int, (regexp_matches(%L, ''(\d+),(\d+)''))[2]::int',
+                    CASE item_rec.quality
+                        WHEN 'white'  THEN cfg.qty_white
+                        WHEN 'green' THEN cfg.qty_green
+                        WHEN 'blue'  THEN cfg.qty_blue
+                        WHEN 'purple' THEN cfg.qty_purple
+                        WHEN 'orange' THEN cfg.qty_orange
+                        WHEN 'red'   THEN cfg.qty_red
+                        ELSE '1,1'
+                    END,
+                    CASE item_rec.quality
+                        WHEN 'white'  THEN cfg.qty_white
+                        WHEN 'green' THEN cfg.qty_green
+                        WHEN 'blue'  THEN cfg.qty_blue
+                        WHEN 'purple' THEN cfg.qty_purple
+                        WHEN 'orange' THEN cfg.qty_orange
+                        WHEN 'red'   THEN cfg.qty_red
+                        ELSE '1,1'
+                    END
+                ) INTO qty_min, qty_max;
+
+                IF qty_max IS NULL OR qty_max < qty_min THEN
+                    qty_min := 1; qty_max := 1;
+                END IF;
+
+                qty := qty_min + floor(random() * (qty_max - qty_min + 1))::INT;
+                qty := GREATEST(1, qty);
+
+                -- 解析基价
+                base_price := CASE item_rec.quality
+                    WHEN 'white'  THEN cfg.price_white
+                    WHEN 'green' THEN cfg.price_green
+                    WHEN 'blue'  THEN cfg.price_blue
+                    WHEN 'purple' THEN cfg.price_purple
+                    WHEN 'orange' THEN cfg.price_orange
+                    WHEN 'red'   THEN cfg.price_red
+                    ELSE 100
+                END;
+
+                -- 价格浮动
+                price_flu := COALESCE(cfg.price_fluctuation, 0.2);
+                price := GREATEST(1, FLOOR(base_price * (1 - price_flu / 2 + random() * price_flu))::BIGINT);
+
+                -- 背包加物品
+                INSERT INTO public.inventory (user_id, item_id, quantity)
+                VALUES (cfg.bot_id, item_rec.id, qty)
+                ON CONFLICT ON CONSTRAINT inventory_user_id_item_id_key
+                DO UPDATE SET quantity = public.inventory.quantity + EXCLUDED.quantity;
+
+                -- 上架
+                INSERT INTO public.market_orders
+                    (seller_id, item_id, quantity, price_per_unit, type, status)
+                VALUES
+                    (cfg.bot_id, item_rec.id, qty, price, 'sell', 'active');
+
+                items_added := items_added + 1;
+            END LOOP;
+
+            total_added := total_added + items_added;
+        END;
+    END LOOP;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'message', '机器人补货完成，新增 ' || total_added || ' 条挂单'
+    );
+END;
+$$;
+
+-- ============================================================
+-- 管理员手动触发机器人补货（权限校验）
+-- ============================================================
+DROP FUNCTION IF EXISTS public.admin_bot_replenish();
+CREATE OR REPLACE FUNCTION public.admin_bot_replenish()
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    is_admin BOOLEAN;
+BEGIN
+    SELECT COALESCE(p.is_admin, false) INTO is_admin
+    FROM public.profiles p WHERE p.id = auth.uid();
+
+    IF NOT is_admin THEN
+        RETURN jsonb_build_object('success', false, 'message', '无管理员权限');
+    END IF;
+
+    PERFORM public.bot_replenish();
+    RETURN jsonb_build_object('success', true, 'message', '补货完成');
+END;
+$$;
+
+-- ============================================================
+-- 管理员：获取指定机器人的所有活跃挂单
+-- ============================================================
+DROP FUNCTION IF EXISTS public.get_bot_orders(UUID);
+CREATE OR REPLACE FUNCTION public.get_bot_orders(p_bot_id UUID)
+RETURNS TABLE(
+    order_id BIGINT, item_id BIGINT, quantity INT,
+    price_per_unit BIGINT, created_at TIMESTAMPTZ,
+    item_name TEXT, item_quality TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT mo.id, mo.item_id, mo.quantity, mo.price_per_unit, mo.created_at,
+           i.name, i.quality
+    FROM public.market_orders mo
+    JOIN public.items i ON mo.item_id = i.id
+    WHERE mo.seller_id = p_bot_id AND mo.status = 'active'
+    ORDER BY mo.created_at DESC;
+END;
+$$;
+
+-- ============================================================
+-- pg_cron 定时任务：每小时第 5 分钟自动补货
+-- ============================================================
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+        PERFORM cron.delete_job('bot_replenish_hourly');
+        PERFORM cron.schedule(
+            'bot_replenish_hourly',
+            '5 * * * *',
+            'SELECT public.bot_replenish()'
+        );
+    END IF;
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'pg_cron not available: %', SQLERRM;
+END $$;
+
 -- 获取最低版本要求
 CREATE OR REPLACE FUNCTION public.get_min_version()
 RETURNS JSONB
@@ -2223,8 +2797,8 @@ LANGUAGE plpgsql
 AS $$
 BEGIN
     RETURN jsonb_build_object(
-        'min_version_code', 2,
-        'min_version', 'v0.4.0_beta',
+        'min_version_code', 3,
+        'min_version', 'v0.4.1_beta',
         'message', '当前版本过低，可能无法正常游玩，请更新（CTRL+SHIFT+F5刷新浏览器或寻求可靠途径）'
     );
 END;
@@ -2545,3 +3119,97 @@ DROP POLICY IF EXISTS "users insert own likes" ON public.likes;
 CREATE POLICY "users insert own likes" ON public.likes FOR INSERT WITH CHECK (auth.uid() = user_id);
 DROP POLICY IF EXISTS "users delete own likes" ON public.likes;
 CREATE POLICY "users delete own likes" ON public.likes FOR DELETE USING (auth.uid() = user_id);
+
+-- ============================================================
+-- 管理员：获取用户详细信息
+-- ============================================================
+DROP FUNCTION IF EXISTS public.admin_get_user_detail(UUID);
+CREATE OR REPLACE FUNCTION public.admin_get_user_detail(p_user_id UUID)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+    v_result JSONB;
+    v_inventory_count BIGINT;
+    v_order_count BIGINT;
+    v_mail_count BIGINT;
+BEGIN
+    IF user_uuid IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '未登录');
+    END IF;
+
+    IF NOT public.check_admin() THEN
+        RETURN jsonb_build_object('success', false, 'message', '无权限');
+    END IF;
+
+    SELECT COUNT(*) INTO v_inventory_count FROM public.inventory WHERE user_id = p_user_id;
+    SELECT COUNT(*) INTO v_order_count FROM public.market_orders WHERE seller_id = p_user_id;
+    SELECT COUNT(*) INTO v_mail_count FROM public.system_mails WHERE user_id = p_user_id;
+
+    SELECT jsonb_build_object(
+        'user_id', p.id,
+        'nickname', p.nickname,
+        'email', COALESCE(au.email, ''),
+        'shells', p.shells,
+        'is_admin', p.is_admin,
+        'is_bot', p.is_bot,
+        'created_at', p.created_at,
+        'last_open_at', p.last_open_at,
+        'last_claim_at', p.last_claim_at,
+        'inventory_count', v_inventory_count,
+        'order_count', v_order_count,
+        'mail_count', v_mail_count
+    ) INTO v_result
+    FROM public.profiles p
+    LEFT JOIN auth.users au ON p.id = au.id
+    WHERE p.id = p_user_id;
+
+    RETURN COALESCE(v_result, jsonb_build_object('success', false, 'message', '用户不存在'));
+END;
+$$;
+
+-- ============================================================
+-- 管理员：获取指定用户的背包物品
+-- ============================================================
+DROP FUNCTION IF EXISTS public.admin_get_user_inventory(UUID);
+CREATE OR REPLACE FUNCTION public.admin_get_user_inventory(p_user_id UUID, p_page INT DEFAULT 1, p_limit INT DEFAULT 20)
+RETURNS TABLE(inv_id BIGINT, item_id BIGINT, quantity INT, acquired_at TIMESTAMP, item_name TEXT, item_quality TEXT, item_image TEXT, item_description TEXT, item_type TEXT, total_count BIGINT)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+    v_offset INT;
+BEGIN
+    IF user_uuid IS NULL THEN
+        RAISE EXCEPTION '未登录';
+    END IF;
+
+    IF NOT public.check_admin() THEN
+        RAISE EXCEPTION '无权限';
+    END IF;
+
+    v_offset := (GREATEST(p_page, 1) - 1) * GREATEST(p_limit, 1);
+
+    RETURN QUERY
+    SELECT
+        inv.id AS inv_id,
+        inv.item_id,
+        inv.quantity,
+        inv.acquired_at AT TIME ZONE 'Asia/Shanghai' AS acquired_at,
+        i.name AS item_name,
+        i.quality AS item_quality,
+        i.image_name AS item_image,
+        i.description AS item_description,
+        i.item_type AS item_type,
+        (SELECT COUNT(*) FROM public.inventory WHERE user_id = p_user_id)::BIGINT AS total_count
+    FROM public.inventory inv
+    JOIN public.items i ON inv.item_id = i.id
+    WHERE inv.user_id = p_user_id
+    ORDER BY inv.acquired_at DESC
+    LIMIT p_limit
+    OFFSET v_offset;
+END;
+$$;
