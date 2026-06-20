@@ -1,6 +1,5 @@
-import { signOut, getInventory, updateProfileSetting, getProfile, getUserSettings } from '../api.js';
-import { formatNumber, escapeHtml, showToast, userBadgeHTML } from '../utils.js';
-import { router } from '../router.js';
+import { getInventory, getProfile } from '../api.js';
+import { formatNumber, escapeHtml, userBadgeHTML } from '../utils.js';
 import { createIcons, icons } from 'lucide';
 import { VERSION, CHANGELOG } from '../version.js';
 
@@ -16,13 +15,6 @@ export const profilePage = {
     },
 
     attachEvents(container) {
-        container.querySelector('#btn-logout').addEventListener('click', async () => {
-            try {
-                await signOut();
-                router.navigate('auth');
-            } catch (e) {}
-        });
-
         const changelogBtn = container.querySelector('#btn-changelog');
         if (changelogBtn) {
             changelogBtn.addEventListener('click', () => {
@@ -41,20 +33,6 @@ export const profilePage = {
         if (overlay) {
             overlay.addEventListener('click', () => {
                 document.getElementById('changelog-modal').style.display = 'none';
-            });
-        }
-
-        // 公开收藏开关
-        const showCollectionsToggle = container.querySelector('#toggle-show-collections');
-        if (showCollectionsToggle) {
-            showCollectionsToggle.addEventListener('change', async (e) => {
-                try {
-                    await updateProfileSetting('show_collections_publicly', e.target.checked);
-                    showToast(e.target.checked ? '已开启公开收藏' : '已关闭公开收藏', 'success');
-                } catch (err) {
-                    e.target.checked = !e.target.checked;
-                    showToast('设置失败', 'error');
-                }
             });
         }
 
@@ -94,14 +72,6 @@ export const profilePage = {
             const inventory = await getInventory();
             const collectionCount = inventory?.filter(item => item.item_type === 'collection').reduce((sum, item) => sum + item.quantity, 0) || 0;
             document.getElementById('profile-items').textContent = formatNumber(collectionCount);
-
-            // 获取用户设置并设置公开收藏开关
-            const settings = await getUserSettings();
-            const toggle = document.getElementById('toggle-show-collections');
-            if (toggle) {
-                // 如果没有设置记录，默认开启（true）；如果有设置记录，使用设置值
-                toggle.checked = settings?.show_collections_publicly !== false;
-            }
         } catch (e) {
             console.error(e);
         }
