@@ -1,11 +1,12 @@
-import { signOut, getInventory } from '../api.js';
-import { getProfile } from '../api.js';
-import { formatNumber, escapeHtml } from '../utils.js';
+import { signOut, getInventory, updateProfileSetting, getProfile, getUserSettings } from '../api.js';
+import { formatNumber, escapeHtml, showToast, userBadgeHTML } from '../utils.js';
 import { router } from '../router.js';
 import { createIcons, icons } from 'lucide';
 import { VERSION, CHANGELOG } from '../version.js';
 
 export const profilePage = {
+    profile: null,
+
     render(container) {
         this.attachEvents(container);
         this.loadProfile();
@@ -43,6 +44,20 @@ export const profilePage = {
             });
         }
 
+        // 公开收藏开关
+        const showCollectionsToggle = container.querySelector('#toggle-show-collections');
+        if (showCollectionsToggle) {
+            showCollectionsToggle.addEventListener('change', async (e) => {
+                try {
+                    await updateProfileSetting('show_collections_publicly', e.target.checked);
+                    showToast(e.target.checked ? '已开启公开收藏' : '已关闭公开收藏', 'success');
+                } catch (err) {
+                    e.target.checked = !e.target.checked;
+                    showToast('设置失败', 'error');
+                }
+            });
+        }
+
         createIcons({ icons });
     },
 
@@ -67,8 +82,10 @@ export const profilePage = {
         try {
             const profile = await getProfile();
             if (!profile) return;
+            this.profile = profile;
+            
             const nickname = escapeHtml(profile.nickname) || '无名旅者';
-            document.getElementById('profile-nickname').textContent = nickname;
+            document.getElementById('profile-nickname').innerHTML = nickname + userBadgeHTML(profile);
             document.getElementById('profile-initial').textContent = nickname.charAt(0).toUpperCase();
             document.getElementById('profile-email').textContent = profile.id ? '' : '';
             document.getElementById('profile-shells').textContent = formatNumber(profile.shells);
@@ -77,6 +94,14 @@ export const profilePage = {
             const inventory = await getInventory();
             const collectionCount = inventory?.filter(item => item.item_type === 'collection').reduce((sum, item) => sum + item.quantity, 0) || 0;
             document.getElementById('profile-items').textContent = formatNumber(collectionCount);
+
+            // 获取用户设置并设置公开收藏开关
+            const settings = await getUserSettings();
+            const toggle = document.getElementById('toggle-show-collections');
+            if (toggle) {
+                // 如果没有设置记录，默认开启（true）；如果有设置记录，使用设置值
+                toggle.checked = settings?.show_collections_publicly !== false;
+            }
         } catch (e) {
             console.error(e);
         }

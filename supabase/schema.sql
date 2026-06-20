@@ -781,6 +781,7 @@ RETURNS TABLE(
     item_description TEXT,
     item_type TEXT,
     seller_nickname TEXT,
+    seller_is_admin BOOLEAN,
     seller_is_bot BOOLEAN,
     total_count BIGINT
 )
@@ -809,6 +810,7 @@ BEGIN
         i.description AS item_description,
         i.item_type AS item_type,
         p.nickname AS seller_nickname,
+        COALESCE(p.is_admin, false) AS seller_is_admin,
         COALESCE(p.is_bot, false) AS seller_is_bot,
         (
             SELECT COUNT(*) FROM public.market_orders mo2
@@ -2845,8 +2847,8 @@ LANGUAGE plpgsql
 AS $$
 BEGIN
     RETURN jsonb_build_object(
-        'min_version_code', 3,
-        'min_version', 'v0.4.1_beta',
+        'min_version_code', 4,
+        'min_version', 'v0.4.3_beta',
         'message', '当前版本过低，可能无法正常游玩，请更新（CTRL+SHIFT+F5刷新浏览器或寻求可靠途径）'
     );
 END;
@@ -2871,7 +2873,7 @@ ALTER TABLE public.posts ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "posts select all" ON public.posts;
 CREATE POLICY "posts select all" ON public.posts FOR SELECT USING (true);
 
--- 登录用户只能插入自己id的帖子（解决42501报错）
+-- 登录用户只能插入自己id的帖子
 DROP POLICY IF EXISTS "users insert own posts" ON public.posts;
 CREATE POLICY "users insert own posts" ON public.posts FOR INSERT WITH CHECK (auth.uid() = user_id);
 
@@ -2948,6 +2950,8 @@ RETURNS TABLE(
     user_id UUID,
     user_nickname TEXT,
     user_avatar TEXT,
+    user_is_admin BOOLEAN,
+    user_is_bot BOOLEAN,
     content TEXT,
     tags TEXT[],
     created_at TIMESTAMPTZ,
@@ -2969,6 +2973,8 @@ BEGIN
         p.user_id,
         pr.nickname AS user_nickname,
         NULL::TEXT AS user_avatar,
+        COALESCE(pr.is_admin, false) AS user_is_admin,
+        COALESCE(pr.is_bot, false) AS user_is_bot,
         p.content,
         p.tags,
         p.created_at,
@@ -3057,6 +3063,8 @@ BEGIN
             c.created_at AS ccreated_at,
             pr.nickname AS user_nickname,
             NULL::TEXT AS user_avatar,
+            COALESCE(pr.is_admin, false) AS user_is_admin,
+            COALESCE(pr.is_bot, false) AS user_is_bot,
             (SELECT COUNT(*) FROM public.likes l WHERE l.target_type = 'comment' AND l.target_id = c.id) AS likes_count,
             EXISTS(SELECT 1 FROM public.likes l WHERE l.user_id = v_login_uid AND l.target_type = 'comment' AND l.target_id = c.id) AS is_liked,
             0 AS depth,
@@ -3077,6 +3085,8 @@ BEGIN
             c.created_at AS ccreated_at,
             pr.nickname AS user_nickname,
             NULL::TEXT AS user_avatar,
+            COALESCE(pr.is_admin, false) AS user_is_admin,
+            COALESCE(pr.is_bot, false) AS user_is_bot,
             (SELECT COUNT(*) FROM public.likes l WHERE l.target_type = 'comment' AND l.target_id = c.id) AS likes_count,
             EXISTS(SELECT 1 FROM public.likes l WHERE l.user_id = v_login_uid AND l.target_type = 'comment' AND l.target_id = c.id) AS is_liked,
             ct.depth + 1,
@@ -3092,6 +3102,8 @@ BEGIN
             'user_id', ct.cuser_id,
             'user_nickname', ct.user_nickname,
             'user_avatar', ct.user_avatar,
+            'user_is_admin', ct.user_is_admin,
+            'user_is_bot', ct.user_is_bot,
             'parent_id', ct.cparent_id,
             'content', ct.ccontent,
             'created_at', ct.ccreated_at,
@@ -3259,5 +3271,702 @@ BEGIN
     ORDER BY inv.acquired_at DESC
     LIMIT p_limit
     OFFSET v_offset;
+END;
+$$;
+
+-- ============================================================
+-- 关注表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.follows (
+    id BIGSERIAL PRIMARY KEY,
+    follower_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+    following_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    UNIQUE(follower_id, following_id),
+    CHECK (follower_id != following_id)
+);
+
+ALTER TABLE public.follows ENABLE ROW LEVEL SECURITY;
+
+-- ============================================================
+-- 用户设置表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.user_settings (
+    id BIGSERIAL PRIMARY KEY,
+    user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL UNIQUE,
+    show_collections_publicly BOOLEAN DEFAULT true NOT NULL,
+    allow_follow BOOLEAN DEFAULT true NOT NULL,
+    allow_stranger_dm BOOLEAN DEFAULT true NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE public.user_settings ENABLE ROW LEVEL SECURITY;
+
+-- RLS 策略：用户只能查看/修改自己的设置
+DROP POLICY IF EXISTS "Users can view own settings" ON public.user_settings;
+CREATE POLICY "Users can view own settings" ON public.user_settings
+    FOR SELECT USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can update own settings" ON public.user_settings;
+CREATE POLICY "Users can update own settings" ON public.user_settings
+    FOR UPDATE USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can insert own settings" ON public.user_settings;
+CREATE POLICY "Users can insert own settings" ON public.user_settings
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- 添加隐私设置字段（兼容旧版本）
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_settings' AND column_name = 'allow_follow') THEN
+        ALTER TABLE public.user_settings ADD COLUMN allow_follow BOOLEAN DEFAULT true NOT NULL;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_settings' AND column_name = 'allow_stranger_dm') THEN
+        ALTER TABLE public.user_settings ADD COLUMN allow_stranger_dm BOOLEAN DEFAULT true NOT NULL;
+    END IF;
+END $$;
+
+-- ============================================================
+-- 私信表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.private_messages (
+    id BIGSERIAL PRIMARY KEY,
+    sender_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+    receiver_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+    content TEXT NOT NULL,
+    is_read BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT TIMEZONE('Asia/Shanghai', NOW())
+);
+
+-- 创建索引
+CREATE INDEX IF NOT EXISTS idx_pm_sender ON public.private_messages(sender_id);
+CREATE INDEX IF NOT EXISTS idx_pm_receiver ON public.private_messages(receiver_id);
+CREATE INDEX IF NOT EXISTS idx_pm_created ON public.private_messages(created_at DESC);
+
+ALTER TABLE public.private_messages ENABLE ROW LEVEL SECURITY;
+
+-- RLS：用户只能查看自己发送或接收的消息
+DROP POLICY IF EXISTS "Users view own messages" ON public.private_messages;
+CREATE POLICY "Users view own messages" ON public.private_messages
+    FOR SELECT USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
+
+-- RLS：用户只能发送消息
+DROP POLICY IF EXISTS "Users insert own messages" ON public.private_messages;
+CREATE POLICY "Users insert own messages" ON public.private_messages
+    FOR INSERT WITH CHECK (auth.uid() = sender_id);
+
+-- RLS：用户只能更新接收的消息（标记已读）
+DROP POLICY IF EXISTS "Users update received messages" ON public.private_messages;
+CREATE POLICY "Users update received messages" ON public.private_messages
+    FOR UPDATE USING (auth.uid() = receiver_id);
+
+-- ============================================================
+-- 用户主页 RPC 函数
+-- ============================================================
+
+-- 添加 image_name 列到 item_submissions 表（如果不存在）
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'item_submissions' AND column_name = 'image_name') THEN
+        ALTER TABLE public.item_submissions ADD COLUMN image_name TEXT DEFAULT '';
+    END IF;
+END;
+$$;
+
+-- 获取用户公开信息（使用 user_settings 表）
+DROP FUNCTION IF EXISTS public.get_user_profile(UUID);
+CREATE OR REPLACE FUNCTION public.get_user_profile(p_user_id UUID)
+RETURNS TABLE(
+    id UUID,
+    nickname TEXT,
+    shells BIGINT,
+    created_at TIMESTAMPTZ,
+    post_count BIGINT,
+    item_count BIGINT,
+    followers_count BIGINT,
+    following_count BIGINT,
+    show_collections BOOLEAN,
+    is_admin BOOLEAN,
+    is_bot BOOLEAN
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        p.id,
+        p.nickname,
+        p.shells,
+        p.created_at,
+        (SELECT COUNT(*) FROM public.posts WHERE user_id = p_user_id)::BIGINT AS post_count,
+        (SELECT COUNT(DISTINCT inv.item_id) FROM public.inventory inv JOIN public.items i ON inv.item_id = i.id WHERE inv.user_id = p_user_id AND i.item_type = 'collection')::BIGINT AS item_count,
+        (SELECT COUNT(*) FROM public.follows WHERE following_id = p_user_id)::BIGINT AS followers_count,
+        (SELECT COUNT(*) FROM public.follows WHERE follower_id = p_user_id)::BIGINT AS following_count,
+        COALESCE(s.show_collections_publicly, true)::BOOLEAN AS show_collections,
+        COALESCE(p.is_admin, false) AS is_admin,
+        COALESCE(p.is_bot, false) AS is_bot
+    FROM public.profiles p
+    LEFT JOIN public.user_settings s ON p.id = s.user_id
+    WHERE p.id = p_user_id;
+END;
+$$;
+
+-- 获取用户动态（带分页）
+DROP FUNCTION IF EXISTS public.get_user_posts(UUID, INT, INT);
+CREATE OR REPLACE FUNCTION public.get_user_posts(p_user_id UUID, p_limit INT DEFAULT 20, p_offset INT DEFAULT 0)
+RETURNS TABLE(
+    post_id BIGINT,
+    content TEXT,
+    tags TEXT[],
+    likes_count BIGINT,
+    comments_count BIGINT,
+    created_at TIMESTAMPTZ
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        po.id AS post_id,
+        po.content,
+        po.tags,
+        (SELECT COUNT(*) FROM public.likes l WHERE l.target_type = 'post' AND l.target_id = po.id)::BIGINT AS likes_count,
+        (SELECT COUNT(*) FROM public.comments c WHERE c.post_id = po.id)::BIGINT AS comments_count,
+        po.created_at
+    FROM public.posts po
+    WHERE po.user_id = p_user_id
+    ORDER BY po.created_at DESC
+    LIMIT GREATEST(p_limit, 1)
+    OFFSET GREATEST(p_offset, 0);
+END;
+$$;
+
+-- 获取单个帖子详情
+DROP FUNCTION IF EXISTS public.get_post(BIGINT);
+CREATE OR REPLACE FUNCTION public.get_post(p_post_id BIGINT)
+RETURNS TABLE(
+    id BIGINT,
+    user_id UUID,
+    user_nickname TEXT,
+    user_avatar TEXT,
+    user_is_admin BOOLEAN,
+    user_is_bot BOOLEAN,
+    content TEXT,
+    tags TEXT[],
+    likes_count BIGINT,
+    comments_count BIGINT,
+    created_at TIMESTAMPTZ,
+    is_liked BOOLEAN
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+BEGIN
+    RETURN QUERY
+    SELECT 
+        po.id,
+        po.user_id,
+        p.nickname AS user_nickname,
+        NULL::TEXT AS user_avatar,
+        COALESCE(p.is_admin, false) AS user_is_admin,
+        COALESCE(p.is_bot, false) AS user_is_bot,
+        po.content,
+        po.tags,
+        (SELECT COUNT(*) FROM public.likes l WHERE l.target_type = 'post' AND l.target_id = po.id)::BIGINT AS likes_count,
+        (SELECT COUNT(*) FROM public.comments c WHERE c.post_id = po.id)::BIGINT AS comments_count,
+        po.created_at,
+        EXISTS(
+            SELECT 1 FROM public.likes l 
+            WHERE l.target_type = 'post' AND l.target_id = po.id AND l.user_id = user_uuid
+        ) AS is_liked
+    FROM public.posts po
+    LEFT JOIN public.profiles p ON po.user_id = p.id
+    WHERE po.id = p_post_id;
+END;
+$$;
+
+-- 获取用户公开收藏品（仅收藏品，且用户需开启公开设置，带分页）
+DROP FUNCTION IF EXISTS public.get_user_inventory_public(UUID, INT, INT);
+CREATE OR REPLACE FUNCTION public.get_user_inventory_public(p_user_id UUID, p_page INT DEFAULT 1, p_limit INT DEFAULT 50)
+RETURNS TABLE(
+    item_id BIGINT,
+    item_name TEXT,
+    item_quality TEXT,
+    item_image TEXT,
+    quantity INT,
+    total_count BIGINT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_offset INT;
+    v_show_collections BOOLEAN;
+BEGIN
+    -- 从 user_settings 表检查用户是否允许公开收藏
+    SELECT COALESCE(s.show_collections_publicly, true) INTO v_show_collections
+    FROM public.user_settings s
+    WHERE s.user_id = p_user_id;
+    
+    -- 如果没有设置记录，默认允许公开
+    IF NOT FOUND THEN
+        v_show_collections := true;
+    END IF;
+    
+    IF NOT v_show_collections THEN
+        RETURN QUERY SELECT NULL::BIGINT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::INT, 0::BIGINT LIMIT 0;
+        RETURN;
+    END IF;
+    
+    v_offset := (GREATEST(p_page, 1) - 1) * GREATEST(p_limit, 1);
+    
+    RETURN QUERY
+    SELECT 
+        i.id AS item_id,
+        i.name AS item_name,
+        i.quality AS item_quality,
+        i.image_name AS item_image,
+        inv.quantity,
+        (SELECT COUNT(DISTINCT inv2.item_id) FROM public.inventory inv2 JOIN public.items i2 ON inv2.item_id = i2.id WHERE inv2.user_id = p_user_id AND i2.item_type = 'collection')::BIGINT AS total_count
+    FROM public.inventory inv
+    JOIN public.items i ON inv.item_id = i.id
+    WHERE inv.user_id = p_user_id AND i.item_type = 'collection'
+    ORDER BY 
+        CASE i.quality 
+            WHEN 'red' THEN 1 
+            WHEN 'purple' THEN 2 
+            WHEN 'blue' THEN 3 
+            WHEN 'green' THEN 4 
+            ELSE 5 
+        END, i.name
+    LIMIT GREATEST(p_limit, 1)
+    OFFSET v_offset;
+END;
+$$;
+
+-- 关注/取消关注
+DROP FUNCTION IF EXISTS public.toggle_follow(UUID);
+CREATE OR REPLACE FUNCTION public.toggle_follow(p_target_user_id UUID)
+RETURNS TABLE(success BOOLEAN, is_following BOOLEAN)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+    already_following BOOLEAN;
+    v_allow_follow BOOLEAN;
+BEGIN
+    IF user_uuid IS NULL THEN
+        RAISE EXCEPTION '未登录';
+    END IF;
+    
+    IF user_uuid = p_target_user_id THEN
+        RAISE EXCEPTION '不能关注自己';
+    END IF;
+    
+    SELECT EXISTS(
+        SELECT 1 FROM public.follows 
+        WHERE follower_id = user_uuid AND following_id = p_target_user_id
+    ) INTO already_following;
+    
+    IF already_following THEN
+        -- 取消关注，不需要检查设置
+        DELETE FROM public.follows 
+        WHERE follower_id = user_uuid AND following_id = p_target_user_id;
+        RETURN QUERY SELECT TRUE, FALSE;
+    ELSE
+        -- 关注前检查目标用户是否允许被关注
+        SELECT COALESCE(s.allow_follow, true) INTO v_allow_follow
+        FROM public.user_settings s
+        WHERE s.user_id = p_target_user_id;
+        
+        IF NOT FOUND THEN
+            v_allow_follow := true;
+        END IF;
+        
+        IF NOT v_allow_follow THEN
+            RAISE EXCEPTION '该用户禁止被关注';
+        END IF;
+        
+        INSERT INTO public.follows (follower_id, following_id)
+        VALUES (user_uuid, p_target_user_id);
+        RETURN QUERY SELECT TRUE, TRUE;
+    END IF;
+END;
+$$;
+
+-- 检查是否已关注
+DROP FUNCTION IF EXISTS public.check_following(UUID);
+CREATE OR REPLACE FUNCTION public.check_following(p_target_user_id UUID)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+BEGIN
+    IF user_uuid IS NULL THEN
+        RETURN FALSE;
+    END IF;
+    
+    RETURN EXISTS(
+        SELECT 1 FROM public.follows 
+        WHERE follower_id = user_uuid AND following_id = p_target_user_id
+    );
+END;
+$$;
+
+-- 获取粉丝列表（带分页）
+DROP FUNCTION IF EXISTS public.get_followers(UUID, INT, INT);
+CREATE OR REPLACE FUNCTION public.get_followers(p_user_id UUID, p_limit INT DEFAULT 50, p_offset INT DEFAULT 0)
+RETURNS TABLE(
+    user_id UUID,
+    nickname TEXT,
+    created_at TIMESTAMPTZ
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        f.follower_id AS user_id,
+        p.nickname,
+        f.created_at
+    FROM public.follows f
+    JOIN public.profiles p ON f.follower_id = p.id
+    WHERE f.following_id = p_user_id
+    ORDER BY f.created_at DESC
+    LIMIT GREATEST(p_limit, 1)
+    OFFSET GREATEST(p_offset, 0);
+END;
+$$;
+
+-- 获取关注列表（带分页）
+DROP FUNCTION IF EXISTS public.get_following(UUID, INT, INT);
+CREATE OR REPLACE FUNCTION public.get_following(p_user_id UUID, p_limit INT DEFAULT 50, p_offset INT DEFAULT 0)
+RETURNS TABLE(
+    user_id UUID,
+    nickname TEXT,
+    created_at TIMESTAMPTZ
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        f.following_id AS user_id,
+        p.nickname,
+        f.created_at
+    FROM public.follows f
+    JOIN public.profiles p ON f.following_id = p.id
+    WHERE f.follower_id = p_user_id
+    ORDER BY f.created_at DESC
+    LIMIT GREATEST(p_limit, 1)
+    OFFSET GREATEST(p_offset, 0);
+END;
+$$;
+
+-- 更新用户设置（使用 user_settings 表）
+DROP FUNCTION IF EXISTS public.update_profile_setting(TEXT, BOOLEAN);
+CREATE OR REPLACE FUNCTION public.update_profile_setting(p_key TEXT, p_value BOOLEAN)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+BEGIN
+    IF user_uuid IS NULL THEN
+        RAISE EXCEPTION '未登录';
+    END IF;
+    
+    -- 只允许设置白名单中的字段
+    IF p_key IN ('show_collections_publicly', 'allow_follow', 'allow_stranger_dm') THEN
+        -- 使用 upsert 模式，如果记录不存在则插入，存在则更新
+        INSERT INTO public.user_settings (user_id, show_collections_publicly, allow_follow, allow_stranger_dm, updated_at)
+        VALUES (user_uuid, 
+                CASE WHEN p_key = 'show_collections_publicly' THEN p_value ELSE true END,
+                CASE WHEN p_key = 'allow_follow' THEN p_value ELSE true END,
+                CASE WHEN p_key = 'allow_stranger_dm' THEN p_value ELSE true END,
+                now())
+        ON CONFLICT (user_id) 
+        DO UPDATE SET 
+            show_collections_publicly = CASE WHEN p_key = 'show_collections_publicly' THEN p_value ELSE user_settings.show_collections_publicly END,
+            allow_follow = CASE WHEN p_key = 'allow_follow' THEN p_value ELSE user_settings.allow_follow END,
+            allow_stranger_dm = CASE WHEN p_key = 'allow_stranger_dm' THEN p_value ELSE user_settings.allow_stranger_dm END,
+            updated_at = now();
+    ELSE
+        RAISE EXCEPTION '不支持的设置项';
+    END IF;
+END;
+$$;
+
+-- ============================================================
+-- 私信 RPC 函数
+-- ============================================================
+
+-- 获取私信会话列表（关注的人或有聊天记录的人）
+DROP FUNCTION IF EXISTS public.get_dm_conversations(INT, INT);
+CREATE OR REPLACE FUNCTION public.get_dm_conversations(p_limit INT DEFAULT 50, p_offset INT DEFAULT 0)
+RETURNS TABLE(
+    user_id UUID,
+    nickname TEXT,
+    last_message TEXT,
+    last_message_time TIMESTAMPTZ,
+    unread_count BIGINT,
+    is_following BOOLEAN
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+BEGIN
+    IF user_uuid IS NULL THEN
+        RAISE EXCEPTION '未登录';
+    END IF;
+    
+    -- 返回关注的人或有聊天记录的人
+    RETURN QUERY
+    WITH chat_users AS (
+        -- 有聊天记录的人
+        SELECT DISTINCT 
+            CASE WHEN pm.sender_id = user_uuid THEN pm.receiver_id ELSE pm.sender_id END AS other_user_id,
+            MAX(pm.created_at) AS last_msg_time
+        FROM public.private_messages pm
+        WHERE pm.sender_id = user_uuid OR pm.receiver_id = user_uuid
+        GROUP BY CASE WHEN pm.sender_id = user_uuid THEN pm.receiver_id ELSE pm.sender_id END
+    ),
+    following_users AS (
+        -- 关注的人
+        SELECT f.following_id AS other_user_id, f.created_at AS follow_time
+        FROM public.follows f
+        WHERE f.follower_id = user_uuid
+    ),
+    all_users AS (
+        -- 合并：有聊天记录的人 + 关注的人
+        SELECT other_user_id FROM chat_users
+        UNION
+        SELECT other_user_id FROM following_users
+    )
+    SELECT 
+        au.other_user_id AS user_id,
+        p.nickname,
+        pm.content AS last_message,
+        pm.created_at AS last_message_time,
+        (SELECT COUNT(*) FROM public.private_messages pm2 
+         WHERE pm2.receiver_id = user_uuid AND pm2.sender_id = au.other_user_id AND pm2.is_read = false) AS unread_count,
+        EXISTS(SELECT 1 FROM public.follows f WHERE f.follower_id = user_uuid AND f.following_id = au.other_user_id) AS is_following
+    FROM all_users au
+    LEFT JOIN public.profiles p ON au.other_user_id = p.id
+    LEFT JOIN public.private_messages pm ON 
+        (pm.sender_id = user_uuid AND pm.receiver_id = au.other_user_id) OR 
+        (pm.sender_id = au.other_user_id AND pm.receiver_id = user_uuid)
+    WHERE pm.id IS NULL OR pm.created_at = (
+        SELECT MAX(pm2.created_at) FROM public.private_messages pm2 
+        WHERE (pm2.sender_id = user_uuid AND pm2.receiver_id = au.other_user_id) OR 
+              (pm2.sender_id = au.other_user_id AND pm2.receiver_id = user_uuid)
+    )
+    ORDER BY COALESCE(pm.created_at, p.created_at) DESC
+    LIMIT GREATEST(p_limit, 1)
+    OFFSET GREATEST(p_offset, 0);
+END;
+$$;
+
+-- 发送私信
+DROP FUNCTION IF EXISTS public.send_private_message(UUID, TEXT);
+CREATE OR REPLACE FUNCTION public.send_private_message(p_receiver_id UUID, p_content TEXT)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+    v_allow_dm BOOLEAN;
+    v_is_following BOOLEAN;
+    v_message_id BIGINT;
+BEGIN
+    IF user_uuid IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '请先登录');
+    END IF;
+    
+    IF user_uuid = p_receiver_id THEN
+        RETURN jsonb_build_object('success', false, 'message', '不能给自己发私信');
+    END IF;
+    
+    IF LENGTH(p_content) < 1 OR LENGTH(p_content) > 1000 THEN
+        RETURN jsonb_build_object('success', false, 'message', '消息长度需在1-1000字符之间');
+    END IF;
+    
+    -- 检查接收者是否允许私信
+    SELECT COALESCE(s.allow_stranger_dm, true) INTO v_allow_dm
+    FROM public.user_settings s
+    WHERE s.user_id = p_receiver_id;
+    
+    IF NOT FOUND THEN
+        v_allow_dm := true;
+    END IF;
+    
+    -- 检查是否关注了接收者
+    SELECT EXISTS(
+        SELECT 1 FROM public.follows 
+        WHERE follower_id = user_uuid AND following_id = p_receiver_id
+    ) INTO v_is_following;
+    
+    -- 如果接收者禁止陌生人私信，且发送者不是关注的人，则拒绝
+    IF NOT v_allow_dm AND NOT v_is_following THEN
+        RETURN jsonb_build_object('success', false, 'message', '对方设置了拒收陌生人私信');
+    END IF;
+    
+    -- 发送消息
+    INSERT INTO public.private_messages (sender_id, receiver_id, content)
+    VALUES (user_uuid, p_receiver_id, p_content)
+    RETURNING id INTO v_message_id;
+    
+    RETURN jsonb_build_object('success', true, 'message_id', v_message_id);
+END;
+$$;
+
+-- 获取与某人的聊天记录
+DROP FUNCTION IF EXISTS public.get_dm_history(UUID, INT, INT);
+CREATE OR REPLACE FUNCTION public.get_dm_history(p_other_user_id UUID, p_limit INT DEFAULT 50, p_offset INT DEFAULT 0)
+RETURNS TABLE(
+    message_id BIGINT,
+    sender_id UUID,
+    sender_nickname TEXT,
+    content TEXT,
+    is_read BOOLEAN,
+    created_at TIMESTAMPTZ
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+BEGIN
+    IF user_uuid IS NULL THEN
+        RAISE EXCEPTION '未登录';
+    END IF;
+    
+    RETURN QUERY
+    SELECT 
+        pm.id AS message_id,
+        pm.sender_id,
+        p.nickname AS sender_nickname,
+        pm.content,
+        pm.is_read,
+        pm.created_at
+    FROM public.private_messages pm
+    LEFT JOIN public.profiles p ON pm.sender_id = p.id
+    WHERE (pm.sender_id = user_uuid AND pm.receiver_id = p_other_user_id) OR 
+          (pm.sender_id = p_other_user_id AND pm.receiver_id = user_uuid)
+    ORDER BY pm.created_at DESC
+    LIMIT GREATEST(p_limit, 1)
+    OFFSET GREATEST(p_offset, 0);
+END;
+$$;
+
+-- 标记私信已读
+DROP FUNCTION IF EXISTS public.mark_dm_read(UUID);
+CREATE OR REPLACE FUNCTION public.mark_dm_read(p_other_user_id UUID)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+BEGIN
+    IF user_uuid IS NULL THEN
+        RAISE EXCEPTION '未登录';
+    END IF;
+    
+    UPDATE public.private_messages
+    SET is_read = true
+    WHERE receiver_id = user_uuid AND sender_id = p_other_user_id AND is_read = false;
+END;
+$$;
+
+-- 获取未读私信数量
+DROP FUNCTION IF EXISTS public.get_unread_dm_count();
+CREATE OR REPLACE FUNCTION public.get_unread_dm_count()
+RETURNS BIGINT
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+    v_count BIGINT;
+BEGIN
+    IF user_uuid IS NULL THEN
+        RETURN 0;
+    END IF;
+    
+    SELECT COUNT(*) INTO v_count
+    FROM public.private_messages
+    WHERE receiver_id = user_uuid AND is_read = false;
+    
+    RETURN v_count;
+END;
+$$;
+
+-- 获取用户完整设置
+DROP FUNCTION IF EXISTS public.get_user_settings_full();
+CREATE OR REPLACE FUNCTION public.get_user_settings_full()
+RETURNS TABLE(
+    show_collections_publicly BOOLEAN,
+    allow_follow BOOLEAN,
+    allow_stranger_dm BOOLEAN
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+BEGIN
+    IF user_uuid IS NULL THEN
+        RAISE EXCEPTION '未登录';
+    END IF;
+    
+    RETURN QUERY
+    SELECT 
+        COALESCE(s.show_collections_publicly, true),
+        COALESCE(s.allow_follow, true),
+        COALESCE(s.allow_stranger_dm, true)
+    FROM public.user_settings s
+    WHERE s.user_id = user_uuid;
+    
+    -- 如果没有设置记录，返回默认值
+    IF NOT FOUND THEN
+        RETURN QUERY SELECT true, true, true;
+    END IF;
+END;
+$$;
+
+-- 检查用户是否允许被关注
+DROP FUNCTION IF EXISTS public.check_allow_follow(UUID);
+CREATE OR REPLACE FUNCTION public.check_allow_follow(p_target_user_id UUID)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_allow_follow BOOLEAN;
+BEGIN
+    SELECT COALESCE(s.allow_follow, true) INTO v_allow_follow
+    FROM public.user_settings s
+    WHERE s.user_id = p_target_user_id;
+    
+    IF NOT FOUND THEN
+        RETURN true;
+    END IF;
+    
+    RETURN v_allow_follow;
 END;
 $$;

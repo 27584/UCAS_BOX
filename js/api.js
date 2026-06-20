@@ -150,6 +150,16 @@ export async function getProfile() {
     return data;
 }
 
+// 获取用户设置
+export async function getUserSettings() {
+    const { data, error } = await supabase
+        .from('user_settings')
+        .select('*')
+        .single();
+    if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows
+    return data;
+}
+
 export async function getInventory() {
     return rpc('get_user_inventory');
 }
@@ -349,6 +359,10 @@ export async function getPosts(limit = 20, offset = 0, tag = null) {
     return rpc('get_posts', { p_limit: limit, p_offset: offset, p_tag: tag });
 }
 
+export async function getPost(postId) {
+    return rpc('get_post', { p_post_id: postId });
+}
+
 export async function toggleLike(targetType, targetId) {
     return rpc('toggle_like', { p_target_type: targetType, p_target_id: targetId });
 }
@@ -367,4 +381,80 @@ export async function deletePost(postId) {
 
 export async function deleteComment(commentId) {
     return rpc('delete_comment', { p_comment_id: commentId });
+}
+
+// ============================================
+// 用户主页功能
+// ============================================
+
+export async function getUserProfile(userId) {
+    return rpc('get_user_profile', { p_user_id: userId });
+}
+
+export async function getUserPosts(userId, limit = 20, offset = 0) {
+    return rpc('get_user_posts', { p_user_id: userId, p_limit: limit, p_offset: offset });
+}
+
+export async function getUserInventoryPublic(userId, page = 1, limit = 50) {
+    return rpc('get_user_inventory_public', { p_user_id: userId, p_page: page, p_limit: limit });
+}
+
+// ============================================
+// 关注功能
+// ============================================
+
+export async function toggleFollow(userId) {
+    return rpc('toggle_follow', { p_target_user_id: userId });
+}
+
+export async function checkFollowing(userId) {
+    return rpc('check_following', { p_target_user_id: userId });
+}
+
+export async function getFollowers(userId, limit = 50, offset = 0) {
+    return rpc('get_followers', { p_user_id: userId, p_limit: limit, p_offset: offset });
+}
+
+export async function getFollowing(userId, limit = 50, offset = 0) {
+    return rpc('get_following', { p_user_id: userId, p_limit: limit, p_offset: offset });
+}
+
+// ============================================
+// 用户设置
+// ============================================
+
+export async function updateProfileSetting(settingKey, settingValue) {
+    return rpc('update_profile_setting', { p_key: settingKey, p_value: settingValue });
+}
+
+export async function getUserSettingsFull() {
+    return rpc('get_user_settings_full');
+}
+
+export async function checkAllowFollow(userId) {
+    return rpc('check_allow_follow', { p_target_user_id: userId });
+}
+
+// ============================================
+// 私信功能
+// ============================================
+
+export async function getDmConversations(limit = 50, offset = 0) {
+    return rpc('get_dm_conversations', { p_limit: limit, p_offset: offset });
+}
+
+export async function sendPrivateMessage(receiverId, content) {
+    return rpc('send_private_message', { p_receiver_id: receiverId, p_content: content });
+}
+
+export async function getDmHistory(otherUserId, limit = 50, offset = 0) {
+    return rpc('get_dm_history', { p_other_user_id: otherUserId, p_limit: limit, p_offset: offset });
+}
+
+export async function markDmRead(otherUserId) {
+    return rpc('mark_dm_read', { p_other_user_id: otherUserId });
+}
+
+export async function getUnreadDmCount() {
+    return rpc('get_unread_dm_count');
 }

@@ -1,6 +1,7 @@
 import { getPosts, createPost, toggleLike, getComments, createComment, deletePost, deleteComment } from '../api.js';
-import { showToast, formatNumber, timeAgo, showConfirm } from '../utils.js';
+import { showToast, formatNumber, timeAgo, showConfirm, userBadgeHTML } from '../utils.js';
 import { createIcons, icons } from 'lucide';
+import { router } from '../router.js';
 
 // ============================================
 // 动态页面
@@ -151,7 +152,7 @@ export const feedPage = {
         return `
             <div class="post-card" data-post-id="${postId}">
                 <div class="post-header">
-                    <div class="post-author">
+                    <div class="post-author" data-user-id="${post.user_id}" style="cursor:pointer;">
                         <div class="author-avatar">
                             ${post.user_avatar 
                                 ? `<img src="${post.user_avatar}" alt="avatar" />`
@@ -159,7 +160,7 @@ export const feedPage = {
                             }
                         </div>
                         <div class="author-info">
-                            <span class="author-name">${post.user_nickname || '匿名用户'}</span>
+                            <span class="author-name">${post.user_nickname || '匿名用户'}${userBadgeHTML(post)}</span>
                             <span class="post-time">${timeAgo(post.created_at)}</span>
                         </div>
                     </div>
@@ -184,6 +185,29 @@ export const feedPage = {
     },
 
     bindPostEvents() {
+        // 点击帖子卡片进入详情页
+        document.querySelectorAll('.post-card').forEach(card => {
+            card.addEventListener('click', (e) => {
+                // 如果点击的是按钮，不跳转
+                if (e.target.closest('button')) return;
+                const postId = card.dataset.postId;
+                if (postId) {
+                    router.navigate(`post/${postId}`);
+                }
+            });
+        });
+
+        // 点击用户头像/昵称进入用户主页
+        document.querySelectorAll('.post-author[data-user-id]').forEach(author => {
+            author.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const userId = author.dataset.userId;
+                if (userId) {
+                    router.navigate(`user/${userId}`);
+                }
+            });
+        });
+
         // 点赞
         document.querySelectorAll('.like-btn').forEach(btn => {
             const dataPostId = btn.dataset.postId;
@@ -356,13 +380,13 @@ export const feedPage = {
             <div class="comment-item" data-comment-id="${comment.id}" style="${indentStyle}">
                 <div class="comment-header">
                     <div class="comment-author">
-                        <div class="author-avatar-sm">
+                        <div class="author-avatar-sm clickable-avatar" data-user-id="${comment.user_id}">
                             ${comment.user_avatar 
                                 ? `<img src="${comment.user_avatar}" alt="avatar" />`
                                 : `<i data-lucide="user" style="width:16;height:16;"></i>`
                             }
                         </div>
-                        <span class="author-name">${comment.user_nickname || '匿名'}</span>
+                        <span class="author-name clickable-name" data-user-id="${comment.user_id}">${comment.user_nickname || '匿名'}${userBadgeHTML(comment)}</span>
                         <span class="comment-time">${timeAgo(comment.created_at)}</span>
                     </div>
                     <div class="comment-actions">
@@ -386,6 +410,16 @@ export const feedPage = {
     },
 
     bindCommentEvents() {
+        // 点击评论作者头像/昵称进入主页
+        document.querySelectorAll('.clickable-avatar, .clickable-name').forEach(el => {
+            el.addEventListener('click', () => {
+                const userId = el.dataset.userId;
+                if (userId) {
+                    router.navigate(`user/${userId}`);
+                }
+            });
+        });
+
         // 评论点赞
         document.querySelectorAll('.like-comment-btn').forEach(btn => {
             btn.addEventListener('click', async () => {

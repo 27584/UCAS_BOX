@@ -36,6 +36,17 @@ export function escapeHtml(str) {
     return div.innerHTML;
 }
 
+// 生成用户徽章 HTML（管理员 & 机器人标识）
+export function userBadgeHTML(user) {
+    if (!user) return '';
+    const isAdmin = user.is_admin || user.user_is_admin;
+    const isBot = user.is_bot || user.user_is_bot;
+    let html = '';
+    if (isAdmin) html += '<span class="admin-badge">管理员</span> ';
+    if (isBot) html += '<span class="bot-tag">机器人</span> ';
+    return html;
+}
+
 export function formatNumber(n) {
     return n.toLocaleString('zh-CN');
 }

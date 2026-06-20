@@ -1,0 +1,71 @@
+<div class="user-page">
+    <div class="user-header-card card animate-fade-in-up">
+        <div class="user-avatar-large" id="user-avatar">
+            <span id="user-initial">?</span>
+        </div>
+        <h2 id="user-nickname">加载中...</h2>
+        <p class="user-joined" id="user-joined"></p>
+        <div class="user-stats">
+            <div class="user-stat">
+                <i data-lucide="coins"></i>
+                <span class="stat-value" id="user-shells">0</span>
+                <span class="stat-label">果壳币</span>
+            </div>
+            <div class="user-stat">
+                <i data-lucide="backpack"></i>
+                <span class="stat-value" id="user-items">0</span>
+                <span class="stat-label">收藏品</span>
+            </div>
+            <div class="user-stat">
+                <i data-lucide="message-circle"></i>
+                <span class="stat-value" id="user-posts">0</span>
+                <span class="stat-label">动态</span>
+            </div>
+        </div>
+        <div class="user-follow-stats">
+            <div class="follow-stat">
+                <span class="follow-value" id="user-followers">0</span>
+                <span class="follow-label">粉丝</span>
+            </div>
+            <div class="follow-stat">
+                <span class="follow-value" id="user-following">0</span>
+                <span class="follow-label">关注</span>
+            </div>
+        </div>
+        <button class="btn btn-primary" id="btn-follow" style="margin-top:16px;width:100%;">
+            <i data-lucide="user-plus"></i>
+            <span>关注</span>
+        </button>
+        <button class="btn btn-secondary" id="btn-dm" style="margin-top:10px;width:100%;">
+            <i data-lucide="mail"></i>
+            <span>私信</span>
+        </button>
+    </div>
+
+    <div class="user-content">
+        <div class="user-tabs">
+            <button class="user-tab active" data-tab="posts">
+                <i data-lucide="message-circle"></i>
+                动态
+            </button>
+            <button class="user-tab" data-tab="inventory">
+                <i data-lucide="gem"></i>
+                收藏品
+            </button>
+        </div>
+
+        <div class="user-tab-content" id="user-posts-content">
+            <div class="user-posts-list" id="user-posts-list">
+                <div class="skeleton" style="height:120px;"></div>
+            </div>
+            <div class="pagination-container" id="user-posts-pagination"></div>
+        </div>
+
+        <div class="user-tab-content" id="user-inventory-content" style="display:none;">
+            <div class="user-inventory-grid" id="user-inventory-grid">
+                <div class="skeleton" style="height:80px;"></div>
+            </div>
+            <div class="pagination-container" id="user-inventory-pagination"></div>
+        </div>
+    </div>
+</div>

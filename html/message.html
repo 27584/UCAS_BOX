@@ -1,0 +1,59 @@
+<div class="message-page">
+    <div class="page-header">
+        <h2><i data-lucide="message-circle"></i> 消息</h2>
+    </div>
+    
+    <div class="message-tabs">
+        <button class="message-tab active" data-tab="system">
+            <i data-lucide="bell"></i>
+            系统消息
+        </button>
+        <button class="message-tab" data-tab="dm">
+            <i data-lucide="mail"></i>
+            私信
+        </button>
+    </div>
+    
+    <div class="message-content">
+        <!-- 系统消息 -->
+        <div class="message-list" id="system-messages">
+            <div class="skeleton" style="height:80px;"></div>
+            <div class="skeleton" style="height:80px;"></div>
+            <div class="skeleton" style="height:80px;"></div>
+        </div>
+        
+        <!-- 私信区域 - 左右布局 -->
+        <div class="dm-container" id="dm-container" style="display:none;">
+            <!-- 左边：会话列表 -->
+            <div class="dm-sidebar">
+                <div class="dm-list" id="dm-list">
+                    <div class="skeleton" style="height:60px;"></div>
+                    <div class="skeleton" style="height:60px;"></div>
+                    <div class="skeleton" style="height:60px;"></div>
+                </div>
+            </div>
+            
+            <!-- 右边：聊天窗口 -->
+            <div class="chat-container" id="chat-container">
+                <div class="chat-empty" id="chat-empty">
+                    <i data-lucide="message-square"></i>
+                    <p>选择一个会话开始聊天</p>
+                </div>
+                <div class="chat-main" id="chat-main" style="display:none;">
+                    <div class="chat-header" id="chat-header">
+                        <!-- 动态填充 -->
+                    </div>
+                    <div class="chat-messages" id="chat-messages">
+                        <!-- 聊天记录 -->
+                    </div>
+                    <div class="chat-input-area">
+                        <textarea id="dm-input" placeholder="输入消息..." rows="1"></textarea>
+                        <button id="send-dm-btn" class="send-btn">
+                            <i data-lucide="send"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

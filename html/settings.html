@@ -1,0 +1,59 @@
+<div class="settings-page">
+    <div class="page-header">
+        <h2><i data-lucide="settings"></i> 设置</h2>
+    </div>
+    
+    <div class="settings-content">
+        <div class="settings-section">
+            <h3><i data-lucide="lock"></i> 隐私设置</h3>
+            
+            <div class="setting-item">
+                <div class="setting-info">
+                    <span class="setting-label">公开收藏品</span>
+                    <span class="setting-desc">允许其他人查看你的收藏品</span>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="toggle-show-collections">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            
+            <div class="setting-item">
+                <div class="setting-info">
+                    <span class="setting-label">允许被关注</span>
+                    <span class="setting-desc">关闭后其他人无法关注你</span>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="toggle-allow-follow">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            
+            <div class="setting-item">
+                <div class="setting-info">
+                    <span class="setting-label">接收陌生人私信</span>
+                    <span class="setting-desc">关闭后只有你关注的人才能给你发私信</span>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="toggle-allow-stranger-dm">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+        </div>
+        
+        <div class="settings-section">
+            <h3><i data-lucide="log-out"></i> 账户</h3>
+            
+            <div class="setting-item">
+                <div class="setting-info">
+                    <span class="setting-label">退出登录</span>
+                    <span class="setting-desc">退出当前账户</span>
+                </div>
+                <button id="logout-btn" class="logout-btn">
+                    <i data-lucide="log-out"></i>
+                    退出
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

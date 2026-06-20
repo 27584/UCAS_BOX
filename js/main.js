@@ -1,10 +1,11 @@
-import { initAuth, resendVerificationEmail } from './auth.js';
+import { initAuth, resendVerificationEmail, updateMailBadge } from './auth.js';
 import { router } from './router.js';
 import { createIcons, icons } from 'lucide';
 import { showToast, itemImageHTML, openItemDetail, QUALITY_CONFIG, initItemImages } from './utils.js';
 import { useRenameCard, useDragonBoatBag, getMinVersion } from './api.js';
 import { formatNumber } from './utils.js';
 import { VERSION, VERSION_CODE } from './version.js';
+import { currentUser } from './supabaseClient.js';
 
 // ============================================
 // 应用入口
@@ -41,6 +42,13 @@ async function bootstrap() {
         createIcons({ icons });
         initItemImages();
     }, 2000);
+
+    // 定期刷新消息红点（每15秒检查一次未读私信和系统消息）
+    setInterval(() => {
+        if (currentUser) {
+            updateMailBadge();
+        }
+    }, 15000);
 }
 
 // 版本检测

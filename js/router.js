@@ -5,7 +5,10 @@ import { inventoryPage } from './pages/inventoryPage.js';
 import { marketPage } from './pages/marketPage.js';
 import { collectionPage } from './pages/collectionPage.js';
 import { profilePage } from './pages/profilePage.js';
-import { mailPage } from './pages/mailPage.js';
+import { userPage } from './pages/userPage.js';
+import { postPage } from './pages/postPage.js';
+import { messagePage } from './pages/messagePage.js';
+import { settingsPage } from './pages/settingsPage.js';
 import { adminPage } from './pages/adminPage.js';
 import { submitPage } from './pages/submitPage.js';
 import { activityPage } from './pages/activityPage.js';
@@ -21,7 +24,10 @@ const routes = {
     market: marketPage,
     collection: collectionPage,
     profile: profilePage,
-    mail: mailPage,
+    user: userPage,
+    post: postPage,
+    message: messagePage,
+    settings: settingsPage,
     admin: adminPage,
     submit: submitPage,
     activity: activityPage,

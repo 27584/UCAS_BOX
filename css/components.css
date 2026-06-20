@@ -180,7 +180,20 @@ select.form-input {
     color: #f87171;
 }
 
-/* 机器人卖家标记 */
+/* 管理员和机器人标识 */
+.admin-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #f59e0b;
+    background: rgba(245, 158, 11, 0.15);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    border-radius: 6px;
+    vertical-align: middle;
+    line-height: 1.4;
+}
+
 .bot-tag {
     display: inline-block;
     padding: 1px 6px;

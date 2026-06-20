@@ -1,6 +1,6 @@
 import { supabase, currentUser, refreshSession } from './supabaseClient.js';
 import { router } from './router.js';
-import { getProfile, getMails, checkAdmin } from './api.js';
+import { getProfile, getMails, getUnreadDmCount, checkAdmin } from './api.js';
 import { formatNumber, showToast } from './utils.js';
 
 // ============================================
@@ -102,17 +102,24 @@ export async function updateMailBadge() {
         return;
     }
     try {
-        const mails = await getMails();
-        const unreadCount = mails.filter(m => !m.is_read).length;
+        // 同时检查未读系统消息和未读私信
+        const [mails, dmUnread] = await Promise.all([
+            getMails(),
+            getUnreadDmCount().catch(() => 0)
+        ]);
+        const mailUnread = mails.filter(m => !m.is_read).length;
+        // 优先显示私信红点（如果有未读私信）
+        const totalUnread = mailUnread + (parseInt(dmUnread) || 0);
+        
         const navBadge = document.getElementById('mail-badge');
         const headerBadge = document.getElementById('header-mail-badge');
         if (navBadge) {
-            navBadge.textContent = unreadCount > 99 ? '99+' : unreadCount;
-            navBadge.style.display = unreadCount > 0 ? 'flex' : 'none';
+            navBadge.textContent = totalUnread > 99 ? '99+' : totalUnread;
+            navBadge.style.display = totalUnread > 0 ? 'flex' : 'none';
         }
         if (headerBadge) {
-            headerBadge.textContent = unreadCount > 99 ? '99+' : unreadCount;
-            headerBadge.style.display = unreadCount > 0 ? 'flex' : 'none';
+            headerBadge.textContent = totalUnread > 99 ? '99+' : totalUnread;
+            headerBadge.style.display = totalUnread > 0 ? 'flex' : 'none';
         }
     } catch (e) {
         // silently fail

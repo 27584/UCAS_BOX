@@ -1,5 +1,5 @@
 import { getMarketOrders, getInventory, buyMarketOrder, cancelMarketOrder, placeMarketOrder, getProfile } from '../api.js';
-import { itemImageHTML, formatNumber, showToast, QUALITY_CONFIG, ITEM_TYPE_CONFIG, openItemDetail, initItemImages } from '../utils.js';
+import { itemImageHTML, formatNumber, showToast, QUALITY_CONFIG, ITEM_TYPE_CONFIG, openItemDetail, initItemImages, userBadgeHTML } from '../utils.js';
 import { createIcons, icons } from 'lucide';
 import { updateGlobalShells } from '../auth.js';
 
@@ -389,7 +389,7 @@ export const marketPage = {
                         </span>
                         <span class="market-card-qty">数量 ${order.quantity}</span>
                     </div>
-                    ${!isOwner ? `<div class="market-card-seller">卖家: ${order.seller_nickname || '未知'}</div>` : ''}
+                    ${!isOwner ? `<div class="market-card-seller">卖家: ${order.seller_nickname || '未知'}${userBadgeHTML({is_admin: order.seller_is_admin, is_bot: order.seller_is_bot})}</div>` : ''}
                 </div>
                 ${isOwner
                     ? `<button class="btn btn-danger btn-cancel" data-id="${order.order_id}">下架</button>`
