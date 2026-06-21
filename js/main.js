@@ -115,10 +115,10 @@ function openRenameModal() {
                     使用改名卡
                 </h3>
                 <p style="color:var(--text-secondary);margin-bottom:16px;font-size:14px;">
-                    输入新的昵称（2-20个字符）
+                    输入新的昵称（2-10个字符）
                 </p>
                 <input type="text" id="new-nickname-input" class="form-input" 
-                    placeholder="请输入新昵称" maxlength="20" 
+                    placeholder="请输入新昵称" maxlength="10" 
                     style="width:100%;margin-bottom:16px;text-align:center;" />
                 <div style="display:flex;gap:12px;">
                     <button id="rename-cancel-btn" class="btn btn-secondary" style="flex:1;">
@@ -156,8 +156,8 @@ function openRenameModal() {
             return;
         }
         
-        if (newNickname.length > 20) {
-            showToast('昵称不能超过20个字符', 'error');
+        if (newNickname.length > 10) {
+            showToast('昵称不能超过10个字符', 'error');
             return;
         }
         

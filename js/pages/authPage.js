@@ -43,8 +43,8 @@ export const authPage = {
                         btn.disabled = false;
                         return;
                     }
-                    if (nickname.length > 20) {
-                        showToast('昵称不能超过20个字符', 'error');
+                    if (nickname.length > 10) {
+                        showToast('昵称不能超过10个字符', 'error');
                         btn.disabled = false;
                         return;
                     }
