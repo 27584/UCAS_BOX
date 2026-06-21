@@ -2908,10 +2908,30 @@
         display: none;
     }
     .dm-time {
-        font-size: 0.7rem;
+        display: none;
     }
     .chat-container {
         flex: 1;
+    }
+    .message-page .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+    .message-page .page-header h2 {
+        margin-bottom: 0;
+    }
+    .message-tabs {
+        margin-bottom: 0;
+        padding: 4px;
+        background: transparent;
+        gap: 4px;
+    }
+    .message-tab {
+        padding: 6px 12px;
+        font-size: 0.8rem;
     }
 }
 
