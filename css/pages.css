@@ -2869,6 +2869,50 @@
         width: 100%;
         margin-top: 8px;
     }
+    .dm-container {
+        flex-direction: column;
+        height: 600px;
+    }
+    .dm-sidebar {
+        flex: 0 0 30%;
+        min-height: 0;
+    }
+    .dm-list {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-content: flex-start;
+    }
+    .dm-item {
+        flex-direction: column;
+        align-items: center;
+        width: calc(33.33% - 6px);
+        padding: 12px 8px;
+        gap: 6px;
+    }
+    .dm-avatar {
+        width: 36px;
+        height: 36px;
+    }
+    .dm-avatar svg {
+        width: 18px;
+        height: 18px;
+    }
+    .dm-body {
+        text-align: center;
+    }
+    .dm-name {
+        font-size: 0.8rem;
+        justify-content: center;
+    }
+    .dm-preview {
+        display: none;
+    }
+    .dm-time {
+        font-size: 0.7rem;
+    }
+    .chat-container {
+        flex: 1;
+    }
 }
 
 /* ========== 动态页 ========== */

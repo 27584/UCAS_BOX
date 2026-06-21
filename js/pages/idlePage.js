@@ -101,7 +101,7 @@ export const idlePage = {
         if (!this.lastClaim) return;
         const diffSec = Math.max(0, (Date.now() - this.lastClaim.getTime()) / 1000);
         const cappedSec = Math.min(diffSec, 480 * 60); // 最多8小时
-        const diffMin = diffSec / 60;
+        const diffMin = cappedSec / 60;
         const totalRate = this.baseRate + this.boostRate;
         const amount = Math.floor(diffMin * totalRate);
 

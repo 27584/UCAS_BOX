@@ -193,6 +193,11 @@ export async function adminBotReplenish() {
     return rpc('admin_bot_replenish');
 }
 
+// 前端触发的机器人补货（任何人可调用，内置60分钟节流）
+export async function triggerBotReplenish() {
+    return rpc('trigger_bot_replenish');
+}
+
 export async function getAllBotsWithConfig() {
     return rpc('get_all_bots_with_config');
 }

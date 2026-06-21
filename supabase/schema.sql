@@ -638,7 +638,7 @@ BEGIN
         VALUES (
             order_rec.seller_id,
             '订单出售成功',
-            '你上架的「' || item_name || '」已被「' || buyer_nickname || '」全部购买，获得 ' || total_price || ' 果壳币。'
+            '你上架的「' || public.sanitize_text(item_name) || '」已被「' || public.sanitize_text(buyer_nickname) || '」全部购买，获得 ' || total_price || ' 果壳币。'
         );
     ELSE
         -- 部分购买，减少订单数量
@@ -651,7 +651,7 @@ BEGIN
         VALUES (
             order_rec.seller_id,
             '订单部分出售',
-            '你上架的「' || item_name || '」被「' || buyer_nickname || '」购买 ' || buy_qty || ' 件，获得 ' || total_price || ' 果壳币，剩余 ' || (order_rec.quantity - buy_qty) || ' 件。'
+            '你上架的「' || public.sanitize_text(item_name) || '」被「' || public.sanitize_text(buyer_nickname) || '」购买 ' || buy_qty || ' 件，获得 ' || total_price || ' 果壳币，剩余 ' || (order_rec.quantity - buy_qty) || ' 件。'
         );
     END IF;
 END;
@@ -793,6 +793,8 @@ DECLARE
     quality_order INT;
 BEGIN
     offset_val := (COALESCE(p_page, 1) - 1) * COALESCE(p_limit, 10);
+    -- 转义 LIKE 通配符防止通配符注入
+    p_search := REPLACE(REPLACE(p_search, '%', '\%'), '_', '\_');
 
     RETURN QUERY
     SELECT
@@ -1116,7 +1118,7 @@ BEGIN
     SELECT
         p_user_id,
         '收到管理员发放的物品',
-        '管理员向您发放了「' || i.name || '」×' || p_quantity || '，请查看背包。'
+        '管理员向您发放了「' || public.sanitize_text(i.name) || '」×' || p_quantity || '，请查看背包。'
     FROM public.items i
     WHERE i.id = p_item_id;
 END;
@@ -1174,6 +1176,8 @@ AS $$
 DECLARE
     user_uuid UUID := auth.uid();
     new_id BIGINT;
+    v_name TEXT;
+    v_desc TEXT;
 BEGIN
     IF user_uuid IS NULL THEN
         RAISE EXCEPTION '未登录';
@@ -1183,8 +1187,17 @@ BEGIN
         RAISE EXCEPTION '无权限';
     END IF;
 
+    v_name := TRIM(p_name);
+    v_desc := TRIM(p_description);
+    IF v_name IS NULL OR LENGTH(v_name) < 1 OR LENGTH(v_name) > 100 THEN
+        RAISE EXCEPTION '物品名称长度需在1-100字符之间';
+    END IF;
+    IF v_desc IS NOT NULL AND LENGTH(v_desc) > 2000 THEN
+        RAISE EXCEPTION '描述长度不能超过2000字符';
+    END IF;
+
     INSERT INTO public.items (name, quality, image_name, description, drop_weight, item_type)
-    VALUES (p_name, p_quality, p_image_name, p_description, p_drop_weight, p_item_type)
+    VALUES (v_name, p_quality, p_image_name, v_desc, p_drop_weight, p_item_type)
     RETURNING id INTO new_id;
 
     RETURN new_id;
@@ -1267,12 +1280,13 @@ $$;
 -- ============================================================
 -- 24. RPC 函数：提交物品投稿
 -- ============================================================
-DROP FUNCTION IF EXISTS public.submit_item(TEXT, TEXT, TEXT, INT);
+DROP FUNCTION IF EXISTS public.submit_item(TEXT, TEXT, TEXT, INT, TEXT);
 CREATE OR REPLACE FUNCTION public.submit_item(
     p_name TEXT,
     p_quality TEXT,
     p_description TEXT,
-    p_drop_weight INT DEFAULT 100
+    p_drop_weight INT DEFAULT 100,
+    p_image_name TEXT DEFAULT ''
 )
 RETURNS BIGINT
 LANGUAGE plpgsql
@@ -1281,13 +1295,25 @@ AS $$
 DECLARE
     user_uuid UUID := auth.uid();
     new_id BIGINT;
+    v_name TEXT;
+    v_desc TEXT;
 BEGIN
     IF user_uuid IS NULL THEN
         RAISE EXCEPTION '未登录';
     END IF;
 
+    -- 输入校验和清理
+    v_name := TRIM(p_name);
+    v_desc := TRIM(p_description);
+    IF v_name IS NULL OR LENGTH(v_name) < 1 OR LENGTH(v_name) > 100 THEN
+        RAISE EXCEPTION '物品名称长度需在1-100字符之间';
+    END IF;
+    IF v_desc IS NULL OR LENGTH(v_desc) > 2000 THEN
+        RAISE EXCEPTION '描述长度不能超过2000字符';
+    END IF;
+
     INSERT INTO public.item_submissions (user_id, name, quality, description, drop_weight, image_name)
-    VALUES (user_uuid, p_name, p_quality, p_description, p_drop_weight, p_image_name)
+    VALUES (user_uuid, v_name, p_quality, v_desc, p_drop_weight, p_image_name)
     RETURNING id INTO new_id;
 
     RETURN new_id;
@@ -1425,7 +1451,7 @@ BEGIN
 
     INSERT INTO public.system_mails (user_id, title, content)
     VALUES (submitter_id, '投稿通过',
-        '恭喜！您投稿的「' || item_name || '」已通过审核，获得 ' || p_reward_shells || ' 果壳币奖励！');
+        '恭喜！您投稿的「' || public.sanitize_text(item_name) || '」已通过审核，获得 ' || p_reward_shells || ' 果壳币奖励！');
 END;
 $$;
 
@@ -1466,7 +1492,7 @@ BEGIN
 
     INSERT INTO public.system_mails (user_id, title, content)
     VALUES (submitter_id, '投稿未通过',
-        '您投稿的「' || item_name || '」未通过审核。原因：' || COALESCE(p_admin_note, '无'));
+        '您投稿的「' || public.sanitize_text(item_name) || '」未通过审核。原因：' || COALESCE(public.sanitize_text(p_admin_note), '无'));
 END;
 $$;
 
@@ -2071,7 +2097,7 @@ BEGIN
         VALUES (
             v_winner.user_id,
             '恭喜中奖！',
-            '你在第 ' || v_round.round_number || ' 期彩票中获奖项：' || COALESCE(v_prize_details, '') || '，总计获得 ' || COALESCE(v_total_prize, 0) || ' 果壳币。'
+            '你在第 ' || v_round.round_number || ' 期彩票中获奖项：' || COALESCE(public.sanitize_text(v_prize_details), '') || '，总计获得 ' || COALESCE(v_total_prize, 0) || ' 果壳币。'
         );
     END LOOP;
 
@@ -2348,7 +2374,8 @@ CREATE TABLE IF NOT EXISTS public.bot_configs (
 
 ALTER TABLE public.bot_configs ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Bot configs admin all" ON public.bot_configs;
-CREATE POLICY "Bot configs admin all" ON public.bot_configs FOR ALL USING (true);
+CREATE POLICY "Bot configs admin read" ON public.bot_configs FOR SELECT USING (true);
+CREATE POLICY "Bot configs admin write" ON public.bot_configs FOR ALL USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND is_admin = true));
 
 -- 将机器人写入 auth.users（和普通用户完全一样）
 DO $$
@@ -2413,7 +2440,14 @@ RETURNS TABLE(
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
+DECLARE
+    v_is_admin BOOLEAN;
 BEGIN
+    SELECT COALESCE(p.is_admin, false) INTO v_is_admin FROM public.profiles p WHERE p.id = auth.uid();
+    IF NOT v_is_admin THEN
+        RAISE EXCEPTION '无权限';
+    END IF;
+
     RETURN QUERY
     SELECT
         ba.id AS bot_id,
@@ -2629,7 +2663,6 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
-    bot_rec RECORD;
     cfg RECORD;
     item_rec RECORD;
     total_weight NUMERIC;
@@ -2641,7 +2674,8 @@ DECLARE
     price BIGINT;
     base_price INT;
     price_flu NUMERIC;
-    items_added INT := 0;
+    current_count INT;
+    bot_added INT;
     total_added INT := 0;
 BEGIN
     FOR cfg IN
@@ -2655,58 +2689,67 @@ BEGIN
         FROM public.bot_configs bc
         WHERE bc.enabled = true
     LOOP
-        DECLARE
-            current_count INT;
-        BEGIN
+        -- 统计当前活跃挂单数
+        SELECT COUNT(*) INTO current_count
+        FROM public.market_orders
+        WHERE seller_id = cfg.bot_id AND status = 'active';
+
+        -- 不低于最低挂单数则跳过
+        IF current_count >= cfg.min_orders THEN
+            CONTINUE;
+        END IF;
+
+        bot_added := 0;
+
+        -- 随机补1~3件（不超过最高挂单数）
+        FOR i IN 1..(1 + floor(random() * 3))::INT LOOP
             SELECT COUNT(*) INTO current_count
             FROM public.market_orders
             WHERE seller_id = cfg.bot_id AND status = 'active';
 
-            -- 低于最低挂单数才补
-            IF current_count >= cfg.min_orders THEN
-                CONTINUE;
+            IF current_count >= cfg.max_orders THEN
+                EXIT;
             END IF;
 
-            -- 随机决定补几件
-            FOR i IN 1..(1 + floor(random() * 3))::INT LOOP
-                SELECT COUNT(*) INTO current_count
-                FROM public.market_orders
-                WHERE seller_id = cfg.bot_id AND status = 'active';
+            -- 按配置的品质范围和权重随机抽取物品
+            SELECT COALESCE(SUM(drop_weight), 0) INTO total_weight
+            FROM public.items
+            WHERE drop_weight > 0
+              AND item_type = 'collection'
+              AND quality = ANY(cfg.qualities);
 
-                IF current_count >= cfg.max_orders THEN
-                    EXIT;
-                END IF;
+            IF total_weight <= 0 THEN
+                EXIT;
+            END IF;
 
-                -- 按配置的品质范围和权重抽取
-                SELECT COALESCE(SUM(drop_weight), 0) INTO total_weight
+            rand_pick := floor(random() * total_weight) + 1;
+            remaining := rand_pick;
+            item_rec := NULL;
+
+            FOR item_rec IN
+                SELECT id, name, quality, drop_weight
                 FROM public.items
                 WHERE drop_weight > 0
                   AND item_type = 'collection'
-                  AND quality = ANY(cfg.qualities);
-
-                IF total_weight <= 0 THEN
+                  AND quality = ANY(cfg.qualities)
+                ORDER BY id
+            LOOP
+                remaining := remaining - item_rec.drop_weight;
+                IF remaining <= 0 THEN
                     EXIT;
                 END IF;
+            END LOOP;
 
-                rand_pick := floor(random() * total_weight) + 1;
-                remaining := rand_pick;
+            -- 未抽到物品则跳过
+            IF item_rec IS NULL OR item_rec.id IS NULL THEN
+                CONTINUE;
+            END IF;
 
-                FOR item_rec IN
-                    SELECT id, name, quality, drop_weight
-                    FROM public.items
-                    WHERE drop_weight > 0
-                      AND item_type = 'collection'
-                      AND quality = ANY(cfg.qualities)
-                    ORDER BY id
-                LOOP
-                    remaining := remaining - item_rec.drop_weight;
-                    IF remaining <= 0 THEN
-                        EXIT;
-                    END IF;
-                END LOOP;
-
-                -- 解析数量范围
-                EXECUTE format('SELECT (regexp_matches(%L, ''(\d+),(\d+)''))[1]::int, (regexp_matches(%L, ''(\d+),(\d+)''))[2]::int',
+            -- 解析数量范围（格式："min,max"）
+            qty_min := 1; qty_max := 1;
+            BEGIN
+                EXECUTE format(
+                    'SELECT (regexp_matches(%L, ''(\d+),(\d+)''))[1]::int, (regexp_matches(%L, ''(\d+),(\d+)''))[2]::int',
                     CASE item_rec.quality
                         WHEN 'white'  THEN cfg.qty_white
                         WHEN 'green' THEN cfg.qty_green
@@ -2726,46 +2769,48 @@ BEGIN
                         ELSE '1,1'
                     END
                 ) INTO qty_min, qty_max;
+            EXCEPTION WHEN OTHERS THEN
+                qty_min := 1; qty_max := 1;
+            END;
 
-                IF qty_max IS NULL OR qty_max < qty_min THEN
-                    qty_min := 1; qty_max := 1;
-                END IF;
+            IF qty_max IS NULL OR qty_max < qty_min THEN
+                qty_min := 1; qty_max := 1;
+            END IF;
 
-                qty := qty_min + floor(random() * (qty_max - qty_min + 1))::INT;
-                qty := GREATEST(1, qty);
+            qty := qty_min + floor(random() * (qty_max - qty_min + 1))::INT;
+            qty := GREATEST(1, qty);
 
-                -- 解析基价
-                base_price := CASE item_rec.quality
-                    WHEN 'white'  THEN cfg.price_white
-                    WHEN 'green' THEN cfg.price_green
-                    WHEN 'blue'  THEN cfg.price_blue
-                    WHEN 'purple' THEN cfg.price_purple
-                    WHEN 'orange' THEN cfg.price_orange
-                    WHEN 'red'   THEN cfg.price_red
-                    ELSE 100
-                END;
+            -- 解析基价
+            base_price := CASE item_rec.quality
+                WHEN 'white'  THEN cfg.price_white
+                WHEN 'green' THEN cfg.price_green
+                WHEN 'blue'  THEN cfg.price_blue
+                WHEN 'purple' THEN cfg.price_purple
+                WHEN 'orange' THEN cfg.price_orange
+                WHEN 'red'   THEN cfg.price_red
+                ELSE 100
+            END;
 
-                -- 价格浮动
-                price_flu := COALESCE(cfg.price_fluctuation, 0.2);
-                price := GREATEST(1, FLOOR(base_price * (1 - price_flu / 2 + random() * price_flu))::BIGINT);
+            -- 价格浮动
+            price_flu := COALESCE(cfg.price_fluctuation, 0.2);
+            price := GREATEST(1, FLOOR(base_price * (1 - price_flu / 2 + random() * price_flu))::BIGINT);
 
-                -- 背包加物品
-                INSERT INTO public.inventory (user_id, item_id, quantity)
-                VALUES (cfg.bot_id, item_rec.id, qty)
-                ON CONFLICT ON CONSTRAINT inventory_user_id_item_id_key
-                DO UPDATE SET quantity = public.inventory.quantity + EXCLUDED.quantity;
+            -- 给机器人背包加物品（仅上架用，不影响已有库存）
+            INSERT INTO public.inventory (user_id, item_id, quantity)
+            VALUES (cfg.bot_id, item_rec.id, qty)
+            ON CONFLICT ON CONSTRAINT inventory_user_id_item_id_key
+            DO UPDATE SET quantity = public.inventory.quantity + EXCLUDED.quantity;
 
-                -- 上架
-                INSERT INTO public.market_orders
-                    (seller_id, item_id, quantity, price_per_unit, type, status)
-                VALUES
-                    (cfg.bot_id, item_rec.id, qty, price, 'sell', 'active');
+            -- 上架新订单（不下架、不修改已有订单）
+            INSERT INTO public.market_orders
+                (seller_id, item_id, quantity, price_per_unit, type, status)
+            VALUES
+                (cfg.bot_id, item_rec.id, qty, price, 'sell', 'active');
 
-                items_added := items_added + 1;
-            END LOOP;
+            bot_added := bot_added + 1;
+        END LOOP;
 
-            total_added := total_added + items_added;
-        END;
+        total_added := total_added + bot_added;
     END LOOP;
 
     RETURN jsonb_build_object(
@@ -2812,7 +2857,14 @@ RETURNS TABLE(
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
+DECLARE
+    v_is_admin BOOLEAN;
 BEGIN
+    SELECT COALESCE(p.is_admin, false) INTO v_is_admin FROM public.profiles p WHERE p.id = auth.uid();
+    IF NOT v_is_admin THEN
+        RAISE EXCEPTION '无权限';
+    END IF;
+
     RETURN QUERY
     SELECT mo.id, mo.item_id, mo.quantity, mo.price_per_unit, mo.created_at,
            i.name, i.quality
@@ -2824,21 +2876,33 @@ END;
 $$;
 
 -- ============================================================
--- pg_cron 定时任务：每小时第 5 分钟自动补货
+-- pg_cron 定时任务：每小时第 16 分钟自动补货
 -- ============================================================
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
-        PERFORM cron.delete_job('bot_replenish_hourly');
+        -- 仅当 job 已存在时才删除
+        IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'bot_replenish_hourly') THEN
+            PERFORM cron.delete_job('bot_replenish_hourly');
+        END IF;
         PERFORM cron.schedule(
             'bot_replenish_hourly',
-            '5 * * * *',
+            '16 * * * *',
             'SELECT public.bot_replenish()'
         );
+    ELSE
+        RAISE NOTICE 'pg_cron extension not installed, skipping cron setup';
     END IF;
-EXCEPTION WHEN OTHERS THEN
-    RAISE NOTICE 'pg_cron not available: %', SQLERRM;
 END $$;
+
+-- HTML 标签清理辅助函数（防止 XSS 注入到邮件/通知中）
+CREATE OR REPLACE FUNCTION public.sanitize_text(p_text TEXT)
+RETURNS TEXT
+LANGUAGE sql
+IMMUTABLE
+AS $$
+    SELECT regexp_replace(regexp_replace(COALESCE(p_text, ''), '<[^>]*>', '', 'g'), '["''\\]', '', 'g');
+$$;
 
 -- 获取最低版本要求
 CREATE OR REPLACE FUNCTION public.get_min_version()
@@ -2849,7 +2913,7 @@ BEGIN
     RETURN jsonb_build_object(
         'min_version_code', 4,
         'min_version', 'v0.4.3_beta',
-        'message', '当前版本过低，可能无法正常游玩，请更新（CTRL+SHIFT+F5刷新浏览器或寻求可靠途径）'
+        'message', '当前版本过低，可能无法正常游玩，请更新（CTRL+SHIFT+F5刷新浏览器或寻求可靠途径）https://27584.github.io/UCAS_BOX'
     );
 END;
 $$;
@@ -3019,6 +3083,8 @@ DECLARE
     v_user_uuid UUID;
 BEGIN
     v_user_uuid := auth.uid();
+    -- 转义 LIKE 通配符防止通配符注入
+    p_query := REPLACE(REPLACE(p_query, '%', '\%'), '_', '\_');
     RETURN QUERY
     SELECT 
         p.id AS post_id,
@@ -3062,6 +3128,8 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 BEGIN
+    -- 转义 LIKE 通配符防止通配符注入
+    p_query := REPLACE(REPLACE(p_query, '%', '\%'), '_', '\_');
     RETURN QUERY
     SELECT 
         p.id AS user_id,
