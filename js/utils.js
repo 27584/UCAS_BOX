@@ -233,7 +233,7 @@ export function openItemDetail(item) {
                         <p id="detail-desc"></p>
                         <div class="detail-meta">
                             <div class="meta-item">
-                                <i data-lucide="gem"></i>
+                                <i data-lucide="coins"></i>
                                 <span id="detail-amount">拥有: 0</span>
                             </div>
                         </div>

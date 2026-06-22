@@ -384,7 +384,7 @@ export const marketPage = {
                 <div class="market-card-meta">
                     <div class="market-card-price-row">
                         <span class="market-card-unit-price">
-                            <i data-lucide="gem" class="market-coin-icon"></i>
+                            <i data-lucide="coins" class="market-coin-icon"></i>
                             ${formatNumber(order.price_per_unit)} 果壳币
                         </span>
                         <span class="market-card-qty">数量 ${order.quantity}</span>
@@ -416,7 +416,7 @@ export const marketPage = {
                         <div class="buy-item-info">
                             <div class="buy-item-name">${order.item_name}</div>
                             <div class="buy-item-price">
-                                <i data-lucide="gem" style="color:#f59e0b;"></i>
+                                <i data-lucide="coins" class="market-coin-icon"></i>
                                 <span id="buy-total-price">${formatNumber(pricePerUnit)}</span> 果壳币
                             </div>
                         </div>

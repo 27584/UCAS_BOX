@@ -4,5 +4,6 @@ showcase = img1.png
 showcase = img2.png
 showcase = img3.png
 showcase = img4.png
+showcase = img5.png
 ---
 只需要等待10分钟，就可以打开一个盒子~~
