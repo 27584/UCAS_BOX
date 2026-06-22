@@ -140,11 +140,11 @@ export const adminPage = {
 
         let html = filtered.map(user => `
             <div class="user-card">
-                <div class="user-avatar-small">
+                <div class="user-avatar-small clickable-avatar">
                     <i data-lucide="user"></i>
                 </div>
                 <div class="user-info">
-                    <span class="user-name">${user.nickname || '无名'}</span>
+                    <span class="user-name clickable-name">${user.nickname || '无名'}</span>
                     <span class="user-date">${new Date(user.created_at).toLocaleDateString()}</span>
                 </div>
                 <div class="user-stats">
@@ -452,14 +452,15 @@ export const adminPage = {
 
         let html = filtered.map(item => {
             const cfg = QUALITY_CONFIG[item.quality] || QUALITY_CONFIG.white;
+            const qClass = 'quality-' + (item.quality || 'white');
             return `
-                <div class="item-admin-card">
-                    <div class="item-quality-bar" style="background:${cfg.color}"></div>
+                <div class="item-admin-card ${qClass}">
+                    <div class="item-quality-bar ${qClass}"></div>
                     <div class="item-admin-row">
                         ${itemImageHTML(item.name, item.quality, item.image_name, 48)}
                         <div class="item-info">
                             <span class="item-name">${item.name}</span>
-                            <span class="item-quality" style="color:${cfg.color}">${cfg.label}</span>
+                            <span class="item-quality">${cfg.label}</span>
                         </div>
                     </div>
                     <div class="item-meta">
@@ -668,12 +669,12 @@ export const adminPage = {
             const cfg = QUALITY_CONFIG[sub.quality] || QUALITY_CONFIG.white;
             return `
                 <div class="submission-card">
-                    <div class="submission-quality-bar" style="background:${cfg.color}"></div>
+                    <div class="submission-quality-bar quality-${sub.quality || 'white'}"></div>
                     <div class="submission-info">
                         <div class="submission-header">
                             ${itemImageHTML(sub.name, sub.quality, sub.image_name, 40)}
                             <span class="submission-name">${sub.name}</span>
-                            <span style="color:${cfg.color}">${cfg.label}</span>
+                            <span class="quality-${sub.quality || 'white'}-text">${cfg.label}</span>
                         </div>
                         <p class="submission-desc">${sub.description}</p>
                         <div class="submission-meta">
@@ -1098,7 +1099,7 @@ export const adminPage = {
             container.innerHTML = orders.map(o => {
                 const qc = QUALITY_CONFIG[o.item_quality] || QUALITY_CONFIG.white;
                 return `<div class="bot-order-row">
-                    <span class="quality-dot" style="background:${qc.color}"></span>
+                    <span class="quality-dot quality-${o.item_quality || 'white'}"></span>
                     <span class="order-name">${o.item_name}</span>
                     <span class="quality-badge quality-${o.item_quality}">${qc.label}</span>
                     <span class="order-qty">×${o.quantity}</span>

@@ -98,12 +98,13 @@ export const collectionPage = {
         grid.innerHTML = pageItems.map((item, idx) => {
             const cfg = QUALITY_CONFIG[item.item_quality];
             const isOwned = item.owned > 0;
+            const qualityClass = 'quality-' + (item.item_quality || 'white');
             return `
-                <div class="item-card collection-card animate-fade-in-up ${!isOwned ? 'unowned' : ''}" data-item-id="${item.item_id}" style="animation-delay:${idx * 0.02}s">
-                    <div class="item-quality-bar" style="background:${isOwned ? cfg.color : '#334155'}"></div>
+                <div class="item-card collection-card animate-fade-in-up ${!isOwned ? 'unowned' : ''} ${qualityClass}" data-item-id="${item.item_id}" style="animation-delay:${idx * 0.02}s">
+                    ${isOwned ? `<div class="item-quality-bar ${qualityClass}"></div>` : ''}
                     ${isOwned
                         ? itemImageHTML(item.item_name, item.item_quality, item.item_image)
-                        : `<div class="item-icon" style="width:64px;height:64px;background:#1e293b;border:2px dashed #334155;border-radius:12px;display:flex;align-items:center;justify-content:center;color:#475569;font-size:24px;">?</div>`
+                        : `<div class="item-icon unowned-placeholder">?</div>`
                     }
                     <div class="item-name">${isOwned ? item.item_name : '???'}</div>
                     <div class="item-count">${isOwned ? '已拥有 ' + item.owned : '未收集'}</div>

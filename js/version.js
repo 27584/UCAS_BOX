@@ -2,10 +2,17 @@
 // 版本信息与更新日志
 // ============================================
 
-export const VERSION = 'v0.4.4_beta';
-export const VERSION_CODE = 4; // 绝对版本号
+export const VERSION = 'v0.5.0_beta';
+export const VERSION_CODE = 5; // 绝对版本号
 
-export const CHANGELOG = [ {
+export const CHANGELOG = [{
+        version: 'v0.5.0_beta',
+        date: '2026-06-22',
+        type: 'feature',
+        features: [
+            "优化UI",
+        ]
+    }, {
         version: 'v0.4.4_beta',
         date: '2026-06-20',
         type: 'feature',

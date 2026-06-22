@@ -115,15 +115,12 @@ export function showConfirm(message) {
             style.id = 'confirm-styles';
             style.textContent = `
                 #confirm-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 10000; display: flex; align-items: center; justify-content: center; }
-                #confirm-modal .confirm-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); }
-                #confirm-modal .confirm-dialog { position: relative; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 16px; padding: 24px; min-width: 280px; box-shadow: 0 20px 60px rgba(0,0,0,0.4); }
-                #confirm-modal .confirm-message { text-align: center; margin-bottom: 24px; color: var(--text-primary); font-size: 16px; }
-                #confirm-modal .confirm-buttons { display: flex; gap: 12px; }
-                #confirm-modal .confirm-buttons .btn { flex: 1; padding: 12px 16px; border-radius: 8px; font-size: 14px; border: none; cursor: pointer; }
-                #confirm-modal .btn-secondary { background: var(--bg-tertiary); color: var(--text-secondary); }
-                #confirm-modal .btn-secondary:hover { background: var(--bg-hover); }
-                #confirm-modal .btn-danger { background: var(--error-color, #ef4444); color: white; }
-                #confirm-modal .btn-danger:hover { opacity: 0.9; }
+                #confirm-modal .confirm-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(31, 26, 18, 0.55); backdrop-filter: blur(2px); }
+                #confirm-modal .confirm-dialog { position: relative; background: var(--paper-card); border: 1.5px solid var(--ink); border-radius: 0; padding: 24px; min-width: 280px; max-width: 360px; box-shadow: var(--shadow-lift); }
+                #confirm-modal .confirm-dialog::before { content: ''; position: absolute; top: -10px; left: 50%; transform: translateX(-50%) rotate(-3deg); width: 36px; height: 18px; background: var(--seal-red); border-radius: 50%; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); opacity: 0.85; }
+                #confirm-modal .confirm-message { text-align: center; margin-bottom: 20px; color: var(--ink); font-size: 1rem; font-family: var(--font-body); }
+                #confirm-modal .confirm-buttons { display: flex; gap: 10px; }
+                #confirm-modal .confirm-buttons .btn { flex: 1; }
             `;
             document.head.appendChild(style);
         }
@@ -160,9 +157,9 @@ export function itemImageHTML(name, quality, imageName, size = 64) {
     const hasImage = isUrl || (imageName && imageName.trim());
     const imgPath = isUrl ? imageName : hasImage ? `assets/items/${escapeHtml(imageName).replace(/[^a-zA-Z0-9._-]/g, '_')}` : '';
     return `
-        <div class="item-icon" style="position:relative;width:${size}px;height:${size}px;overflow:hidden;border-radius:12px;flex-shrink:0;">
-            <div class="item-fallback" style="width:100%;height:100%;background:linear-gradient(135deg, ${cfg.color}22, ${cfg.color}11);border:2px solid ${cfg.color}55;box-shadow:0 0 12px ${cfg.glow};display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:${size * 0.45}px;color:${cfg.color};font-weight:700;">${initial}</div>
-            ${hasImage ? `<img src="${imgPath}" alt="${escapedName}" class="item-image" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:12px;display:none;z-index:1;">` : ''}
+        <div class="item-icon quality-${quality}" style="position:relative;width:${size}px;height:${size}px;overflow:hidden;flex-shrink:0;">
+            <div class="item-fallback" style="width:100%;height:100%;background:var(--paper-bg);border:1.5px solid currentColor;display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:${size * 0.45}px;color:currentColor;font-weight:700;">${initial}</div>
+            ${hasImage ? `<img src="${imgPath}" alt="${escapedName}" class="item-image" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none;z-index:1;">` : ''}
         </div>
     `;
 }
@@ -259,12 +256,11 @@ export function openItemDetail(item) {
 
     icon.innerHTML = itemImageHTML(item.name, item.quality, item.image_name, 80);
     name.textContent = item.name;
-    name.style.color = cfg.color;
+    name.className = 'quality-' + item.quality + '-text';
     quality.textContent = cfg.label;
     quality.className = 'quality-badge quality-' + item.quality;
     type.textContent = typeCfg.label;
-    type.style.background = typeCfg.bg;
-    type.style.color = typeCfg.color;
+    type.className = 'type-badge';
     desc.textContent = item.description ? escapeHtml(item.description) : '暂无描述';
     amount.textContent = '拥有: ' + (item.owned || 0);
 

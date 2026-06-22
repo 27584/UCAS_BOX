@@ -32,16 +32,15 @@ export const postPage = {
             backBtn.addEventListener('click', () => history.back());
         }
 
-        // 点击作者进入主页
-        const authorEl = container.querySelector('.clickable-author');
-        if (authorEl) {
-            authorEl.addEventListener('click', () => {
-                const userId = authorEl.dataset.userId;
+        // 点击作者头像/名称进入主页
+        container.querySelectorAll('.post-author .clickable-avatar, .post-author .clickable-name').forEach(el => {
+            el.addEventListener('click', () => {
+                const userId = el.dataset.userId;
                 if (userId) {
                     router.navigate(`user/${userId}`);
                 }
             });
-        }
+        });
 
         // 点赞
         const likeBtn = container.querySelector('#btn-like');
@@ -132,15 +131,15 @@ export const postPage = {
                     ` : ''}
                 </div>
                 
-                <div class="post-author clickable-author" data-user-id="${user_id}">
-                    <div class="author-avatar">
+                <div class="post-author" data-user-id="${user_id}">
+                    <div class="author-avatar clickable-avatar" data-user-id="${user_id}">
                         ${user_avatar 
                             ? `<img src="${user_avatar}" alt="avatar" />`
                             : `<div class="avatar-placeholder">${(user_nickname || '匿').charAt(0).toUpperCase()}</div>`
                         }
                     </div>
                     <div class="author-info">
-                        <span class="author-name">${escapeHtml(user_nickname || '匿名用户')}${userBadgeHTML({is_admin: user_is_admin, is_bot: user_is_bot})}</span>
+                        <span class="author-name clickable-name" data-user-id="${user_id}">${escapeHtml(user_nickname || '匿名用户')}${userBadgeHTML({is_admin: user_is_admin, is_bot: user_is_bot})}</span>
                         <span class="post-time">${timeAgo(created_at)}</span>
                     </div>
                 </div>

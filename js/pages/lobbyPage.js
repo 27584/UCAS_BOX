@@ -1,5 +1,5 @@
 import { openBox, getProfile } from '../api.js';
-import { formatCountdown, itemImageHTML, showToast, QUALITY_CONFIG, initItemImages } from '../utils.js';
+import { formatCountdown, showToast } from '../utils.js';
 import { createIcons, icons } from 'lucide';
 import { updateGlobalShells } from '../auth.js';
 
@@ -23,22 +23,25 @@ export const lobbyPage = {
 
             setTimeout(async () => {
                 try {
+                    console.log('[lobby] openBox clicked');
                     const result = await openBox();
+                    console.log('[lobby] openBox result:', result);
                     if (result && result.length > 0) {
-                        this.showDrop(result[0]);
+                        if (typeof window.showDropModal === 'function') {
+                            window.showDropModal(result[0]);
+                        } else {
+                            console.error('[lobby] window.showDropModal is not a function!');
+                            alert('showDropModal 未加载，请刷新页面 (Ctrl+Shift+R)');
+                        }
                         this.startCooldown(new Date());
-                        this.updateGlobalShells();
+                        try { updateGlobalShells(); } catch (e) { console.error('updateGlobalShells error:', e); }
                     }
                 } catch (err) {
+                    console.error('[lobby] openBox error:', err);
                     box.classList.remove('animate-shake');
                     btn.disabled = false;
                 }
             }, 600);
-        });
-
-        document.getElementById('drop-close').addEventListener('click', () => {
-            document.getElementById('drop-modal').style.display = 'none';
-            box.classList.remove('animate-shake');
         });
 
         createIcons({ icons });
@@ -84,24 +87,5 @@ export const lobbyPage = {
 
         update();
         this.timer = setInterval(update, 1000);
-    },
-
-    showDrop(item) {
-        const modal = document.getElementById('drop-modal');
-        const glow = document.getElementById('drop-glow');
-        const placeholder = document.getElementById('drop-placeholder');
-        const nameEl = document.getElementById('drop-name');
-        const qualityEl = document.getElementById('drop-quality');
-        const cfg = QUALITY_CONFIG[item.out_item_quality] || QUALITY_CONFIG.white;
-
-        glow.style.background = cfg.color;
-        placeholder.innerHTML = itemImageHTML(item.out_item_name, item.out_item_quality, item.out_item_image, 96);
-        initItemImages();
-        nameEl.textContent = item.out_item_name;
-        nameEl.style.color = cfg.color;
-        qualityEl.textContent = cfg.label;
-        qualityEl.className = `quality-badge quality-${item.out_item_quality}`;
-
-        modal.style.display = 'flex';
     }
 };

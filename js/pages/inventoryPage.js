@@ -307,9 +307,10 @@ export const inventoryPage = {
 
         grid.innerHTML = filtered.map((inv, idx) => {
             const cfg = QUALITY_CONFIG[inv.item_quality];
+            const qClass = 'quality-' + (inv.item_quality || 'white');
             return `
-                <div class="item-card animate-fade-in-up" data-item-id="${inv.item_id}" style="animation-delay:${idx * 0.03}s">
-                    <div class="item-quality-bar" style="background:${cfg.color}"></div>
+                <div class="item-card animate-fade-in-up ${qClass}" data-item-id="${inv.item_id}" style="animation-delay:${idx * 0.03}s">
+                    <div class="item-quality-bar"></div>
                     ${itemImageHTML(inv.item_name, inv.item_quality, inv.item_image)}
                     <div class="item-name">${inv.item_name}</div>
                     <div class="item-count">x${inv.quantity}</div>

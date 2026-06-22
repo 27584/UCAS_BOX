@@ -67,23 +67,23 @@ export const submitPage = {
         list.innerHTML = this.submissions.map(sub => {
             const cfg = QUALITY_CONFIG[sub.quality] || QUALITY_CONFIG.white;
             const statusMap = {
-                pending: { text: '审核中', color: '#f59e0b' },
-                approved: { text: '已通过', color: '#10b981' },
-                rejected: { text: '未通过', color: '#ef4444' }
+                pending: { text: '审核中', cls: 'status-pending' },
+                approved: { text: '已通过', cls: 'status-approved' },
+                rejected: { text: '未通过', cls: 'status-rejected' }
             };
             const status = statusMap[sub.status] || statusMap.pending;
 
             return `
                 <div class="submission-card">
-                    <div class="submission-quality-bar" style="background:${cfg.color}"></div>
+                    <div class="submission-quality-bar quality-${sub.quality || 'white'}"></div>
                     <div class="submission-info">
                         <div class="submission-header">
                             <span class="submission-name">${sub.name}</span>
-                            <span class="submission-status" style="color:${status.color}">${status.text}</span>
+                            <span class="submission-status ${status.cls}">${status.text}</span>
                         </div>
                         <p class="submission-desc">${sub.description}</p>
                         <div class="submission-meta">
-                            <span style="color:${cfg.color}">${cfg.label}</span>
+                            <span class="quality-${sub.quality || 'white'}-text">${cfg.label}</span>
                             <span>权重: ${sub.drop_weight}</span>
                             ${sub.status === 'approved' ? `<span class="reward">奖励: ${sub.reward_shells} 果壳币</span>` : ''}
                             ${sub.status === 'rejected' && sub.admin_note ? `<span class="reject-reason">原因: ${sub.admin_note}</span>` : ''}

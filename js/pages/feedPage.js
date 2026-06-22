@@ -182,15 +182,15 @@ export const feedPage = {
         return `
             <div class="post-card" data-post-id="${postId}">
                 <div class="post-header">
-                    <div class="post-author" data-user-id="${post.user_id}" style="cursor:pointer;">
-                        <div class="author-avatar">
+                    <div class="post-author" data-user-id="${post.user_id}">
+                        <div class="author-avatar clickable-avatar" data-user-id="${post.user_id}">
                             ${post.user_avatar 
                                 ? `<img src="${post.user_avatar}" alt="avatar" />`
                                 : `<i data-lucide="user" style="width:24;height:24;"></i>`
                             }
                         </div>
                         <div class="author-info">
-                            <span class="author-name">${post.user_nickname || '匿名用户'}${userBadgeHTML(post)}</span>
+                            <span class="author-name clickable-name" data-user-id="${post.user_id}">${post.user_nickname || '匿名用户'}${userBadgeHTML(post)}</span>
                             <span class="post-time">${timeAgo(post.created_at)}</span>
                         </div>
                     </div>
@@ -228,10 +228,10 @@ export const feedPage = {
         });
 
         // 点击用户头像/昵称进入用户主页
-        document.querySelectorAll('.post-author[data-user-id]').forEach(author => {
-            author.addEventListener('click', (e) => {
+        document.querySelectorAll('.post-author .clickable-avatar, .post-author .clickable-name').forEach(el => {
+            el.addEventListener('click', (e) => {
                 e.stopPropagation();
-                const userId = author.dataset.userId;
+                const userId = el.dataset.userId;
                 if (userId) {
                     router.navigate(`user/${userId}`);
                 }
