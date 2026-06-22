@@ -55,6 +55,23 @@ export const authPage = {
                         return;
                     }
                     
+                    // 检查昵称是否已被使用
+                    const { data: existingUser, error } = await supabase
+                        .from('profiles')
+                        .select('nickname')
+                        .eq('nickname', nickname)
+                        .limit(1);
+                    if (error) {
+                        showToast('检查昵称失败', 'error');
+                        btn.disabled = false;
+                        return;
+                    }
+                    if (existingUser && existingUser.length > 0) {
+                        showToast('该昵称已被使用', 'error');
+                        btn.disabled = false;
+                        return;
+                    }
+                    
                     await signUp(email, password, nickname);
                 }
                 router.navigate('lobby');

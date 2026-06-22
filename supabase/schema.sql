@@ -1,8 +1,25 @@
--- UCAS_BOX 完整数据库架构
--- 在 Supabase SQL Editor 中执行此文件以一键创建所有表、函数和策略
+-- UCAS_BOX 数据库架构
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ALTER DATABASE postgres SET TIME ZONE 'Asia/Shanghai';
 
--- 清理旧的机器人相关对象（兼容历史版本）
+-- 清理旧的机器人相关对象
 DROP TABLE IF EXISTS public.bot_accounts CASCADE;
 DROP TABLE IF EXISTS public.bot_state CASCADE;
 DROP FUNCTION IF EXISTS public.ensure_bot_users CASCADE;
@@ -69,10 +86,40 @@ CREATE TABLE IF NOT EXISTS public.dragon_boat_progress (
 ALTER TABLE public.dragon_boat_progress ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users can view own dragon boat progress" ON public.dragon_boat_progress;
 CREATE POLICY "Users can view own dragon boat progress" ON public.dragon_boat_progress FOR SELECT USING (auth.uid() = user_id);
-DROP POLICY IF EXISTS "Users can update own dragon boat progress" ON public.dragon_boat_progress;
-CREATE POLICY "Users can update own dragon boat progress" ON public.dragon_boat_progress FOR UPDATE USING (auth.uid() = user_id);
-DROP POLICY IF EXISTS "Users can insert own dragon boat progress" ON public.dragon_boat_progress;
-CREATE POLICY "Users can insert own dragon boat progress" ON public.dragon_boat_progress FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- 注意：dragon_boat_progress的INSERT/UPDATE只能通过SECURITY DEFINER函数进行，防止作弊
+-- 管理员例外
+DROP POLICY IF EXISTS "Admin can manage dragon boat" ON public.dragon_boat_progress;
+CREATE POLICY "Admin can manage dragon boat" ON public.dragon_boat_progress FOR ALL USING (public.check_admin());
+
+-- 保护dragon_boat_progress表，用户只能查看，不能修改
+DROP FUNCTION IF EXISTS public.protect_dragon_boat_progress() CASCADE;
+CREATE OR REPLACE FUNCTION public.protect_dragon_boat_progress()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    -- 如果是SECURITY DEFINER函数调用（current_user为postgres），允许修改
+    IF current_user = 'postgres' THEN
+        RETURN NEW;
+    END IF;
+    
+    -- 如果是管理员操作，允许修改
+    IF public.check_admin() THEN
+        RETURN NEW;
+    END IF;
+    
+    -- 普通用户禁止修改，抛出异常
+    RAISE EXCEPTION '无权修改端午活动进度';
+END;
+$$;
+
+DROP TRIGGER IF EXISTS protect_dragon_boat ON public.dragon_boat_progress;
+CREATE TRIGGER protect_dragon_boat
+    BEFORE INSERT OR UPDATE OR DELETE ON public.dragon_boat_progress
+    FOR EACH ROW
+    EXECUTE FUNCTION public.protect_dragon_boat_progress();
 
 -- ============================================================
 -- 1.6 彩票活动表
@@ -141,8 +188,10 @@ CREATE POLICY "Users can view all lottery rounds" ON public.lottery_rounds FOR S
 DROP POLICY IF EXISTS "Users can view own lottery tickets" ON public.lottery_tickets;
 CREATE POLICY "Users can view own lottery tickets" ON public.lottery_tickets FOR SELECT USING (auth.uid() = user_id);
 
-DROP POLICY IF EXISTS "Users can insert lottery tickets" ON public.lottery_tickets;
-CREATE POLICY "Users can insert lottery tickets" ON public.lottery_tickets FOR INSERT WITH CHECK (auth.uid() = user_id);
+-- 注意：lottery_tickets的INSERT只能通过SECURITY DEFINER函数进行，防止免费购买彩票
+-- 管理员例外
+DROP POLICY IF EXISTS "Admin can manage lottery" ON public.lottery_tickets;
+CREATE POLICY "Admin can manage lottery" ON public.lottery_tickets FOR ALL USING (public.check_admin());
 
 DROP POLICY IF EXISTS "Users can view all lottery results" ON public.lottery_results;
 CREATE POLICY "Users can view all lottery results" ON public.lottery_results FOR SELECT USING (true);
@@ -182,6 +231,9 @@ CREATE TABLE IF NOT EXISTS public.inventory (
     UNIQUE(user_id, item_id)
 );
 
+CREATE INDEX IF NOT EXISTS idx_inventory_user_id ON public.inventory(user_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_item_id ON public.inventory(item_id);
+
 -- ============================================================
 -- 4. 市场订单
 -- ============================================================
@@ -207,6 +259,9 @@ CREATE TABLE IF NOT EXISTS public.system_mails (
     is_read BOOLEAN DEFAULT false,
     created_at TIMESTAMPTZ DEFAULT now()
 );
+
+CREATE INDEX IF NOT EXISTS idx_system_mails_user_id ON public.system_mails(user_id);
+CREATE INDEX IF NOT EXISTS idx_system_mails_is_read ON public.system_mails(is_read);
 
 -- ============================================================
 -- 6. 投稿表
@@ -243,29 +298,32 @@ CREATE POLICY "Users can view own profile"
 DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
 CREATE POLICY "Users can update own profile"
     ON public.profiles FOR UPDATE
-    USING (auth.uid() = id);
+    USING (auth.uid() = id OR public.check_admin())
+    WITH CHECK (auth.uid() = id AND is_admin = (SELECT is_admin FROM public.profiles WHERE id = auth.uid()));
 
 DROP POLICY IF EXISTS "Users can view own inventory" ON public.inventory;
 CREATE POLICY "Users can view own inventory"
     ON public.inventory FOR SELECT
     USING (auth.uid() = user_id);
 
-DROP POLICY IF EXISTS "System can manage inventory" ON public.inventory;
-CREATE POLICY "System can manage inventory"
+-- 注意：inventory的INSERT/UPDATE/DELETE只能通过SECURITY DEFINER函数进行，用户不能直接操作
+-- 管理员例外：允许管理员操作所有数据
+DROP POLICY IF EXISTS "Admin can manage all inventory" ON public.inventory;
+CREATE POLICY "Admin can manage all inventory"
     ON public.inventory FOR ALL
-    USING (auth.uid() = user_id)
-    WITH CHECK (auth.uid() = user_id);
+    USING (public.check_admin());
 
 DROP POLICY IF EXISTS "Market orders public read" ON public.market_orders;
 CREATE POLICY "Market orders public read"
     ON public.market_orders FOR SELECT
     USING (true);
 
-DROP POLICY IF EXISTS "Users can manage own orders" ON public.market_orders;
-CREATE POLICY "Users can manage own orders"
+-- 注意：market_orders的INSERT/UPDATE/DELETE只能通过SECURITY DEFINER函数进行
+-- 管理员例外：允许管理员操作所有数据
+DROP POLICY IF EXISTS "Admin can manage all orders" ON public.market_orders;
+CREATE POLICY "Admin can manage all orders"
     ON public.market_orders FOR ALL
-    USING (auth.uid() = seller_id)
-    WITH CHECK (auth.uid() = seller_id);
+    USING (public.check_admin());
 
 DROP POLICY IF EXISTS "Users can view own mails" ON public.system_mails;
 CREATE POLICY "Users can view own mails"
@@ -275,25 +333,31 @@ CREATE POLICY "Users can view own mails"
 DROP POLICY IF EXISTS "Users can update own mails" ON public.system_mails;
 CREATE POLICY "Users can update own mails"
     ON public.system_mails FOR UPDATE
-    USING (auth.uid() = user_id);
+    USING (auth.uid() = user_id OR public.check_admin())
+    WITH CHECK (auth.uid() = user_id OR public.check_admin());
 
 ALTER TABLE public.item_submissions ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Users can view own submissions" ON public.item_submissions;
 CREATE POLICY "Users can view own submissions"
     ON public.item_submissions FOR SELECT
-    USING (auth.uid() = user_id);
+    USING (auth.uid() = user_id OR public.check_admin());
 
 DROP POLICY IF EXISTS "Users can insert submissions" ON public.item_submissions;
 CREATE POLICY "Users can insert submissions"
     ON public.item_submissions FOR INSERT
     WITH CHECK (auth.uid() = user_id);
 
+-- 管理员例外：允许管理员操作所有投稿
+DROP POLICY IF EXISTS "Admin can manage all submissions" ON public.item_submissions;
+CREATE POLICY "Admin can manage all submissions"
+    ON public.item_submissions FOR ALL
+    USING (public.check_admin());
+
 -- ============================================================
 -- 7. 触发器：注册后自动创建 profile
 -- ============================================================
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-DROP FUNCTION IF EXISTS public.handle_new_user();
+DROP FUNCTION IF EXISTS public.handle_new_user() CASCADE;
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -307,7 +371,13 @@ BEGIN
     -- 移除HTML标签，防止XSS
     clean_nickname := regexp_replace(raw_nickname, '<[^>]*>', '', 'g');
     -- 限制长度
-    clean_nickname := LEFT(clean_nickname, 20);
+    clean_nickname := LEFT(clean_nickname, 10);
+    
+    -- 检查昵称是否已被使用，如果是则添加随机后缀
+    WHILE EXISTS (SELECT 1 FROM public.profiles WHERE nickname = clean_nickname) LOOP
+        clean_nickname := LEFT(clean_nickname, 8) || FLOOR(RANDOM() * 100)::INT;
+    END LOOP;
+    
     INSERT INTO public.profiles (id, nickname)
     VALUES (NEW.id, clean_nickname);
     RETURN NEW;
@@ -319,6 +389,115 @@ CREATE TRIGGER on_auth_user_created
     AFTER INSERT ON auth.users
     FOR EACH ROW
     EXECUTE FUNCTION public.handle_new_user();
+
+-- 保护profiles表敏感字段，所有字段只能通过SECURITY DEFINER函数或管理员修改
+DROP FUNCTION IF EXISTS public.protect_profile_fields() CASCADE;
+CREATE OR REPLACE FUNCTION public.protect_profile_fields()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    -- 如果是SECURITY DEFINER函数调用（current_user为postgres），允许修改所有字段
+    IF current_user = 'postgres' THEN
+        RETURN NEW;
+    END IF;
+    
+    -- 如果是管理员操作，允许修改所有字段
+    IF public.check_admin() THEN
+        RETURN NEW;
+    END IF;
+    
+    -- 普通用户禁止修改任何字段（昵称修改需要改名卡，必须通过change_nickname()函数）
+    -- 保留id和created_at不变，其他所有字段强制恢复为原值
+    NEW.nickname := OLD.nickname;
+    NEW.shells := OLD.shells;
+    NEW.is_admin := OLD.is_admin;
+    NEW.created_at := OLD.created_at;
+    NEW.last_open_at := OLD.last_open_at;
+    NEW.last_claim_at := OLD.last_claim_at;
+    NEW.ad_claimed_at := OLD.ad_claimed_at;
+    NEW.is_bot := OLD.is_bot;
+    NEW.dragon_boat_online_total := OLD.dragon_boat_online_total;
+    NEW.dragon_boat_last_update := OLD.dragon_boat_last_update;
+    NEW.dragon_boat_claimed_1min := OLD.dragon_boat_claimed_1min;
+    NEW.dragon_boat_claimed_10min := OLD.dragon_boat_claimed_10min;
+    NEW.dragon_boat_claimed_60min := OLD.dragon_boat_claimed_60min;
+    NEW.dragon_boat_daily_reset := OLD.dragon_boat_daily_reset;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS protect_profile ON public.profiles;
+CREATE TRIGGER protect_profile
+    BEFORE UPDATE ON public.profiles
+    FOR EACH ROW
+    EXECUTE FUNCTION public.protect_profile_fields();
+
+-- 保护system_mails表敏感字段，用户只能修改is_read
+DROP FUNCTION IF EXISTS public.protect_mail_fields() CASCADE;
+CREATE OR REPLACE FUNCTION public.protect_mail_fields()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    -- 如果是SECURITY DEFINER函数调用（current_user为postgres），允许修改所有字段
+    IF current_user = 'postgres' THEN
+        RETURN NEW;
+    END IF;
+    
+    -- 如果是管理员操作，允许修改所有字段
+    IF public.check_admin() THEN
+        RETURN NEW;
+    END IF;
+    
+    -- 普通用户只能修改is_read字段，其他字段保持原值
+    NEW.user_id := OLD.user_id;
+    NEW.title := OLD.title;
+    NEW.content := OLD.content;
+    NEW.created_at := OLD.created_at;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS protect_mail ON public.system_mails;
+CREATE TRIGGER protect_mail
+    BEFORE UPDATE ON public.system_mails
+    FOR EACH ROW
+    EXECUTE FUNCTION public.protect_mail_fields();
+
+-- 保护item_submissions表，强制设置status、reward_shells、admin_note为默认值
+DROP FUNCTION IF EXISTS public.protect_submission_fields() CASCADE;
+CREATE OR REPLACE FUNCTION public.protect_submission_fields()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    -- 如果是SECURITY DEFINER函数调用（current_user为postgres），允许修改所有字段
+    IF current_user = 'postgres' THEN
+        RETURN NEW;
+    END IF;
+    
+    -- 如果是管理员操作，允许修改所有字段
+    IF public.check_admin() THEN
+        RETURN NEW;
+    END IF;
+    
+    -- 普通用户提交时强制设置管理员字段为默认值，防止用户绕过审核
+    NEW.status := 'pending';
+    NEW.reward_shells := 0;
+    NEW.admin_note := NULL;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS protect_submission ON public.item_submissions;
+CREATE TRIGGER protect_submission
+    BEFORE INSERT ON public.item_submissions
+    FOR EACH ROW
+    EXECUTE FUNCTION public.protect_submission_fields();
 
 -- ============================================================
 -- 7. RPC 函数：领取挂机收益
@@ -691,7 +870,10 @@ BEGIN
 END;
 $$;
 
--- 使用改名卡修改昵称
+-- ============================================================
+-- 12.5 RPC 函数：使用改名卡修改昵称
+-- ============================================================
+DROP FUNCTION IF EXISTS public.use_rename_card(TEXT);
 CREATE OR REPLACE FUNCTION public.use_rename_card(p_new_nickname TEXT)
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -712,8 +894,8 @@ BEGIN
         RETURN jsonb_build_object('success', false, 'message', '昵称至少需要2个字符');
     END IF;
     
-    IF char_length(trim(p_new_nickname)) > 20 THEN
-        RETURN jsonb_build_object('success', false, 'message', '昵称不能超过20个字符');
+    IF char_length(trim(p_new_nickname)) > 10 THEN
+        RETURN jsonb_build_object('success', false, 'message', '昵称不能超过10个字符');
     END IF;
     
     new_nickname := trim(p_new_nickname);
@@ -910,9 +1092,11 @@ BEGIN
         RAISE EXCEPTION '未登录';
     END IF;
 
+    -- 使用 FOR UPDATE 锁定行，防止竞态条件
     SELECT ad_claimed_at::DATE INTO last_claim_date
     FROM public.profiles
-    WHERE id = user_uuid;
+    WHERE id = user_uuid
+    FOR UPDATE;
 
     IF last_claim_date = CURRENT_DATE THEN
         RAISE EXCEPTION '今日已领取过广告奖励，请明天再来';
@@ -1025,7 +1209,7 @@ $$;
 -- ============================================================
 -- 18. RPC 函数：检查是否为管理员
 -- ============================================================
-DROP FUNCTION IF EXISTS public.check_admin();
+DROP FUNCTION IF EXISTS public.check_admin() CASCADE;
 CREATE OR REPLACE FUNCTION public.check_admin()
 RETURNS BOOLEAN
 LANGUAGE plpgsql
@@ -1158,8 +1342,350 @@ END;
 $$;
 
 -- ============================================================
--- 22. RPC 函数：添加物品（管理员）
+-- 21b. RPC 函数：修改用户果壳币（管理员）
 -- ============================================================
+DROP FUNCTION IF EXISTS public.admin_update_user_shells(UUID, BIGINT);
+CREATE OR REPLACE FUNCTION public.admin_update_user_shells(p_user_id UUID, p_shells BIGINT)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+    old_shells BIGINT;
+    user_nickname TEXT;
+BEGIN
+    IF user_uuid IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '未登录');
+    END IF;
+
+    IF NOT public.check_admin() THEN
+        RETURN jsonb_build_object('success', false, 'message', '无权限');
+    END IF;
+
+    IF p_shells < 0 THEN
+        RETURN jsonb_build_object('success', false, 'message', '果壳币不能为负数');
+    END IF;
+
+    SELECT nickname, shells INTO user_nickname, old_shells FROM public.profiles WHERE id = p_user_id;
+    IF user_nickname IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '用户不存在');
+    END IF;
+
+    UPDATE public.profiles SET shells = p_shells WHERE id = p_user_id;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'message', '已将 ' || user_nickname || ' 的果壳币从 ' || old_shells || ' 调整为 ' || p_shells,
+        'user_id', p_user_id,
+        'old_shells', old_shells,
+        'new_shells', p_shells
+    );
+END;
+$$;
+
+-- ============================================================
+-- 21c. RPC 函数：增减用户果壳币（管理员）
+-- ============================================================
+DROP FUNCTION IF EXISTS public.admin_adjust_user_shells(UUID, BIGINT, TEXT);
+CREATE OR REPLACE FUNCTION public.admin_adjust_user_shells(p_user_id UUID, p_amount BIGINT, p_reason TEXT DEFAULT '')
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+    old_shells BIGINT;
+    new_shells BIGINT;
+    user_nickname TEXT;
+    change_type TEXT;
+BEGIN
+    IF user_uuid IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '未登录');
+    END IF;
+
+    IF NOT public.check_admin() THEN
+        RETURN jsonb_build_object('success', false, 'message', '无权限');
+    END IF;
+
+    IF p_amount = 0 THEN
+        RETURN jsonb_build_object('success', false, 'message', '调整金额不能为0');
+    END IF;
+
+    SELECT nickname, shells INTO user_nickname, old_shells FROM public.profiles WHERE id = p_user_id;
+    IF user_nickname IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '用户不存在');
+    END IF;
+
+    new_shells := old_shells + p_amount;
+    IF new_shells < 0 THEN
+        RETURN jsonb_build_object('success', false, 'message', '果壳币不能为负数，当前余额: ' || old_shells);
+    END IF;
+
+    UPDATE public.profiles SET shells = new_shells WHERE id = p_user_id;
+    change_type := CASE WHEN p_amount > 0 THEN '增加' ELSE '减少' END;
+
+    -- 发送通知邮件
+    INSERT INTO public.system_mails (user_id, title, content)
+    VALUES (p_user_id, '果壳币变动', change_type || abs(p_amount) || '果壳币，原因: ' || COALESCE(p_reason, '管理员操作'));
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'message', change_type || abs(p_amount) || '果壳币成功，当前余额: ' || new_shells,
+        'old_shells', old_shells,
+        'new_shells', new_shells,
+        'change', p_amount
+    );
+END;
+$$;
+
+-- ============================================================
+-- 21d. RPC 函数：移除用户单个物品（管理员）
+-- ============================================================
+DROP FUNCTION IF EXISTS public.admin_remove_user_item(UUID, BIGINT, INT);
+CREATE OR REPLACE FUNCTION public.admin_remove_user_item(p_user_id UUID, p_item_id BIGINT, p_quantity INT DEFAULT 1)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+    current_qty INT;
+    user_nickname TEXT;
+    item_name TEXT;
+BEGIN
+    IF user_uuid IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '未登录');
+    END IF;
+
+    IF NOT public.check_admin() THEN
+        RETURN jsonb_build_object('success', false, 'message', '无权限');
+    END IF;
+
+    SELECT nickname INTO user_nickname FROM public.profiles WHERE id = p_user_id;
+    IF user_nickname IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '用户不存在');
+    END IF;
+
+    SELECT i.name, inv.quantity INTO item_name, current_qty
+    FROM public.items i
+    LEFT JOIN public.inventory inv ON inv.item_id = i.id AND inv.user_id = p_user_id
+    WHERE i.id = p_item_id;
+
+    IF item_name IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '物品不存在');
+    END IF;
+
+    IF current_qty IS NULL OR current_qty < p_quantity THEN
+        RETURN jsonb_build_object('success', false, 'message', '物品数量不足，当前: ' || COALESCE(current_qty::TEXT, '0'));
+    END IF;
+
+    IF current_qty = p_quantity THEN
+        DELETE FROM public.inventory WHERE user_id = p_user_id AND item_id = p_item_id;
+    ELSE
+        UPDATE public.inventory SET quantity = quantity - p_quantity WHERE user_id = p_user_id AND item_id = p_item_id;
+    END IF;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'message', '已从 ' || user_nickname || ' 移除「' || item_name || '」×' || p_quantity,
+        'item_name', item_name,
+        'removed', p_quantity
+    );
+END;
+$$;
+
+-- ============================================================
+-- 21e. RPC 函数：清空用户所有物品（管理员）
+-- ============================================================
+DROP FUNCTION IF EXISTS public.admin_clear_user_items(UUID);
+CREATE OR REPLACE FUNCTION public.admin_clear_user_items(p_user_id UUID)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+    user_nickname TEXT;
+    item_count INT;
+BEGIN
+    IF user_uuid IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '未登录');
+    END IF;
+
+    IF NOT public.check_admin() THEN
+        RETURN jsonb_build_object('success', false, 'message', '无权限');
+    END IF;
+
+    SELECT nickname INTO user_nickname FROM public.profiles WHERE id = p_user_id;
+    IF user_nickname IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '用户不存在');
+    END IF;
+
+    DELETE FROM public.inventory WHERE user_id = p_user_id;
+
+    -- 获取删除了多少物品
+    GET DIAGNOSTICS item_count = ROW_COUNT;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'message', '已清空 ' || user_nickname || ' 的所有物品，共 ' || item_count || ' 种',
+        'items_cleared', item_count
+    );
+END;
+$$;
+
+-- ============================================================
+-- 21f. RPC 函数：设置/撤销管理员权限（管理员）
+-- ============================================================
+DROP FUNCTION IF EXISTS public.admin_set_user_admin(UUID, BOOLEAN);
+CREATE OR REPLACE FUNCTION public.admin_set_user_admin(p_user_id UUID, p_is_admin BOOLEAN)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+    user_nickname TEXT;
+BEGIN
+    IF user_uuid IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '未登录');
+    END IF;
+
+    IF NOT public.check_admin() THEN
+        RETURN jsonb_build_object('success', false, 'message', '无权限');
+    END IF;
+
+    SELECT nickname INTO user_nickname FROM public.profiles WHERE id = p_user_id;
+    IF user_nickname IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '用户不存在');
+    END IF;
+
+    UPDATE public.profiles SET is_admin = p_is_admin WHERE id = p_user_id;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'message', user_nickname || ' 的管理员权限已' || CASE WHEN p_is_admin THEN '开启' ELSE '撤销' END,
+        'nickname', user_nickname,
+        'is_admin', p_is_admin
+    );
+END;
+$$;
+
+-- ============================================================
+-- 21h. RPC 函数：修改用户昵称（管理员）
+-- ============================================================
+DROP FUNCTION IF EXISTS public.admin_change_user_nickname(UUID, TEXT);
+CREATE OR REPLACE FUNCTION public.admin_change_user_nickname(p_user_id UUID, p_new_nickname TEXT)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+    old_nickname TEXT;
+    new_nickname TEXT;
+BEGIN
+    IF user_uuid IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '未登录');
+    END IF;
+
+    IF NOT public.check_admin() THEN
+        RETURN jsonb_build_object('success', false, 'message', '无权限');
+    END IF;
+
+    -- 检查新昵称
+    new_nickname := TRIM(p_new_nickname);
+    IF new_nickname IS NULL OR LENGTH(new_nickname) < 2 THEN
+        RETURN jsonb_build_object('success', false, 'message', '昵称至少需要2个字符');
+    END IF;
+    
+    IF LENGTH(new_nickname) > 10 THEN
+        RETURN jsonb_build_object('success', false, 'message', '昵称不能超过10个字符');
+    END IF;
+    
+    -- 检查特殊字符
+    IF new_nickname LIKE '%<%' OR new_nickname LIKE '%>%' OR new_nickname LIKE '%''%' 
+       OR new_nickname LIKE '%"%' OR new_nickname LIKE '%\\%' OR new_nickname LIKE '%%;(%' OR new_nickname LIKE '%)%' THEN
+        RETURN jsonb_build_object('success', false, 'message', '昵称不能包含特殊字符');
+    END IF;
+
+    -- 获取用户当前昵称
+    SELECT nickname INTO old_nickname FROM public.profiles WHERE id = p_user_id;
+    IF old_nickname IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '用户不存在');
+    END IF;
+
+    -- 检查新昵称是否已被使用
+    IF EXISTS (SELECT 1 FROM public.profiles WHERE nickname = new_nickname AND id != p_user_id) THEN
+        RETURN jsonb_build_object('success', false, 'message', '该昵称已被使用');
+    END IF;
+
+    -- 更新昵称
+    UPDATE public.profiles SET nickname = new_nickname WHERE id = p_user_id;
+
+    -- 发送通知邮件
+    INSERT INTO public.system_mails (user_id, title, content)
+    VALUES (p_user_id, '昵称被修改', '管理员将您的昵称从「' || old_nickname || '」修改为「' || new_nickname || '」');
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'message', '已将 ' || old_nickname || ' 的昵称修改为 ' || new_nickname,
+        'old_nickname', old_nickname,
+        'new_nickname', new_nickname
+    );
+END;
+$$;
+
+-- ============================================================
+-- 21g. RPC 函数：获取用户列表（管理员，带搜索）
+-- ============================================================
+DROP FUNCTION IF EXISTS public.admin_get_users(TEXT, INT, INT);
+CREATE OR REPLACE FUNCTION public.admin_get_users(p_search TEXT DEFAULT '', p_page INT DEFAULT 1, p_limit INT DEFAULT 20)
+RETURNS TABLE(
+    user_id UUID,
+    nickname TEXT,
+    shells BIGINT,
+    is_admin BOOLEAN,
+    created_at TIMESTAMPTZ,
+    total_count BIGINT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+    v_offset INT;
+BEGIN
+    IF user_uuid IS NULL THEN
+        RAISE EXCEPTION '未登录';
+    END IF;
+
+    IF NOT public.check_admin() THEN
+        RAISE EXCEPTION '无权限';
+    END IF;
+
+    v_offset := (GREATEST(p_page, 1) - 1) * GREATEST(p_limit, 1);
+
+    RETURN QUERY
+    SELECT 
+        p.id AS user_id,
+        p.nickname,
+        p.shells,
+        p.is_admin,
+        p.created_at,
+        COUNT(*) OVER()::BIGINT AS total_count
+    FROM public.profiles p
+    WHERE p.nickname ILIKE '%' || COALESCE(p_search, '') || '%'
+       OR p.id::TEXT LIKE '%' || COALESCE(p_search, '') || '%'
+    ORDER BY p.created_at DESC
+    LIMIT p_limit
+    OFFSET v_offset;
+END;
+$$;
+
+-- ============================================================
+-- 22. RPC 函数：添加物品定义（管理员）
 DROP FUNCTION IF EXISTS public.admin_add_item_definition(TEXT, TEXT, TEXT, TEXT, INT, TEXT);
 CREATE OR REPLACE FUNCTION public.admin_add_item_definition(
     p_name TEXT,
@@ -2374,6 +2900,8 @@ CREATE TABLE IF NOT EXISTS public.bot_configs (
 
 ALTER TABLE public.bot_configs ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Bot configs admin all" ON public.bot_configs;
+DROP POLICY IF EXISTS "Bot configs admin read" ON public.bot_configs;
+DROP POLICY IF EXISTS "Bot configs admin write" ON public.bot_configs;
 CREATE POLICY "Bot configs admin read" ON public.bot_configs FOR SELECT USING (true);
 CREATE POLICY "Bot configs admin write" ON public.bot_configs FOR ALL USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND is_admin = true));
 
@@ -2677,7 +3205,17 @@ DECLARE
     current_count INT;
     bot_added INT;
     total_added INT := 0;
+    v_is_admin BOOLEAN;
 BEGIN
+    -- 检查权限：允许 pg_cron 调用（无认证用户）或管理员调用
+    -- pg_cron 调用时 auth.uid() 返回 NULL
+    IF auth.uid() IS NOT NULL THEN
+        SELECT COALESCE(p.is_admin, false) INTO v_is_admin
+        FROM public.profiles p WHERE p.id = auth.uid();
+        IF NOT v_is_admin THEN
+            RETURN jsonb_build_object('success', false, 'message', '无权限');
+        END IF;
+    END IF;
     FOR cfg IN
         SELECT bc.bot_id, bc.enabled,
                bc.min_orders, bc.max_orders, bc.qualities,
@@ -3446,6 +3984,13 @@ CREATE TABLE IF NOT EXISTS public.follows (
 
 ALTER TABLE public.follows ENABLE ROW LEVEL SECURITY;
 
+-- 用户可以查看自己的关注关系
+DROP POLICY IF EXISTS "Users view own follows" ON public.follows;
+CREATE POLICY "Users view own follows" ON public.follows
+    FOR SELECT USING (auth.uid() = follower_id OR auth.uid() = following_id);
+
+-- 注意：follows的INSERT/DELETE只能通过SECURITY DEFINER函数进行
+
 -- ============================================================
 -- 用户设置表
 -- ============================================================
@@ -3462,18 +4007,50 @@ CREATE TABLE IF NOT EXISTS public.user_settings (
 
 ALTER TABLE public.user_settings ENABLE ROW LEVEL SECURITY;
 
--- RLS 策略：用户只能查看/修改自己的设置
+-- RLS 策略：用户只能查看/修改自己的设置（管理员例外）
 DROP POLICY IF EXISTS "Users can view own settings" ON public.user_settings;
 CREATE POLICY "Users can view own settings" ON public.user_settings
-    FOR SELECT USING (auth.uid() = user_id);
+    FOR SELECT USING (auth.uid() = user_id OR public.check_admin());
 
 DROP POLICY IF EXISTS "Users can update own settings" ON public.user_settings;
 CREATE POLICY "Users can update own settings" ON public.user_settings
-    FOR UPDATE USING (auth.uid() = user_id);
+    FOR UPDATE USING (auth.uid() = user_id OR public.check_admin());
 
 DROP POLICY IF EXISTS "Users can insert own settings" ON public.user_settings;
 CREATE POLICY "Users can insert own settings" ON public.user_settings
-    FOR INSERT WITH CHECK (auth.uid() = user_id);
+    FOR INSERT WITH CHECK (auth.uid() = user_id OR public.check_admin());
+
+-- 保护user_settings表，用户只能修改隐私设置字段
+DROP FUNCTION IF EXISTS public.protect_settings_fields() CASCADE;
+CREATE OR REPLACE FUNCTION public.protect_settings_fields()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    -- 如果是SECURITY DEFINER函数调用（current_user为postgres），允许修改所有字段
+    IF current_user = 'postgres' THEN
+        RETURN NEW;
+    END IF;
+    
+    -- 如果是管理员操作，允许修改所有字段
+    IF public.check_admin() THEN
+        RETURN NEW;
+    END IF;
+    
+    -- 普通用户只能修改隐私设置字段，其他字段保持原值
+    NEW.user_id := OLD.user_id;
+    NEW.created_at := OLD.created_at;
+    NEW.updated_at := now(); -- 自动更新updated_at
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS protect_settings ON public.user_settings;
+CREATE TRIGGER protect_settings
+    BEFORE UPDATE ON public.user_settings
+    FOR EACH ROW
+    EXECUTE FUNCTION public.protect_settings_fields();
 
 -- 添加隐私设置字段（兼容旧版本）
 DO $$
@@ -3508,20 +4085,53 @@ CREATE INDEX IF NOT EXISTS idx_pm_created ON public.private_messages(created_at 
 
 ALTER TABLE public.private_messages ENABLE ROW LEVEL SECURITY;
 
--- RLS：用户只能查看自己发送或接收的消息
+-- RLS：用户只能查看自己发送或接收的消息（管理员例外）
 DROP POLICY IF EXISTS "Users view own messages" ON public.private_messages;
 CREATE POLICY "Users view own messages" ON public.private_messages
-    FOR SELECT USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
+    FOR SELECT USING (auth.uid() = sender_id OR auth.uid() = receiver_id OR public.check_admin());
 
--- RLS：用户只能发送消息
+-- RLS：用户只能发送消息（管理员例外）
 DROP POLICY IF EXISTS "Users insert own messages" ON public.private_messages;
 CREATE POLICY "Users insert own messages" ON public.private_messages
-    FOR INSERT WITH CHECK (auth.uid() = sender_id);
+    FOR INSERT WITH CHECK (auth.uid() = sender_id OR public.check_admin());
 
--- RLS：用户只能更新接收的消息（标记已读）
+-- RLS：用户只能更新接收的消息（标记已读）（管理员例外）
 DROP POLICY IF EXISTS "Users update received messages" ON public.private_messages;
 CREATE POLICY "Users update received messages" ON public.private_messages
-    FOR UPDATE USING (auth.uid() = receiver_id);
+    FOR UPDATE USING (auth.uid() = receiver_id OR public.check_admin());
+
+-- 保护private_messages表，用户只能修改is_read字段
+DROP FUNCTION IF EXISTS public.protect_pm_fields() CASCADE;
+CREATE OR REPLACE FUNCTION public.protect_pm_fields()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    -- 如果是SECURITY DEFINER函数调用（current_user为postgres），允许修改所有字段
+    IF current_user = 'postgres' THEN
+        RETURN NEW;
+    END IF;
+    
+    -- 如果是管理员操作，允许修改所有字段
+    IF public.check_admin() THEN
+        RETURN NEW;
+    END IF;
+    
+    -- 普通用户只能修改is_read字段，其他字段保持原值
+    NEW.sender_id := OLD.sender_id;
+    NEW.receiver_id := OLD.receiver_id;
+    NEW.content := OLD.content;
+    NEW.created_at := OLD.created_at;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS protect_pm ON public.private_messages;
+CREATE TRIGGER protect_pm
+    BEFORE UPDATE ON public.private_messages
+    FOR EACH ROW
+    EXECUTE FUNCTION public.protect_pm_fields();
 
 -- ============================================================
 -- 用户主页 RPC 函数

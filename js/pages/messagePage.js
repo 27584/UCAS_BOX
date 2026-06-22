@@ -17,6 +17,7 @@ export const messagePage = {
 
     render(container) {
         this.bindTabEvents();
+        this.loadBadges();
         // 检查是否有待处理的私信（从用户主页跳转过来）
         const pendingDm = sessionStorage.getItem('pendingDm');
         if (pendingDm) {
@@ -60,6 +61,34 @@ export const messagePage = {
                 this.switchTab(tabName);
             });
         });
+    },
+
+    async loadBadges() {
+        if (!currentUser) return;
+        try {
+            // 获取未读系统消息数量
+            const mails = await getMails(1, 100);
+            const systemUnread = mails.filter(m => !m.is_read).length;
+            const systemBadge = document.getElementById('system-badge');
+            if (systemBadge) {
+                systemBadge.textContent = systemUnread > 99 ? '99+' : systemUnread;
+                systemBadge.style.display = systemUnread > 0 ? 'flex' : 'none';
+            }
+
+            // 获取未读私信数量
+            const dmUnreadRaw = await getUnreadDmCount().catch(() => 0);
+            const dmUnread = parseInt(dmUnreadRaw) || 0;
+            console.log('未读私信数量:', dmUnreadRaw, '解析后:', dmUnread);
+            const dmBadge = document.getElementById('dm-badge');
+            console.log('dmBadge元素:', dmBadge);
+            if (dmBadge) {
+                dmBadge.textContent = dmUnread > 99 ? '99+' : dmUnread;
+                dmBadge.style.display = dmUnread > 0 ? 'flex' : 'none';
+                console.log('私信红点显示:', dmBadge.style.display, '内容:', dmBadge.textContent);
+            }
+        } catch (e) {
+            console.error('加载红点失败:', e);
+        }
     },
 
     switchTab(tabName) {
@@ -162,6 +191,9 @@ export const messagePage = {
                     try {
                         await markMailRead(mailId);
                         mail.is_read = true;
+                        // 更新红点
+                        this.loadBadges();
+                        updateMailBadge();
                     } catch (e) {}
                 }
             });
@@ -275,6 +307,9 @@ export const messagePage = {
             await markDmRead(userId);
             // 更新会话列表（清除红点）
             this.loadDmConversations();
+            // 更新红点
+            this.loadBadges();
+            updateMailBadge();
         } catch (e) {}
 
         // 绑定发送消息

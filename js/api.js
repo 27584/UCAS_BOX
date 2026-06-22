@@ -270,6 +270,62 @@ export async function adminAddItem(userId, itemId, quantity = 1) {
     });
 }
 
+// 设置用户果壳币（管理员）
+export async function adminUpdateUserShells(userId, shells) {
+    return rpc('admin_update_user_shells', {
+        p_user_id: userId,
+        p_shells: shells
+    });
+}
+
+// 增减用户果壳币（管理员）
+export async function adminAdjustUserShells(userId, amount, reason = '') {
+    return rpc('admin_adjust_user_shells', {
+        p_user_id: userId,
+        p_amount: amount,
+        p_reason: reason
+    });
+}
+
+// 移除用户物品（管理员）
+export async function adminRemoveUserItem(userId, itemId, quantity = 1) {
+    return rpc('admin_remove_user_item', {
+        p_user_id: userId,
+        p_item_id: itemId,
+        p_quantity: quantity
+    });
+}
+
+// 清空用户所有物品（管理员）
+export async function adminClearUserItems(userId) {
+    return rpc('admin_clear_user_items', { p_user_id: userId });
+}
+
+// 设置用户管理员权限（管理员）
+export async function adminSetUserAdmin(userId, isAdmin) {
+    return rpc('admin_set_user_admin', {
+        p_user_id: userId,
+        p_is_admin: isAdmin
+    });
+}
+
+// 修改用户昵称（管理员）
+export async function adminChangeUserNickname(userId, newNickname) {
+    return rpc('admin_change_user_nickname', {
+        p_user_id: userId,
+        p_new_nickname: newNickname
+    });
+}
+
+// 获取用户列表（管理员，带搜索）
+export async function adminGetUsers(search = '', page = 1, limit = 20) {
+    return rpc('admin_get_users', {
+        p_search: search,
+        p_page: page,
+        p_limit: limit
+    });
+}
+
 export async function adminAddItemDefinition(name, quality, imageName, description, dropWeight) {
     return rpc('admin_add_item_definition', {
         p_name: name,

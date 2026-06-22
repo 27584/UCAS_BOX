@@ -2563,6 +2563,46 @@
     margin-top: 4px;
 }
 
+/* 管理员操作区域 */
+.admin-actions-row {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    background: var(--bg-glass);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 12px;
+}
+
+.admin-action-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.admin-action-group > label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.shells-adjust-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.nickname-change-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.inv-item-row .btn-remove-item {
+    padding: 4px 8px;
+    font-size: 0.7rem;
+}
+
 .item-form {
     margin-bottom: 20px;
     padding: 16px;
@@ -3882,6 +3922,7 @@
     border: none;
     border-radius: var(--radius-sm);
     color: var(--text-secondary);
+    position: relative;
     font-size: 0.9rem;
     cursor: pointer;
     transition: all 0.2s;
@@ -3899,6 +3940,24 @@
 .message-tab svg {
     width: 18px;
     height: 18px;
+}
+
+.message-tab .tab-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background: #ef4444;
+    color: white;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    border-radius: 9px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 4px rgba(239, 68, 68, 0.3);
 }
 
 .message-page > .message-content {

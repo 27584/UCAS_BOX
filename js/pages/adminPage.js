@@ -1,4 +1,4 @@
-import { checkAdmin, getAllUsers, getUserDetail, getUserInventory, getSystemStats, adminGetItems, adminAddItem, adminAddItemDefinition, adminUpdateItemDefinition, getItems, getPendingSubmissions, approveSubmission, rejectSubmission, getLotteryRound, drawLotteryRound, getLotteryHistory, adminBotReplenish, getAllBotsWithConfig, updateBotConfig, adminBotListItem, adminBotCancelOrder, getBotOrders } from '../api.js';
+import { checkAdmin, getAllUsers, getUserDetail, getUserInventory, getSystemStats, adminGetItems, adminAddItem, adminAddItemDefinition, adminUpdateItemDefinition, getItems, getPendingSubmissions, approveSubmission, rejectSubmission, getLotteryRound, drawLotteryRound, getLotteryHistory, adminBotReplenish, getAllBotsWithConfig, updateBotConfig, adminBotListItem, adminBotCancelOrder, getBotOrders, adminUpdateUserShells, adminAdjustUserShells, adminRemoveUserItem, adminClearUserItems, adminSetUserAdmin, adminGetUsers, adminChangeUserNickname } from '../api.js';
 import { supabase } from '../supabaseClient.js';
 import { router } from '../router.js';
 import { createIcons, icons } from 'lucide';
@@ -326,6 +326,37 @@ export const adminPage = {
                             <span class="detail-value">${d.mail_count ?? 0}</span>
                         </div>
                     </div>
+                </div>
+                <div class="user-detail-section">
+                    <h4>管理操作</h4>
+                    <div class="admin-actions-row">
+                        <div class="admin-action-group">
+                            <label>修改昵称</label>
+                            <div class="nickname-change-row">
+                                <input type="text" class="form-input" id="new-nickname" placeholder="新昵称" maxlength="10" style="flex:1;" />
+                                <button class="btn btn-sm btn-primary" id="btn-change-nickname">修改</button>
+                            </div>
+                        </div>
+                        <div class="admin-action-group">
+                            <label>果壳币调整</label>
+                            <div class="shells-adjust-row">
+                                <input type="number" class="form-input" id="shells-adjust-amount" placeholder="数量" style="width:80px;" />
+                                <button class="btn btn-sm btn-success" id="btn-shells-add">增加</button>
+                                <button class="btn btn-sm btn-danger" id="btn-shells-reduce">减少</button>
+                            </div>
+                            <input type="text" class="form-input" id="shells-reason" placeholder="操作原因（可选）" style="margin-top:4px;" />
+                        </div>
+                        <div class="admin-action-group">
+                            <label>物品管理</label>
+                            <button class="btn btn-sm btn-danger" id="btn-clear-items">清空所有物品</button>
+                        </div>
+                        <div class="admin-action-group">
+                            <label>权限管理</label>
+                            <button class="btn btn-sm ${(d.is_admin ?? user.is_admin) ? 'btn-warning' : 'btn-success'}" id="btn-toggle-admin">
+                                ${(d.is_admin ?? user.is_admin) ? '撤销管理员' : '设为管理员'}
+                            </button>
+                        </div>
+                    </div>
                 </div>`;
 
             if (invItems.length > 0) {
@@ -336,11 +367,14 @@ export const adminPage = {
                         ${invItems.map(item => {
                             const cfg = QUALITY_CONFIG[item.item_quality] || QUALITY_CONFIG.white;
                             return `
-                                <div class="inv-item-row">
+                                <div class="inv-item-row" data-inv-item-id="${item.item_id}" data-inv-item-name="${item.item_name}">
                                     <span class="quality-dot" style="background:${cfg.color}"></span>
                                     <span class="inv-item-name">${item.item_name}</span>
                                     <span class="quality-badge quality-${item.item_quality}">${cfg.label}</span>
                                     <span class="inv-item-qty">x${item.quantity}</span>
+                                    <button class="btn btn-danger btn-xs btn-remove-item" data-item-id="${item.item_id}" data-item-name="${item.item_name}" data-qty="${item.quantity}">
+                                        <i data-lucide="trash-2"></i>
+                                    </button>
                                 </div>
                             `;
                         }).join('')}
@@ -361,6 +395,9 @@ export const adminPage = {
             bindPagination(body, (page) => {
                 this.showUserDetail(userId, page);
             });
+
+            // 绑定管理操作事件
+            this.bindUserDetailActions(userId);
         };
 
         try {
@@ -1143,5 +1180,167 @@ export const adminPage = {
             btn.innerHTML = '<i data-lucide="refresh-cw"></i> 立刻补货';
             createIcons({ icons });
         }
+    },
+
+    // 用户详情操作事件绑定
+    async bindUserDetailActions(userId) {
+        // 修改昵称
+        const btnChangeNickname = document.getElementById('btn-change-nickname');
+        if (btnChangeNickname) {
+            btnChangeNickname.addEventListener('click', async () => {
+                const newNickname = document.getElementById('new-nickname')?.value?.trim();
+                if (!newNickname || newNickname.length < 2) {
+                    showToast('昵称至少需要2个字符', 'error');
+                    return;
+                }
+                if (newNickname.length > 10) {
+                    showToast('昵称不能超过10个字符', 'error');
+                    return;
+                }
+                btnChangeNickname.disabled = true;
+                try {
+                    const result = await adminChangeUserNickname(userId, newNickname);
+                    if (result?.success) {
+                        showToast(result.message, 'success');
+                        this.showUserDetail(userId, 1);
+                        this.loadUsers();
+                    } else {
+                        showToast(result?.message || '修改失败', 'error');
+                    }
+                } catch (e) {
+                    showToast('修改失败', 'error');
+                }
+                btnChangeNickname.disabled = false;
+            });
+        }
+
+        // 增加果壳币
+        const btnShellsAdd = document.getElementById('btn-shells-add');
+        if (btnShellsAdd) {
+            btnShellsAdd.addEventListener('click', async () => {
+                const amount = parseInt(document.getElementById('shells-adjust-amount')?.value);
+                const reason = document.getElementById('shells-reason')?.value || '管理员操作';
+                if (!amount || amount <= 0) {
+                    showToast('请输入有效的数量', 'error');
+                    return;
+                }
+                btnShellsAdd.disabled = true;
+                try {
+                    const result = await adminAdjustUserShells(userId, amount, reason);
+                    if (result?.success) {
+                        showToast(result.message, 'success');
+                        this.showUserDetail(userId, 1);
+                    } else {
+                        showToast(result?.message || '操作失败', 'error');
+                    }
+                } catch (e) {
+                    showToast('操作失败', 'error');
+                }
+                btnShellsAdd.disabled = false;
+            });
+        }
+
+        // 减少果壳币
+        const btnShellsReduce = document.getElementById('btn-shells-reduce');
+        if (btnShellsReduce) {
+            btnShellsReduce.addEventListener('click', async () => {
+                const amount = parseInt(document.getElementById('shells-adjust-amount')?.value);
+                const reason = document.getElementById('shells-reason')?.value || '管理员操作';
+                if (!amount || amount <= 0) {
+                    showToast('请输入有效的数量', 'error');
+                    return;
+                }
+                btnShellsReduce.disabled = true;
+                try {
+                    const result = await adminAdjustUserShells(userId, -amount, reason);
+                    if (result?.success) {
+                        showToast(result.message, 'success');
+                        this.showUserDetail(userId, 1);
+                    } else {
+                        showToast(result?.message || '操作失败', 'error');
+                    }
+                } catch (e) {
+                    showToast('操作失败', 'error');
+                }
+                btnShellsReduce.disabled = false;
+            });
+        }
+
+        // 清空所有物品
+        const btnClearItems = document.getElementById('btn-clear-items');
+        if (btnClearItems) {
+            btnClearItems.addEventListener('click', async () => {
+                if (!confirm('确定要清空该用户的所有物品吗？此操作不可撤销！')) {
+                    return;
+                }
+                btnClearItems.disabled = true;
+                try {
+                    const result = await adminClearUserItems(userId);
+                    if (result?.success) {
+                        showToast(result.message, 'success');
+                        this.showUserDetail(userId, 1);
+                        this.loadStats();
+                    } else {
+                        showToast(result?.message || '操作失败', 'error');
+                    }
+                } catch (e) {
+                    showToast('操作失败', 'error');
+                }
+                btnClearItems.disabled = false;
+            });
+        }
+
+        // 设置/撤销管理员
+        const btnToggleAdmin = document.getElementById('btn-toggle-admin');
+        if (btnToggleAdmin) {
+            btnToggleAdmin.addEventListener('click', async () => {
+                const user = this.users.find(u => u.user_id === userId);
+                const currentAdmin = user?.is_admin;
+                const action = currentAdmin ? '撤销' : '设为';
+                if (!confirm(`确定要${action}该用户的管理员权限吗？`)) {
+                    return;
+                }
+                btnToggleAdmin.disabled = true;
+                try {
+                    const result = await adminSetUserAdmin(userId, !currentAdmin);
+                    if (result?.success) {
+                        showToast(result.message, 'success');
+                        this.showUserDetail(userId, 1);
+                        this.loadUsers();
+                        this.loadStats();
+                    } else {
+                        showToast(result?.message || '操作失败', 'error');
+                    }
+                } catch (e) {
+                    showToast('操作失败', 'error');
+                }
+                btnToggleAdmin.disabled = false;
+            });
+        }
+
+        // 移除单个物品
+        document.querySelectorAll('.btn-remove-item').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const itemId = parseInt(btn.dataset.itemId);
+                const itemName = btn.dataset.itemName;
+                const qty = parseInt(btn.dataset.qty);
+                if (!confirm(`确定要移除该用户的「${itemName}」吗？`)) {
+                    return;
+                }
+                btn.disabled = true;
+                try {
+                    const result = await adminRemoveUserItem(userId, itemId, qty);
+                    if (result?.success) {
+                        showToast(result.message, 'success');
+                        this.showUserDetail(userId, 1);
+                    } else {
+                        showToast(result?.message || '移除失败', 'error');
+                    }
+                } catch (e) {
+                    showToast('移除失败', 'error');
+                }
+                btn.disabled = false;
+            });
+        });
     }
 };
