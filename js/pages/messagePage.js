@@ -270,21 +270,34 @@ export const messagePage = {
 
     async openChat(userId, nickname) {
         this.currentChatUser = { id: userId, nickname };
-        
+
         // 显示聊天主界面
         const chatEmpty = document.getElementById('chat-empty');
         const chatMain = document.getElementById('chat-main');
+        const chatContainer = document.getElementById('chat-container');
         chatEmpty.style.display = 'none';
         chatMain.style.display = 'flex';
+
+        // 移动端：聊天界面全屏显示
+        const isMobile = window.innerWidth <= 600;
+        if (isMobile && chatContainer) {
+            chatContainer.classList.add('mobile-active');
+        }
 
         // 高亮选中的会话
         document.querySelectorAll('.dm-item').forEach(item => {
             item.classList.toggle('active', item.dataset.userId === userId);
         });
 
-        // 渲染聊天头部
+        // 渲染聊天头部（移动端加返回按钮）
         const chatHeader = document.getElementById('chat-header');
-        chatHeader.innerHTML = `
+        const backBtnHtml = isMobile ? `
+            <button class="chat-back-btn" id="chat-back-btn">
+                <i data-lucide="arrow-left"></i>
+                返回
+            </button>
+        ` : '';
+        chatHeader.innerHTML = backBtnHtml + `
             <div class="chat-user-info">
                 <span class="chat-user-name">${nickname}</span>
             </div>
@@ -294,6 +307,21 @@ export const messagePage = {
             </button>
         `;
 
+        // 绑定返回按钮（移动端）
+        const backBtn = document.getElementById('chat-back-btn');
+        if (backBtn) {
+            backBtn.addEventListener('click', () => {
+                chatContainer.classList.remove('mobile-active');
+                chatEmpty.style.display = 'flex';
+                chatMain.style.display = 'none';
+                this.currentChatUser = null;
+                // 清除会话高亮
+                document.querySelectorAll('.dm-item').forEach(item => {
+                    item.classList.remove('active');
+                });
+            });
+        }
+
         // 绑定查看用户主页
         chatHeader.querySelector('.chat-user-link').addEventListener('click', () => {
             router.navigate(`user/${userId}`);
@@ -301,7 +329,7 @@ export const messagePage = {
 
         // 加载聊天记录
         await this.loadChatHistory(userId);
-        
+
         // 标记已读
         try {
             await markDmRead(userId);
@@ -315,7 +343,7 @@ export const messagePage = {
         // 绑定发送消息
         const sendBtn = document.getElementById('send-dm-btn');
         const input = document.getElementById('dm-input');
-        
+
         sendBtn.onclick = () => this.sendMessage(userId, input);
         input.onkeypress = (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
