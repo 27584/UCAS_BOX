@@ -7,6 +7,11 @@
                 系统消息
                 <span class="tab-badge" id="system-badge" style="display:none;">0</span>
             </button>
+            <button class="message-tab" data-tab="notification">
+                <i data-lucide="message-square"></i>
+                回复通知
+                <span class="tab-badge" id="notification-badge" style="display:none;">0</span>
+            </button>
             <button class="message-tab" data-tab="dm">
                 <i data-lucide="mail"></i>
                 私信
@@ -18,6 +23,13 @@
     <div class="message-content">
         <!-- 系统消息 -->
         <div class="message-list" id="system-messages">
+            <div class="skeleton" style="height:80px;"></div>
+            <div class="skeleton" style="height:80px;"></div>
+            <div class="skeleton" style="height:80px;"></div>
+        </div>
+        
+        <!-- 回复通知 -->
+        <div class="message-list" id="notification-list" style="display:none;">
             <div class="skeleton" style="height:80px;"></div>
             <div class="skeleton" style="height:80px;"></div>
             <div class="skeleton" style="height:80px;"></div>

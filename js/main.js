@@ -2,8 +2,8 @@ import { initAuth, resendVerificationEmail, updateMailBadge } from './auth.js';
 import { router } from './router.js';
 import { createIcons, icons } from 'lucide';
 import { showToast, itemImageHTML, openItemDetail, QUALITY_CONFIG, initItemImages } from './utils.js';
-import { useRenameCard, useDragonBoatBag, getMinVersion } from './api.js';
-import { formatNumber } from './utils.js';
+import { useRenameCard, useDragonBoatBag, getMinVersion, getReplyNotifications, markAllNotificationsRead, getUnreadNotificationCount } from './api.js';
+import { formatNumber, timeAgo, userAvatarHTML, userBadgeHTML } from './utils.js';
 import { VERSION, VERSION_CODE } from './version.js';
 import { currentUser } from './supabaseClient.js';
 
@@ -47,8 +47,12 @@ async function bootstrap() {
     setInterval(() => {
         if (currentUser) {
             updateMailBadge();
+            updateNotificationBadge();
         }
     }, 15000);
+
+    // 初始化通知系统
+    initNotificationSystem();
 }
 
 // 版本检测
@@ -301,3 +305,29 @@ async function useDragonBoatBagMain() {
         showToast(result?.message || '打开失败', 'error');
     }
 }
+
+// ============================================
+// 通知系统
+// ============================================
+async function updateNotificationBadge() {
+    try {
+        const count = await getUnreadNotificationCount();
+        const badge = document.getElementById('notification-badge');
+        if (badge) {
+            if (count > 0) {
+                badge.textContent = count > 99 ? '99+' : count;
+                badge.style.display = 'block';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+    } catch (e) {
+        console.error('更新通知徽章失败:', e);
+    }
+}
+
+function initNotificationSystem() {
+    // 通知按钮已移除，徽章显示在消息页面内
+}
+
+

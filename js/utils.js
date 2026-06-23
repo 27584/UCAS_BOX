@@ -47,6 +47,21 @@ export function userBadgeHTML(user) {
     return html;
 }
 
+export function userAvatarHTML(user) {
+    if (!user) return '';
+    const avatarUrl = user.avatar_url || user.user_avatar_url;
+    const nickname = user.nickname || user.user_nickname || '未知用户';
+    const initial = nickname.charAt(0);
+    const isUrl = avatarUrl && (/^https?:\/\//i.test(avatarUrl) || /^data:image\//i.test(avatarUrl));
+    return `
+        <div class="avatar-wrapper">
+            <div class="avatar" style="background:var(--paper-card);border:1.5px solid var(--ink);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-weight:700;color:var(--ink);">
+                ${isUrl ? `<img src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(nickname)}" class="avatar-img">` : `<span class="avatar-initial">${initial}</span>`}
+            </div>
+        </div>
+    `;
+}
+
 export function formatNumber(n) {
     return n.toLocaleString('zh-CN');
 }

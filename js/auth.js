@@ -1,7 +1,9 @@
 import { supabase, currentUser, refreshSession } from './supabaseClient.js';
 import { router } from './router.js';
-import { getProfile, getMails, getUnreadDmCount, checkAdmin } from './api.js';
+import { getProfile, getMails, getUnreadDmCount, getUnreadNotificationCount, checkAdmin, userPing } from './api.js';
 import { formatNumber, showToast } from './utils.js';
+
+let pingInterval = null;
 
 // ============================================
 // 认证状态管理
@@ -14,6 +16,7 @@ export async function initAuth() {
     updateMailBadge();
     updateAdminNav();
     checkEmailVerification();
+    startOnlinePing();
 
     supabase.auth.onAuthStateChange((event, session) => {
         updateNavVisibility();
@@ -21,6 +24,14 @@ export async function initAuth() {
         updateMailBadge();
         updateAdminNav();
         checkEmailVerification();
+        
+        if (session) {
+            userPing().catch(() => {});
+            startOnlinePing();
+        } else {
+            stopOnlinePing();
+        }
+        
         const hash = window.location.hash.replace('#', '') || 'lobby';
         if (!session && hash !== 'auth') {
             router.navigate('auth');
@@ -34,6 +45,21 @@ export async function initAuth() {
             });
         }
     });
+}
+
+function startOnlinePing() {
+    if (pingInterval) return;
+    userPing().catch(() => {});
+    pingInterval = setInterval(() => {
+        userPing().catch(() => {});
+    }, 2 * 60 * 1000);
+}
+
+function stopOnlinePing() {
+    if (pingInterval) {
+        clearInterval(pingInterval);
+        pingInterval = null;
+    }
 }
 
 export async function checkEmailVerification() {
@@ -98,28 +124,22 @@ export async function updateGlobalShells() {
 export async function updateMailBadge() {
     if (!currentUser) {
         document.getElementById('mail-badge')?.style.setProperty('display', 'none');
-        document.getElementById('header-mail-badge')?.style.setProperty('display', 'none');
         return;
     }
     try {
-        // 同时检查未读系统消息和未读私信
-        const [mails, dmUnread] = await Promise.all([
+        // 同时检查未读系统消息、回复通知和未读私信
+        const [mails, notificationUnread, dmUnread] = await Promise.all([
             getMails(),
+            getUnreadNotificationCount().catch(() => 0),
             getUnreadDmCount().catch(() => 0)
         ]);
         const mailUnread = mails.filter(m => !m.is_read).length;
-        // 优先显示私信红点（如果有未读私信）
-        const totalUnread = mailUnread + (parseInt(dmUnread) || 0);
+        const totalUnread = mailUnread + (parseInt(notificationUnread) || 0) + (parseInt(dmUnread) || 0);
         
         const navBadge = document.getElementById('mail-badge');
-        const headerBadge = document.getElementById('header-mail-badge');
         if (navBadge) {
             navBadge.textContent = totalUnread > 99 ? '99+' : totalUnread;
             navBadge.style.display = totalUnread > 0 ? 'flex' : 'none';
-        }
-        if (headerBadge) {
-            headerBadge.textContent = totalUnread > 99 ? '99+' : totalUnread;
-            headerBadge.style.display = totalUnread > 0 ? 'flex' : 'none';
         }
     } catch (e) {
         // silently fail

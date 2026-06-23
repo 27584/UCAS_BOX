@@ -1,0 +1,152 @@
+.follow-page-wrapper {
+    padding: 20px;
+}
+
+.follow-page-wrapper .page-header {
+    margin-bottom: 20px;
+}
+
+.follow-page-wrapper .page-header h2 {
+    font-family: var(--font-display);
+    color: var(--ink);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.follow-page {
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.follow-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid var(--ink);
+    padding-bottom: 10px;
+}
+
+.follow-tab {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 20px;
+    background: var(--paper-bg);
+    border: 1.5px solid var(--ink);
+    font-family: var(--font-mono);
+    font-size: 0.9rem;
+    color: var(--ink-soft);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.follow-tab:hover {
+    background: var(--paper-card);
+    color: var(--ink);
+}
+
+.follow-tab.active {
+    background: var(--ink);
+    color: var(--paper-bg);
+}
+
+.follow-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.follow-loading,
+.follow-empty {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--ink-soft);
+    font-family: var(--font-mono);
+}
+
+.follow-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    background: var(--paper-card);
+    border: 1.5px solid var(--ink);
+    transition: all 0.15s ease;
+}
+
+.follow-item:hover {
+    box-shadow: var(--shadow-lift);
+    transform: translateY(-2px);
+}
+
+.follow-avatar {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.follow-avatar .avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: 2px solid var(--ink);
+    object-fit: cover;
+}
+
+.online-dot {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    width: 12px;
+    height: 12px;
+    background: #27ae60;
+    border: 2px solid var(--paper-card);
+    border-radius: 50%;
+}
+
+.follow-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.follow-name {
+    font-family: var(--font-display);
+    font-size: 1rem;
+    color: var(--ink);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.online-tag {
+    font-size: 0.75rem;
+    padding: 2px 6px;
+    background: #27ae60;
+    color: white;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+}
+
+.mutual-tag {
+    font-size: 0.75rem;
+    padding: 2px 6px;
+    background: var(--accent);
+    color: var(--ink);
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    margin-top: 4px;
+}
+
+.follow-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.follow-actions .btn {
+    padding: 8px 12px;
+    font-size: 0.85rem;
+}

@@ -257,6 +257,56 @@ export async function getAllUsers(page = 1, limit = 20) {
     return rpc('get_all_users', { p_page: page, p_limit: limit });
 }
 
+// 关注/粉丝系统
+export async function toggleFollow(targetUserId) {
+    return rpc('toggle_follow', { p_target_user_id: targetUserId });
+}
+
+export async function checkFollowing(targetUserId) {
+    return rpc('check_following', { p_target_user_id: targetUserId });
+}
+
+export async function getFollowers(userId, limit = 50, offset = 0) {
+    return rpc('get_followers', { p_user_id: userId, p_limit: limit, p_offset: offset });
+}
+
+export async function getFollowing(userId, limit = 50, offset = 0) {
+    return rpc('get_following', { p_user_id: userId, p_limit: limit, p_offset: offset });
+}
+
+export async function getFriendsWithOnline(userId, limit = 50) {
+    return rpc('get_friends_with_online', { p_user_id: userId, p_limit: limit });
+}
+
+export async function getFollowingWithOnline(userId, limit = 50) {
+    return rpc('get_following_with_online', { p_user_id: userId, p_limit: limit });
+}
+
+export async function getFollowersWithOnline(userId, limit = 50) {
+    return rpc('get_followers_with_online', { p_user_id: userId, p_limit: limit });
+}
+
+export async function userPing() {
+    return rpc('user_ping');
+}
+
+// 回复通知系统
+export async function getReplyNotifications(page = 1, limit = 20) {
+    return rpc('get_reply_notifications', { p_page: page, p_limit: limit });
+}
+
+export async function markNotificationRead(notificationId) {
+    return rpc('mark_notification_read', { p_notification_id: notificationId });
+}
+
+export async function markAllNotificationsRead() {
+    return rpc('mark_all_notifications_read');
+}
+
+export async function getUnreadNotificationCount() {
+    return rpc('get_unread_notification_count');
+}
+
 export async function getUserDetail(userId) {
     return rpc('admin_get_user_detail', { p_user_id: userId });
 }
@@ -469,26 +519,6 @@ export async function getUserPosts(userId, limit = 20, offset = 0) {
 
 export async function getUserInventoryPublic(userId, page = 1, limit = 50) {
     return rpc('get_user_inventory_public', { p_user_id: userId, p_page: page, p_limit: limit });
-}
-
-// ============================================
-// 关注功能
-// ============================================
-
-export async function toggleFollow(userId) {
-    return rpc('toggle_follow', { p_target_user_id: userId });
-}
-
-export async function checkFollowing(userId) {
-    return rpc('check_following', { p_target_user_id: userId });
-}
-
-export async function getFollowers(userId, limit = 50, offset = 0) {
-    return rpc('get_followers', { p_user_id: userId, p_limit: limit, p_offset: offset });
-}
-
-export async function getFollowing(userId, limit = 50, offset = 0) {
-    return rpc('get_following', { p_user_id: userId, p_limit: limit, p_offset: offset });
 }
 
 // ============================================

@@ -258,6 +258,106 @@ body.drop-modal-open::after {
 }
 .shell-badge svg { width: 14px; height: 14px; }
 .shell-badge#header-mail-btn { transform: rotate(0deg); cursor: pointer; text-decoration: none; }
+.shell-badge.notification-btn { transform: rotate(0deg); background: transparent; }
+
+/* ============================================
+   通知弹窗
+   ============================================ */
+.notification-panel {
+    max-width: 400px;
+    width: 90%;
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.notification-panel h3 {
+    font-family: var(--font-display);
+    color: var(--ink);
+    margin: 0 0 16px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.notification-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.notification-loading,
+.notification-empty {
+    padding: 30px 20px;
+    text-align: center;
+    color: var(--ink-soft);
+    font-family: var(--font-mono);
+}
+
+.notification-item {
+    display: flex;
+    gap: 12px;
+    padding: 12px;
+    background: var(--paper-bg);
+    border: 1px solid var(--ink-faded);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.notification-item:hover {
+    background: var(--paper-card);
+    border-color: var(--ink);
+}
+
+.notification-item.unread {
+    background: rgba(232, 185, 74, 0.1);
+    border-left: 3px solid var(--accent);
+}
+
+.notification-avatar .avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 1.5px solid var(--ink);
+    object-fit: cover;
+}
+
+.notification-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.notification-author {
+    font-family: var(--font-display);
+    font-size: 0.9rem;
+    color: var(--ink);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.notification-text {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--ink-soft);
+    margin-top: 4px;
+    word-break: break-word;
+}
+
+.notification-meta {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+    font-size: 0.75rem;
+    color: var(--ink-mute);
+}
+
+.notification-post {
+    font-family: var(--font-mono);
+}
+
+.notification-time {
+    font-family: var(--font-mono);
+}
 
 /* ============================================
    底部导航（移动端）

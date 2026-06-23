@@ -27,6 +27,7 @@
     <link rel="stylesheet" href="css/pages/userPage.css">
     <link rel="stylesheet" href="css/pages/postPage.css">
     <link rel="stylesheet" href="css/pages/messagePage.css">
+    <link rel="stylesheet" href="css/pages/followPage.css">
     <link rel="stylesheet" href="css/animations.css">
     <style>
         #buy-modal #market-buy-quantity-selector {
@@ -174,10 +175,6 @@
                 </a>
             </nav>
             <div class="nav-user">
-                <a href="#message" class="shell-badge" id="header-mail-btn" style="text-decoration:none;">
-                    <i data-lucide="message-circle"></i>
-                    <span class="badge" id="header-mail-badge" style="display:none;"></span>
-                </a>
                 <span class="shell-badge">
                     <i data-lucide="coins"></i>
                     <span id="global-shells">0</span>
@@ -245,6 +242,22 @@
                 <span>管理</span>
             </a>
         </nav>
+    </div>
+
+    <!-- 通知弹窗 -->
+    <div id="notification-modal" class="modal" style="display:none;">
+        <div class="modal-overlay" id="notification-overlay"></div>
+        <div class="modal-content notification-panel">
+            <button class="btn-close" id="notification-close"><i data-lucide="x"></i></button>
+            <h3><i data-lucide="bell"></i> 回复通知</h3>
+            <div class="notification-list" id="notification-list">
+                <div class="notification-loading">加载中...</div>
+            </div>
+            <button class="btn btn-secondary btn-mark-all" id="btn-mark-all-read" style="width:100%;margin-top:12px;">
+                <i data-lucide="check"></i>
+                全部标记已读
+            </button>
+        </div>
     </div>
 
     <!-- 全局消息提示 -->

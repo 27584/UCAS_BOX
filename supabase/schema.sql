@@ -2993,13 +2993,61 @@ BEGIN
 END;
 $$;
 
--- 为已存在的 profiles 表添加机器人标记
+-- 为已存在的 profiles 表添加机器人标记、头像和最后活跃时间字段
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'is_bot') THEN
         ALTER TABLE public.profiles ADD COLUMN is_bot BOOLEAN DEFAULT false;
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'avatar_url') THEN
+        ALTER TABLE public.profiles ADD COLUMN avatar_url TEXT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'last_active_at') THEN
+        ALTER TABLE public.profiles ADD COLUMN last_active_at TIMESTAMPTZ DEFAULT '1970-01-01'::timestamptz;
+    ELSE
+        ALTER TABLE public.profiles DISABLE TRIGGER trigger_update_last_active_at;
+        UPDATE public.profiles SET last_active_at = '1970-01-01'::timestamptz;
+        ALTER TABLE public.profiles ENABLE TRIGGER trigger_update_last_active_at;
+    END IF;
 END $$;
+
+-- ============================================================
+-- 更新用户活跃时间触发器
+-- ============================================================
+DROP TRIGGER IF EXISTS trigger_update_last_active_at ON public.profiles;
+DROP FUNCTION IF EXISTS public.update_last_active_at();
+CREATE OR REPLACE FUNCTION public.update_last_active_at()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    NEW.last_active_at = NOW();
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trigger_update_last_active_at
+    BEFORE UPDATE ON public.profiles
+    FOR EACH ROW
+    EXECUTE FUNCTION public.update_last_active_at();
+
+-- ============================================================
+-- 用户在线状态Ping函数
+-- ============================================================
+DROP FUNCTION IF EXISTS public.user_ping();
+CREATE OR REPLACE FUNCTION public.user_ping()
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    UPDATE public.profiles
+    SET last_active_at = NOW()
+    WHERE id = auth.uid();
+    
+    RETURN jsonb_build_object('success', true, 'message', '活跃时间已更新');
+END;
+$$;
 
 -- ============================================================
 -- 机器人配置表（关联 profiles.id，机器人即 is_bot=true 的 profile）
@@ -3848,10 +3896,14 @@ $$;
 CREATE OR REPLACE FUNCTION public.create_comment(p_post_id BIGINT, p_content TEXT, p_parent_id BIGINT DEFAULT NULL)
 RETURNS JSONB
 LANGUAGE plpgsql
+SECURITY DEFINER
 AS $$
 DECLARE
     user_uuid UUID;
     v_comment_id BIGINT;
+    v_parent_author_id UUID;
+    v_post_author_id UUID;
+    v_parent_content TEXT;
 BEGIN
     user_uuid := auth.uid();
     IF user_uuid IS NULL THEN
@@ -3865,6 +3917,35 @@ BEGIN
     INSERT INTO public.comments (post_id, user_id, parent_id, content)
     VALUES (p_post_id, user_uuid, p_parent_id, p_content)
     RETURNING id INTO v_comment_id;
+
+    -- 获取帖子作者
+    SELECT user_id INTO v_post_author_id 
+    FROM public.posts 
+    WHERE id = p_post_id;
+
+    -- 如果是回复评论，通知被回复者（不通知帖子作者）
+    IF p_parent_id IS NOT NULL THEN
+        SELECT user_id, content INTO v_parent_author_id, v_parent_content 
+        FROM public.comments 
+        WHERE id = p_parent_id;
+        
+        IF v_parent_author_id IS NOT NULL AND v_parent_author_id != user_uuid THEN
+            INSERT INTO public.reply_notifications (
+                user_id, reply_id, post_id, reply_author_id, content, notification_type, parent_content
+            ) VALUES (
+                v_parent_author_id, v_comment_id, p_post_id, user_uuid, p_content, 'reply', LEFT(v_parent_content, 50)
+            );
+        END IF;
+    ELSE
+        -- 如果是一级评论且评论者不是帖子作者，通知帖子作者
+        IF v_post_author_id IS NOT NULL AND v_post_author_id != user_uuid THEN
+            INSERT INTO public.reply_notifications (
+                user_id, reply_id, post_id, reply_author_id, content, notification_type
+            ) VALUES (
+                v_post_author_id, v_comment_id, p_post_id, user_uuid, p_content, 'post_comment'
+            );
+        END IF;
+    END IF;
 
     RETURN jsonb_build_object('success', true, 'comment_id', v_comment_id);
 END;
@@ -4875,5 +4956,245 @@ BEGIN
     END IF;
     
     RETURN v_allow_follow;
+END;
+$$;
+-- ============================================================
+-- 12. 回复通知系统（关注系统已存在）
+-- ============================================================
+
+-- 12.1 回复通知表
+CREATE TABLE IF NOT EXISTS public.reply_notifications (
+    id BIGSERIAL PRIMARY KEY,
+    user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+    reply_id BIGINT REFERENCES public.comments(id) ON DELETE CASCADE NOT NULL,
+    post_id BIGINT REFERENCES public.posts(id) ON DELETE CASCADE NOT NULL,
+    reply_author_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+    content TEXT NOT NULL,
+    notification_type TEXT DEFAULT 'reply',
+    parent_content TEXT DEFAULT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    is_read BOOLEAN DEFAULT FALSE
+);
+
+CREATE INDEX IF NOT EXISTS idx_reply_notifications_user ON public.reply_notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_reply_notifications_unread ON public.reply_notifications(user_id, is_read);
+
+ALTER TABLE public.reply_notifications ADD COLUMN IF NOT EXISTS notification_type TEXT DEFAULT 'reply';
+ALTER TABLE public.reply_notifications ADD COLUMN IF NOT EXISTS parent_content TEXT DEFAULT NULL;
+
+-- ============================================================
+-- 12.2 RPC 函数：获取好友列表（互关用户，带在线状态）
+-- ============================================================
+DROP FUNCTION IF EXISTS public.get_friends_with_online(UUID, INT);
+CREATE OR REPLACE FUNCTION public.get_friends_with_online(p_user_id UUID, p_limit INT DEFAULT 50)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    RETURN (
+        SELECT jsonb_agg(t) FROM (
+            SELECT
+                p.id AS user_id,
+                p.nickname,
+                p.avatar_url,
+                p.is_admin,
+                p.is_bot,
+                CASE 
+                    WHEN p.last_active_at > NOW() - INTERVAL '5 minutes' THEN true
+                    ELSE false
+                END AS is_online
+            FROM public.profiles p
+            WHERE EXISTS (
+                SELECT 1 FROM public.follows f1 
+                WHERE f1.follower_id = p_user_id AND f1.following_id = p.id
+            ) AND EXISTS (
+                SELECT 1 FROM public.follows f2 
+                WHERE f2.follower_id = p.id AND f2.following_id = p_user_id
+            )
+            ORDER BY p.last_active_at DESC
+            LIMIT p_limit
+        ) t
+    );
+END;
+$$;
+
+-- ============================================================
+-- 12.3 RPC 函数：获取关注列表（带在线状态和互关标记）
+-- ============================================================
+DROP FUNCTION IF EXISTS public.get_following_with_online(UUID, INT);
+CREATE OR REPLACE FUNCTION public.get_following_with_online(p_user_id UUID, p_limit INT DEFAULT 50)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    RETURN (
+        SELECT jsonb_agg(t) FROM (
+            SELECT
+                p.id AS user_id,
+                p.nickname,
+                p.avatar_url,
+                p.is_admin,
+                p.is_bot,
+                f.created_at AS followed_at,
+                EXISTS (
+                    SELECT 1 FROM public.follows f2 
+                    WHERE f2.follower_id = p.id AND f2.following_id = p_user_id
+                ) AS is_mutual,
+                CASE 
+                    WHEN p.last_active_at > NOW() - INTERVAL '5 minutes' THEN true
+                    ELSE false
+                END AS is_online
+            FROM public.follows f
+            JOIN public.profiles p ON f.following_id = p.id
+            WHERE f.follower_id = p_user_id
+            ORDER BY p.last_active_at DESC
+            LIMIT p_limit
+        ) t
+    );
+END;
+$$;
+
+-- ============================================================
+-- 12.4 RPC 函数：获取粉丝列表（带在线状态和互关标记）
+-- ============================================================
+DROP FUNCTION IF EXISTS public.get_followers_with_online(UUID, INT);
+CREATE OR REPLACE FUNCTION public.get_followers_with_online(p_user_id UUID, p_limit INT DEFAULT 50)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    RETURN (
+        SELECT jsonb_agg(t) FROM (
+            SELECT
+                p.id AS user_id,
+                p.nickname,
+                p.avatar_url,
+                p.is_admin,
+                p.is_bot,
+                f.created_at AS followed_at,
+                EXISTS (
+                    SELECT 1 FROM public.follows f2 
+                    WHERE f2.follower_id = p_user_id AND f2.following_id = p.id
+                ) AS is_mutual,
+                CASE 
+                    WHEN p.last_active_at > NOW() - INTERVAL '5 minutes' THEN true
+                    ELSE false
+                END AS is_online
+            FROM public.follows f
+            JOIN public.profiles p ON f.follower_id = p.id
+            WHERE f.following_id = p_user_id
+            ORDER BY p.last_active_at DESC
+            LIMIT p_limit
+        ) t
+    );
+END;
+$$;
+
+-- ============================================================
+-- 12.5 RPC 函数：获取未读回复通知
+-- ============================================================
+DROP FUNCTION IF EXISTS public.get_reply_notifications(INT);
+DROP FUNCTION IF EXISTS public.get_reply_notifications(INT, INT);
+CREATE OR REPLACE FUNCTION public.get_reply_notifications(p_limit INT DEFAULT 20, p_page INT DEFAULT 1)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_user_id UUID := auth.uid();
+    v_offset INT := (p_page - 1) * p_limit;
+    v_total_count INT;
+BEGIN
+    SELECT COUNT(*) INTO v_total_count 
+    FROM public.reply_notifications n
+    WHERE n.user_id = v_user_id;
+
+    RETURN (
+        SELECT jsonb_agg(t) FROM (
+            SELECT
+                n.id AS notification_id,
+                n.post_id,
+                LEFT(po.content, 50) AS post_title,
+                n.reply_id,
+                n.content,
+                n.reply_author_id,
+                p.nickname AS reply_author_name,
+                p.avatar_url AS reply_author_avatar,
+                p.is_admin AS reply_author_is_admin,
+                p.is_bot AS reply_author_is_bot,
+                n.created_at,
+                n.is_read,
+                n.notification_type,
+                n.parent_content,
+                v_total_count AS total_count
+            FROM public.reply_notifications n
+            JOIN public.posts po ON n.post_id = po.id
+            JOIN public.profiles p ON n.reply_author_id = p.id
+            WHERE n.user_id = v_user_id
+            ORDER BY n.created_at DESC
+            LIMIT p_limit
+            OFFSET v_offset
+        ) t
+    );
+END;
+$$;
+
+-- ============================================================
+-- 12.6 RPC 函数：标记通知为已读
+-- ============================================================
+DROP FUNCTION IF EXISTS public.mark_notification_read(BIGINT);
+CREATE OR REPLACE FUNCTION public.mark_notification_read(p_notification_id BIGINT)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_user_id UUID := auth.uid();
+BEGIN
+    UPDATE public.reply_notifications 
+    SET is_read = true 
+    WHERE id = p_notification_id AND user_id = v_user_id;
+END;
+$$;
+
+-- ============================================================
+-- 12.7 RPC 函数：标记所有通知为已读
+-- ============================================================
+DROP FUNCTION IF EXISTS public.mark_all_notifications_read();
+CREATE OR REPLACE FUNCTION public.mark_all_notifications_read()
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_user_id UUID := auth.uid();
+BEGIN
+    UPDATE public.reply_notifications 
+    SET is_read = true 
+    WHERE user_id = v_user_id AND is_read = false;
+END;
+$$;
+
+-- ============================================================
+-- 12.8 RPC 函数：获取未读通知数量
+-- ============================================================
+DROP FUNCTION IF EXISTS public.get_unread_notification_count();
+CREATE OR REPLACE FUNCTION public.get_unread_notification_count()
+RETURNS INT
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_user_id UUID := auth.uid();
+    v_count INT;
+BEGIN
+    SELECT COUNT(*) INTO v_count 
+    FROM public.reply_notifications 
+    WHERE user_id = v_user_id AND is_read = false;
+    
+    RETURN v_count;
 END;
 $$;

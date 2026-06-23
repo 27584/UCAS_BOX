@@ -1,4 +1,4 @@
-import { getMails, markMailRead, getDmConversations, getDmHistory, sendPrivateMessage, markDmRead, getUnreadDmCount } from '../api.js';
+import { getMails, markMailRead, getDmConversations, getDmHistory, sendPrivateMessage, markDmRead, getUnreadDmCount, getReplyNotifications, markNotificationRead, markAllNotificationsRead, getUnreadNotificationCount } from '../api.js';
 import { createIcons, icons } from 'lucide';
 import { showToast, renderPagination, bindPagination } from '../utils.js';
 import { currentUser } from '../supabaseClient.js';
@@ -9,6 +9,7 @@ export const messagePage = {
     mails: [],
     dmConversations: [],
     dmHistory: [],
+    notifications: [],
     currentTab: 'system',
     page: 1,
     limit: 20,
@@ -18,21 +19,40 @@ export const messagePage = {
     render(container) {
         this.bindTabEvents();
         this.loadBadges();
+        // 检查是否有待处理的回复通知（从通知按钮跳转过来）
+        const pendingNotificationTab = sessionStorage.getItem('pendingNotificationTab');
+        if (pendingNotificationTab) {
+            sessionStorage.removeItem('pendingNotificationTab');
+            this.currentTab = 'notification';
+            this.currentChatUser = null;
+            document.querySelectorAll('.message-tab').forEach(tab => {
+                tab.classList.toggle('active', tab.dataset.tab === 'notification');
+            });
+            const systemContent = document.getElementById('system-messages');
+            const notificationContent = document.getElementById('notification-list');
+            const dmContainer = document.getElementById('dm-container');
+            if (systemContent) systemContent.style.display = 'none';
+            if (notificationContent) notificationContent.style.display = 'block';
+            if (dmContainer) dmContainer.style.display = 'none';
+            this.loadNotifications(1);
+            return;
+        }
         // 检查是否有待处理的私信（从用户主页跳转过来）
         const pendingDm = sessionStorage.getItem('pendingDm');
         if (pendingDm) {
             try {
                 const dm = JSON.parse(pendingDm);
                 sessionStorage.removeItem('pendingDm');
-                // 切换到私信tab并打开对话
                 this.currentTab = 'dm';
                 this.currentChatUser = null;
                 document.querySelectorAll('.message-tab').forEach(tab => {
                     tab.classList.toggle('active', tab.dataset.tab === 'dm');
                 });
                 const systemContent = document.getElementById('system-messages');
+                const notificationContent = document.getElementById('notification-list');
                 const dmContainer = document.getElementById('dm-container');
                 if (systemContent) systemContent.style.display = 'none';
+                if (notificationContent) notificationContent.style.display = 'none';
                 if (dmContainer) dmContainer.style.display = 'flex';
                 this.loadDmConversations().then(() => {
                     this.openChat(dm.userId, dm.nickname);
@@ -44,8 +64,10 @@ export const messagePage = {
         this.currentTab = 'system';
         this.currentChatUser = null;
         const systemContent = document.getElementById('system-messages');
+        const notificationContent = document.getElementById('notification-list');
         const dmContainer = document.getElementById('dm-container');
         if (systemContent) systemContent.style.display = 'block';
+        if (notificationContent) notificationContent.style.display = 'none';
         if (dmContainer) dmContainer.style.display = 'none';
         document.querySelectorAll('.message-tab').forEach(tab => {
             tab.classList.toggle('active', tab.dataset.tab === 'system');
@@ -75,16 +97,22 @@ export const messagePage = {
                 systemBadge.style.display = systemUnread > 0 ? 'flex' : 'none';
             }
 
+            // 获取未读回复通知数量
+            const notificationUnreadRaw = await getUnreadNotificationCount().catch(() => 0);
+            const notificationUnread = parseInt(notificationUnreadRaw) || 0;
+            const notificationBadge = document.getElementById('notification-badge');
+            if (notificationBadge) {
+                notificationBadge.textContent = notificationUnread > 99 ? '99+' : notificationUnread;
+                notificationBadge.style.display = notificationUnread > 0 ? 'flex' : 'none';
+            }
+
             // 获取未读私信数量
             const dmUnreadRaw = await getUnreadDmCount().catch(() => 0);
             const dmUnread = parseInt(dmUnreadRaw) || 0;
-            console.log('未读私信数量:', dmUnreadRaw, '解析后:', dmUnread);
             const dmBadge = document.getElementById('dm-badge');
-            console.log('dmBadge元素:', dmBadge);
             if (dmBadge) {
                 dmBadge.textContent = dmUnread > 99 ? '99+' : dmUnread;
                 dmBadge.style.display = dmUnread > 0 ? 'flex' : 'none';
-                console.log('私信红点显示:', dmBadge.style.display, '内容:', dmBadge.textContent);
             }
         } catch (e) {
             console.error('加载红点失败:', e);
@@ -103,16 +131,24 @@ export const messagePage = {
 
         // 显示对应内容
         const systemContent = document.getElementById('system-messages');
+        const notificationContent = document.getElementById('notification-list');
         const dmContainer = document.getElementById('dm-container');
         const chatEmpty = document.getElementById('chat-empty');
         const chatMain = document.getElementById('chat-main');
 
         if (tabName === 'system') {
             systemContent.style.display = 'block';
+            notificationContent.style.display = 'none';
             dmContainer.style.display = 'none';
             this.loadMails(1);
+        } else if (tabName === 'notification') {
+            systemContent.style.display = 'none';
+            notificationContent.style.display = 'block';
+            dmContainer.style.display = 'none';
+            this.loadNotifications(1);
         } else {
             systemContent.style.display = 'none';
+            notificationContent.style.display = 'none';
             dmContainer.style.display = 'flex';
             chatEmpty.style.display = 'flex';
             chatMain.style.display = 'none';
@@ -200,6 +236,107 @@ export const messagePage = {
         });
 
         bindPagination(list, (page) => this.loadMails(page));
+        createIcons({ icons });
+    },
+
+    async loadNotifications(page) {
+        this.page = page;
+        const list = document.getElementById('notification-list');
+        try {
+            console.log('加载回复通知:', { page, limit: this.limit });
+            const data = await getReplyNotifications(page, this.limit);
+            console.log('回复通知数据:', data);
+            this.notifications = data || [];
+            if (data && data.length > 0) {
+                this.totalCount = parseInt(data[0].total_count) || 0;
+            } else {
+                this.totalCount = 0;
+            }
+            this.renderNotificationList();
+        } catch (e) {
+            console.error('加载回复通知失败:', e);
+            if (list) {
+                list.innerHTML = `
+                    <div class="empty-state" style="padding:40px 0;">
+                        <p>加载失败</p>
+                        <p style="font-size:0.8rem;color:var(--ink-faded);margin-top:8px;">${e.message || '未知错误'}</p>
+                    </div>
+                `;
+            }
+        }
+    },
+
+    renderNotificationList() {
+        const list = document.getElementById('notification-list');
+        if (!list) return;
+        if (this.notifications.length === 0) {
+            list.innerHTML = `
+                <div class="empty-state" style="padding:40px 0;">
+                    <i data-lucide="inbox"></i>
+                    <p>暂无回复通知</p>
+                </div>
+            `;
+            createIcons({ icons });
+            return;
+        }
+
+        let html = this.notifications.map((n, idx) => {
+            const date = new Date(n.created_at).toLocaleString('zh-CN');
+            const avatarHtml = n.reply_author_avatar ?
+                `<img src="${n.reply_author_avatar}" alt="${n.reply_author_name}" class="notification-avatar-img" />` :
+                `<i data-lucide="user"></i>`;
+            const adminBadge = n.reply_author_is_admin ? '<span class="badge admin-badge">管理员</span>' : '';
+            const botBadge = n.reply_author_is_bot ? '<span class="badge bot-badge">机器人</span>' : '';
+            
+            const isPostComment = n.notification_type === 'post_comment';
+            const replyTarget = isPostComment ? n.post_title : (n.parent_content || n.post_title);
+            
+            return `
+                <div class="notification-item ${n.is_read ? 'read' : 'unread'} animate-fade-in-up" data-id="${n.notification_id}" data-post-id="${n.post_id}" style="animation-delay:${idx * 0.05}s">
+                    <div class="notification-avatar">
+                        ${avatarHtml}
+                    </div>
+                    <div class="notification-body">
+                        <div class="notification-author">
+                            ${n.reply_author_name} ${adminBadge} ${botBadge}
+                        </div>
+                        <div class="notification-content-text">${this.escapeHtml(n.content)}</div>
+                        <div class="notification-meta">
+                            <span class="notification-post">回复了「${replyTarget}」</span>
+                            <span class="notification-date">${date}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        html += renderPagination(this.page, this.totalCount, this.limit);
+
+        list.innerHTML = html;
+
+        list.querySelectorAll('.notification-item').forEach(item => {
+            item.addEventListener('click', async () => {
+                const notificationId = parseInt(item.dataset.id);
+                const postId = parseInt(item.dataset.postId);
+                const notification = this.notifications.find(n => n.notification_id === notificationId);
+                if (!notification) return;
+
+                item.classList.remove('unread');
+                item.classList.add('read');
+
+                if (!notification.is_read) {
+                    try {
+                        await markNotificationRead(notificationId);
+                        notification.is_read = true;
+                        this.loadBadges();
+                    } catch (e) {}
+                }
+
+                router.navigate(`post/${postId}`);
+            });
+        });
+
+        bindPagination(list, (page) => this.loadNotifications(page));
         createIcons({ icons });
     },
 
