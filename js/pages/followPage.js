@@ -167,6 +167,15 @@ export const followPage = {
                 await this.handleFollowBack(btn.dataset.userId);
             });
         });
+
+        listEl.querySelectorAll('.btn-dm').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const userId = btn.dataset.userId;
+                const nickname = btn.dataset.nickname;
+                sessionStorage.setItem('pendingDm', JSON.stringify({ userId, nickname }));
+                router.navigate('message');
+            });
+        });
     },
 
     async handleUnfollow(targetId) {

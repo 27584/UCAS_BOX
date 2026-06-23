@@ -129,6 +129,8 @@
     display: flex;
     gap: 16px;
     height: 500px;
+    position: relative;
+    overflow: hidden;
 }
 
 .dm-sidebar {
@@ -549,4 +551,51 @@
     font-family: var(--font-mono);
 }
 
-/* ============================================
+/* ============================================
+   移动端响应式
+   ============================================ */
+@media (max-width: 768px) {
+    /* 消息页面 tabs 缩小 */
+    .message-tabs {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    .message-tab {
+        padding: 6px 10px;
+        font-size: 0.8rem;
+    }
+    .message-tab .tab-badge {
+        font-size: 0.65rem;
+        padding: 1px 5px;
+    }
+
+    /* 私信容器：移动端切换式布局 */
+    .dm-container {
+        position: relative;
+        height: 500px;
+    }
+    /* 默认在移动端：显示会话列表，隐藏聊天窗口 */
+    .dm-container .dm-sidebar {
+        flex: 1 1 100%;
+        width: 100%;
+        max-width: 100%;
+    }
+    .dm-container .chat-container {
+        display: none;
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 10;
+        background: var(--paper-card);
+    }
+    /* 当聊天容器被标记为 mobile-active 时全屏显示聊天窗口 */
+    .chat-container.mobile-active {
+        display: flex !important;
+    }
+    /* 当聊天窗口激活时，隐藏会话列表 */
+    .dm-container:has(.chat-container.mobile-active) .dm-sidebar {
+        display: none;
+    }
+}

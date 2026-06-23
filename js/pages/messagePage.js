@@ -423,7 +423,7 @@ export const messagePage = {
         chatMain.style.display = 'flex';
 
         // 移动端：聊天界面全屏显示
-        const isMobile = window.innerWidth <= 600;
+        const isMobile = window.innerWidth <= 768;
         if (isMobile && chatContainer) {
             chatContainer.classList.add('mobile-active');
             document.body.style.overflow = 'hidden';
