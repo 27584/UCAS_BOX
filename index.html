@@ -11,6 +11,94 @@
     <link rel="stylesheet" href="css/components.css">
     <link rel="stylesheet" href="css/pages.css">
     <link rel="stylesheet" href="css/animations.css">
+    <style>
+        #buy-modal #market-buy-quantity-selector {
+            display: flex !important;
+            flex-direction: row !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            padding: 0 !important;
+            background: transparent !important;
+            border: none !important;
+            margin-bottom: 10px !important;
+            width: 100% !important;
+        }
+        #buy-modal #market-buy-quantity-label {
+            font-family: var(--font-mono) !important;
+            font-size: 0.75rem !important;
+            text-transform: uppercase !important;
+            letter-spacing: 2px !important;
+            color: var(--ink-soft) !important;
+            flex-shrink: 0 !important;
+            white-space: nowrap !important;
+            display: inline-flex !important;
+            margin: 0 !important;
+        }
+        #buy-modal #market-buy-quantity-controls {
+            display: flex !important;
+            flex-direction: row !important;
+            align-items: center !important;
+            gap: 0 !important;
+            border: 2px solid var(--ink) !important;
+            box-shadow: 2px 2px 0 var(--ink) !important;
+        }
+        #buy-modal #market-buy-quantity-controls input {
+            width: 50px !important;
+            height: 34px !important;
+            text-align: center !important;
+            font-family: var(--font-mono) !important;
+            font-size: 1rem !important;
+            font-weight: 700 !important;
+            color: var(--ink) !important;
+            background: var(--paper-card) !important;
+            border: none !important;
+            border-left: 2px solid var(--ink) !important;
+            border-right: 2px solid var(--ink) !important;
+            border-radius: 0 !important;
+            -moz-appearance: textfield !important;
+            outline: none !important;
+        }
+        #buy-modal #market-buy-quantity-controls input::-webkit-outer-spin-button,
+        #buy-modal #market-buy-quantity-controls input::-webkit-inner-spin-button { -webkit-appearance: none !important; margin: 0 !important; }
+        #buy-modal .market-qty-btn {
+            width: 34px !important;
+            height: 34px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            background: var(--paper-card) !important;
+            border: none !important;
+            color: var(--ink) !important;
+            cursor: pointer !important;
+            border-radius: 0 !important;
+            font-size: 0.9rem !important;
+            font-weight: 700 !important;
+        }
+        #buy-modal .market-qty-btn:hover {
+            background: var(--ink) !important;
+            color: var(--paper-card) !important;
+        }
+        #buy-modal .market-qty-btn svg {
+            width: 14px !important;
+            height: 14px !important;
+        }
+        .buy-modal-card {
+            text-align: left !important;
+        }
+        .buy-modal-card .buy-header h3,
+        .buy-modal-card .buy-item-info,
+        .buy-modal-card .buy-hint {
+            text-align: center !important;
+        }
+        #buy-modal .buy-footer {
+            display: flex !important;
+            justify-content: flex-end !important;
+            gap: 10px !important;
+        }
+        #buy-modal .buy-footer .btn {
+            flex: none !important;
+        }
+    </style>
     <script type="importmap">
     {
         "imports": {

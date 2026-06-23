@@ -205,19 +205,12 @@ function openRenameModal() {
 function showDropModal(item) {
     try {
         console.log('[showDropModal] called with:', item);
-        // 兼容 lobby 的字段（out_item_xxx）和 福袋的字段（item_xxx）
         const name = (item && (item.out_item_name || item.item_name || item.name)) || '未知物品';
         const quality = (item && (item.out_item_quality || item.item_quality || item.quality)) || 'white';
         const image = item && (item.out_item_image || item.item_image || item.image_name);
 
-        // 移除已存在的弹窗
         const old = document.getElementById('dragon-boat-result-modal');
         if (old) old.remove();
-
-        const overlay = document.createElement('div');
-        overlay.className = 'drop-modal show';  // 直接加 show 确保可见
-        overlay.id = 'dragon-boat-result-modal';
-        overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(31,26,18,0.6);padding:20px;';
 
         const cfg = (typeof QUALITY_CONFIG !== 'undefined' && QUALITY_CONFIG[quality]) || { label: quality };
         let itemHtml = '';
@@ -230,34 +223,44 @@ function showDropModal(item) {
             itemHtml = '<div style="width:100px;height:100px;display:flex;align-items:center;justify-content:center;border:2px solid #000;font-size:40px;">' + (name ? name.charAt(0) : '?') + '</div>';
         }
 
-        overlay.innerHTML =
-            '<div class="drop-modal-box" style="position:relative;width:320px;max-width:100%;background:#fdfaf3;border:1.5px solid #2a2218;padding:40px 24px 24px;text-align:center;box-shadow:6px 6px 0 rgba(0,0,0,0.15);">' +
-                '<div class="drop-modal-seal" style="position:absolute;top:-10px;left:50%;transform:translateX(-50%) rotate(-3deg);width:50px;height:20px;background:#a8371f;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,0.25);"></div>' +
-                '<div class="drop-modal-title" style="font-size:1.5rem;color:#a8371f;margin:0 0 20px;font-weight:700;letter-spacing:2px;display:inline-block;transform:rotate(-2deg);">恭喜获得</div>' +
-                '<div class="drop-modal-icon quality-' + quality + '" style="width:110px;height:110px;margin:0 auto 16px;border:1.5px solid currentColor;background:#f5f0e6;display:flex;align-items:center;justify-content:center;box-shadow:3px 3px 0 #2a2218;">' +
-                    itemHtml +
-                '</div>' +
-                '<div class="drop-modal-name quality-' + quality + '-text" style="font-size:1.25rem;font-weight:700;margin:0 0 8px;letter-spacing:0.5px;line-height:1.3;">' + name + '</div>' +
-                '<div class="drop-modal-badge quality-' + quality + '" style="display:inline-block;padding:3px 12px;font-size:0.75rem;font-weight:700;letter-spacing:1.5px;border:1.5px solid currentColor;background:#fdfaf3;margin-bottom:20px;">' + cfg.label + '</div>' +
-                '<button class="drop-modal-btn" id="drop-modal-close" style="display:block;width:100%;margin:0;padding:12px 20px;background:#2a2218;color:#fdfaf3;border:1.5px solid #2a2218;font-size:0.9rem;font-weight:700;letter-spacing:2px;cursor:pointer;box-shadow:3px 3px 0 #a8371f;">收 下</button>' +
-            '</div>';
+        const modalHtml = `
+            <div id="dragon-boat-result-modal" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;display:flex;align-items:center;justify-content:center;">
+                <div id="drop-modal-overlay" style="position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(31,26,18,0.7);backdrop-filter:blur(3px);"></div>
+                <div style="position:relative;z-index:1;background:#fbf5e4;border:1.5px solid #1f1a12;padding:40px 24px 24px;max-width:340px;width:90%;text-align:center;box-shadow:0 6px 20px rgba(0,0,0,0.2);">
+                    <div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%) rotate(-3deg);width:50px;height:20px;background:#a8371f;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,0.25);"></div>
+                    <div style="font-size:1.5rem;color:#a8371f;margin:0 0 20px;font-weight:700;letter-spacing:2px;display:inline-block;transform:rotate(-2deg);">恭喜获得</div>
+                    <div class="drop-modal-icon quality-${quality}" style="width:110px;height:110px;margin:0 auto 16px;border:1.5px solid currentColor;background:#faf5e6;display:flex;align-items:center;justify-content:center;box-shadow:3px 3px 0 #1f1a12;">${itemHtml}</div>
+                    <div class="drop-modal-name quality-${quality}-text" style="font-size:1.25rem;font-weight:700;margin:0 0 8px;letter-spacing:0.5px;line-height:1.3;">${name}</div>
+                    <div class="drop-modal-badge quality-${quality}" style="display:inline-block;padding:3px 12px;font-size:0.75rem;font-weight:700;letter-spacing:1.5px;border:1.5px solid currentColor;background:#fbf5e4;margin-bottom:20px;">${cfg.label}</div>
+                    <button id="drop-modal-close" style="display:block;width:100%;margin:0;padding:12px 20px;background:#1f1a12;color:#fbf5e4;border:1.5px solid #1f1a12;font-size:0.9rem;font-weight:700;letter-spacing:2px;cursor:pointer;box-shadow:3px 3px 0 #a8371f;transition:all 0.15s;">收 下</button>
+                </div>
+            </div>
+        `;
 
-        document.body.appendChild(overlay);
-        console.log('[showDropModal] overlay appended, id =', overlay.id);
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
 
+        const modal = document.getElementById('dragon-boat-result-modal');
         const close = () => {
-            overlay.style.opacity = '0';
-            setTimeout(() => {
-                overlay.remove();
-                if (window.refreshInventory) window.refreshInventory();
-            }, 200);
+            modal.remove();
+            if (window.refreshInventory) window.refreshInventory();
         };
 
-        const closeBtn = overlay.querySelector('#drop-modal-close');
-        if (closeBtn) closeBtn.addEventListener('click', close);
-        overlay.addEventListener('click', (e) => {
-            if (e.target === overlay) close();
-        });
+        const closeBtn = document.getElementById('drop-modal-close');
+        const overlay = document.getElementById('drop-modal-overlay');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', close);
+            closeBtn.addEventListener('mouseenter', () => {
+                closeBtn.style.background = '#a8371f';
+                closeBtn.style.boxShadow = '4px 4px 0 #1f1a12';
+                closeBtn.style.transform = 'translate(-1px, -1px)';
+            });
+            closeBtn.addEventListener('mouseleave', () => {
+                closeBtn.style.background = '#1f1a12';
+                closeBtn.style.boxShadow = '3px 3px 0 #a8371f';
+                closeBtn.style.transform = 'translate(0, 0)';
+            });
+        }
+        if (overlay) overlay.addEventListener('click', close);
     } catch (err) {
         console.error('[showDropModal] error:', err);
         alert('弹窗打开失败: ' + err.message);
@@ -274,12 +277,26 @@ async function useDragonBoatBagMain() {
 
     if (result && result.success) {
         showToast(result.message, 'success');
-        showDropModal({
-            item_id: result.item_id,
-            item_name: result.item_name,
-            item_quality: result.item_quality,
-            item_image: result.item_image
-        });
+        
+        if (result.item_name) {
+            showDropModal({
+                item_id: result.item_id,
+                item_name: result.item_name,
+                item_quality: result.item_quality || 'white',
+                item_image: result.item_image
+            });
+        } else {
+            showDropModal({
+                item_name: '神秘物品',
+                item_quality: 'white'
+            });
+        }
+        
+        setTimeout(() => {
+            if (window.refreshInventory) {
+                window.refreshInventory();
+            }
+        }, 500);
     } else {
         showToast(result?.message || '打开失败', 'error');
     }

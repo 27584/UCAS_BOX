@@ -400,6 +400,11 @@ export const marketPage = {
     },
 
     openBuyModal(order) {
+        const existingModal = document.getElementById('buy-modal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+
         const pricePerUnit = order.price_per_unit;
         let quantity = 1;
         const self = this;
@@ -420,14 +425,14 @@ export const marketPage = {
                                 <span id="buy-total-price">${formatNumber(pricePerUnit)}</span> 果壳币
                             </div>
                         </div>
-                        <div class="buy-quantity-selector">
-                            <span class="buy-quantity-label">购买数量</span>
-                            <div class="buy-quantity-controls">
-                                <button class="qty-btn" id="qty-minus">
+                        <div id="market-buy-quantity-selector">
+                            <span id="market-buy-quantity-label">购买数量</span>
+                            <div id="market-buy-quantity-controls">
+                                <button id="market-qty-minus" class="market-qty-btn">
                                     <i data-lucide="minus"></i>
                                 </button>
-                                <input type="number" id="buy-quantity" value="1" min="1" max="${order.quantity}">
-                                <button class="qty-btn" id="qty-plus">
+                                <input type="number" id="market-buy-quantity" value="1" min="1" max="${order.quantity}">
+                                <button id="market-qty-plus" class="market-qty-btn">
                                     <i data-lucide="plus"></i>
                                 </button>
                             </div>
@@ -450,10 +455,10 @@ export const marketPage = {
         createIcons({ icons });
 
         const modal = document.getElementById('buy-modal');
-        const quantityInput = document.getElementById('buy-quantity');
+        const quantityInput = document.getElementById('market-buy-quantity');
         const totalPriceEl = document.getElementById('buy-total-price');
-        const minusBtn = document.getElementById('qty-minus');
-        const plusBtn = document.getElementById('qty-plus');
+        const minusBtn = document.getElementById('market-qty-minus');
+        const plusBtn = document.getElementById('market-qty-plus');
         const confirmBtn = document.getElementById('buy-confirm');
         const cancelBtn = document.getElementById('buy-cancel');
         const closeBtn = document.getElementById('buy-close');

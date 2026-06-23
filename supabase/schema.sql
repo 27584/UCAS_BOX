@@ -4588,10 +4588,10 @@ BEGIN
         v_allow_dm := true;
     END IF;
     
-    -- 检查是否关注了接收者
+    -- 检查接收者是否关注了发送者
     SELECT EXISTS(
         SELECT 1 FROM public.follows 
-        WHERE follower_id = user_uuid AND following_id = p_receiver_id
+        WHERE follower_id = p_receiver_id AND following_id = user_uuid
     ) INTO v_is_following;
     
     -- 如果接收者禁止陌生人私信，且发送者不是关注的人，则拒绝
