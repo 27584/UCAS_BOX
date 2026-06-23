@@ -4801,16 +4801,32 @@
 
     /* 移动端聊天界面：默认隐藏，点击会话后全屏显示 */
     .chat-container {
-        display: none;
-        position: fixed;
-        inset: 0;
-        z-index: 100;
-        flex-direction: column;
-        height: 100vh;
-        background: var(--paper-bg);
+        display: none !important;
+        position: fixed !important;
+        inset: 0 !important;
+        z-index: 100 !important;
+        flex-direction: column !important;
+        height: 100vh !important;
+        background: var(--paper-bg) !important;
     }
     .chat-container.mobile-active {
-        display: flex;
+        display: flex !important;
+    }
+    .chat-container.mobile-active .chat-main {
+        display: flex !important;
+        flex-direction: column !important;
+        height: 100% !important;
+    }
+    .chat-container.mobile-active .chat-messages {
+        flex: 1 !important;
+        overflow-y: auto !important;
+        min-height: 0 !important;
+    }
+    .chat-container.mobile-active .chat-input-area {
+        display: flex !important;
+        flex-shrink: 0 !important;
+        position: relative !important;
+        z-index: 10 !important;
     }
     .chat-header {
         padding: 12px 16px;
