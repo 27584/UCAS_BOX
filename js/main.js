@@ -16,6 +16,32 @@ window.resendVerificationEmail = resendVerificationEmail;
 window.openRenameModal = openRenameModal;
 window.useDragonBoatBag = useDragonBoatBagMain;
 
+// 禁止移动端双指缩放/双击缩放
+function preventZoom() {
+    // 禁止双击缩放
+    let lastTouchEnd = 0;
+    document.addEventListener('touchend', (e) => {
+        const now = Date.now();
+        if (now - lastTouchEnd <= 300) {
+            e.preventDefault();
+        }
+        lastTouchEnd = now;
+    }, { passive: false });
+
+    // 禁止双指缩放 (iOS Safari)
+    document.addEventListener('gesturestart', (e) => {
+        e.preventDefault();
+    });
+}
+preventZoom();
+
+// 路由切换时确保 body 滚动恢复
+window.addEventListener('hashchange', () => {
+    document.body.style.overflow = '';
+    document.body.style.position = '';
+    document.body.style.height = '';
+});
+
 async function bootstrap() {
     // 版本检测
     await checkVersion();

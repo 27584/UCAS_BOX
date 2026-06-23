@@ -459,6 +459,46 @@ body.drop-modal-open::after {
     .bottom-nav { display: flex; }
     #main-content { padding: 20px 16px 90px; }
     .nav-brand { font-size: 1rem; letter-spacing: 1px; }
+
+    /* 防止表单元素触发缩放 (iOS) */
+    input, textarea, select {
+        font-size: 16px !important;
+    }
+
+    /* 按钮、卡片等全局元素缩小 */
+    .btn {
+        padding: 8px 14px;
+        font-size: 0.9rem;
+    }
+    .btn-small {
+        padding: 5px 10px;
+        font-size: 0.8rem;
+    }
+
+    /* 卡片通用 */
+    .paper-card,
+    .post-card,
+    .item-card {
+        padding: 14px !important;
+    }
+
+    /* 文字 */
+    h1 { font-size: 1.5rem; }
+    h2 { font-size: 1.25rem; }
+    h3 { font-size: 1.1rem; }
+
+    /* 列表/网格缩小间距 */
+    .post-list,
+    .item-grid,
+    .user-grid {
+        gap: 10px;
+    }
+
+    /* 头像通用 */
+    .avatar {
+        width: 40px;
+        height: 40px;
+    }
 }
 
 @media (min-width: 769px) {

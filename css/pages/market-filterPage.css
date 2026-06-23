@@ -1,4 +1,4 @@
-﻿/* ============================================
+/* ============================================
    市场筛选
    ============================================ */
 .market-filter {
@@ -445,4 +445,60 @@
 .load-more {
     text-align: center;
     padding: 20px;
+}
+
+/* ============================================
+   移动端响应式
+   ============================================ */
+@media (max-width: 768px) {
+    .market-filter {
+        padding: 8px 0;
+    }
+    .filter-row {
+        gap: 6px;
+    }
+    .filter-row select,
+    .filter-row input {
+        font-size: 0.8rem;
+        padding: 6px 8px;
+        min-width: 0;
+        flex: 1 1 auto;
+    }
+    .feed-search-bar {
+        min-width: 0;
+        width: 100%;
+        margin-left: 0;
+    }
+    .feed-filter-bar {
+        gap: 6px;
+    }
+    .post-card {
+        padding: 12px;
+    }
+    .post-create-card {
+        padding: 12px;
+    }
+    .post-content {
+        font-size: 0.9rem;
+    }
+    .action-btn {
+        font-size: 0.8rem;
+    }
+    .action-btn svg {
+        width: 16px;
+        height: 16px;
+    }
+    .pagination {
+        gap: 4px;
+        padding: 12px 0;
+        flex-wrap: wrap;
+    }
+    .page-btn {
+        width: 32px;
+        height: 32px;
+        font-size: 0.8rem;
+    }
+    .feed-list {
+        gap: 10px;
+    }
 }

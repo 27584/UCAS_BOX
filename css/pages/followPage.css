@@ -87,6 +87,17 @@
     flex-shrink: 0;
 }
 
+.follow-avatar-clickable,
+.follow-info-clickable {
+    cursor: pointer;
+    transition: opacity 0.15s;
+}
+
+.follow-avatar-clickable:hover,
+.follow-info-clickable:hover {
+    opacity: 0.7;
+}
+
 .follow-avatar .avatar {
     width: 48px;
     height: 48px;
@@ -159,4 +170,63 @@
 .follow-actions .btn {
     padding: 8px 12px;
     font-size: 0.85rem;
+}
+
+/* ============================================
+   移动端响应式
+   ============================================ */
+@media (max-width: 768px) {
+    .follow-page-wrapper {
+        padding: 12px;
+    }
+    .follow-tabs {
+        gap: 6px;
+        flex-wrap: wrap;
+        padding-bottom: 6px;
+    }
+    .follow-tab {
+        padding: 8px 10px;
+        font-size: 0.8rem;
+    }
+    .follow-tab span {
+        display: inline !important;
+    }
+    .follow-list {
+        gap: 10px;
+    }
+    .follow-item {
+        padding: 10px;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+    .follow-avatar-clickable {
+        width: 40px;
+        height: 40px;
+    }
+    .follow-info {
+        min-width: 0;
+        flex: 1 1 auto;
+    }
+    .follow-name {
+        font-size: 0.9rem;
+        flex-wrap: wrap;
+    }
+    .follow-actions {
+        gap: 6px;
+        width: 100%;
+        justify-content: flex-end;
+    }
+    .follow-actions .btn {
+        padding: 5px 8px;
+        font-size: 0.75rem;
+    }
+    .follow-actions .btn i {
+        width: 12px;
+        height: 12px;
+    }
+    /* 移动端关闭 hover 效果 */
+    .follow-item:hover {
+        box-shadow: none;
+        transform: none;
+    }
 }

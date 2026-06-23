@@ -192,6 +192,30 @@
     min-height: 56px;
 }
 
+.chat-back-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: transparent;
+    border: none;
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 0.9rem;
+    cursor: pointer;
+    padding: 6px 10px;
+    border-radius: 4px;
+    transition: background 0.15s;
+}
+
+.chat-back-btn:hover {
+    background: var(--paper-card);
+}
+
+.chat-back-btn i {
+    width: 18px;
+    height: 18px;
+}
+
 .chat-user-info {
     display: flex;
     align-items: center;
@@ -597,5 +621,53 @@
     /* 当聊天窗口激活时，隐藏会话列表 */
     .dm-container:has(.chat-container.mobile-active) .dm-sidebar {
         display: none;
+    }
+
+    /* 会话项 */
+    .dm-item {
+        padding: 10px 12px;
+        gap: 10px;
+    }
+    .dm-item .avatar {
+        width: 40px;
+        height: 40px;
+    }
+    .dm-name {
+        font-size: 0.9rem;
+    }
+    .dm-last {
+        font-size: 0.8rem;
+    }
+
+    /* 聊天窗口 */
+    .chat-header {
+        padding: 10px 12px;
+    }
+    .chat-header-name {
+        font-size: 0.95rem;
+    }
+    .chat-messages {
+        padding: 12px;
+    }
+    .message-bubble {
+        max-width: 80%;
+        font-size: 0.9rem;
+        padding: 8px 12px;
+    }
+    .chat-input {
+        padding: 10px 12px;
+    }
+    .chat-input input {
+        font-size: 16px;
+        padding: 8px 12px;
+    }
+
+    /* 通知/系统消息列表 */
+    .notification-item {
+        padding: 10px 12px;
+        gap: 10px;
+    }
+    .notification-content-text {
+        font-size: 0.85rem;
     }
 }

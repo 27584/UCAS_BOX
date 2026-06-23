@@ -110,11 +110,11 @@ export const followPage = {
             
             return `
             <div class="follow-item" data-user-id="${user.user_id}">
-                <div class="follow-avatar">
+                <div class="follow-avatar follow-avatar-clickable">
                     ${userAvatarHTML(user)}
                     ${user.is_online ? '<span class="online-dot"></span>' : ''}
                 </div>
-                <div class="follow-info">
+                <div class="follow-info follow-info-clickable">
                     <div class="follow-name">
                         ${user.nickname}
                         ${userBadgeHTML({ is_admin: user.is_admin, is_bot: user.is_bot })}
@@ -123,10 +123,6 @@ export const followPage = {
                     ${this.currentTab !== 'friends' && user.is_mutual ? '<span class="mutual-tag">互关</span>' : ''}
                 </div>
                 <div class="follow-actions">
-                    <button class="btn btn-outline btn-profile" data-user-id="${user.user_id}">
-                        <i data-lucide="user"></i>
-                        查看
-                    </button>
                     <button class="btn btn-primary btn-dm" data-user-id="${user.user_id}" data-nickname="${user.nickname}">
                         <i data-lucide="message-circle"></i>
                         私信
@@ -149,10 +145,11 @@ export const followPage = {
 
         createIcons({ icons });
 
-        // 绑定事件
-        listEl.querySelectorAll('.btn-profile').forEach(btn => {
-            btn.addEventListener('click', () => {
-                router.navigate(`user/${btn.dataset.userId}`);
+        // 绑定事件 - 点击头像/信息区域进入用户主页
+        listEl.querySelectorAll('.follow-avatar-clickable, .follow-info-clickable').forEach(el => {
+            el.addEventListener('click', () => {
+                const item = el.closest('.follow-item');
+                router.navigate(`user/${item.dataset.userId}`);
             });
         });
 

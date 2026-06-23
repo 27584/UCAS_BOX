@@ -124,6 +124,11 @@ export const messagePage = {
         this.page = 1;
         this.currentChatUser = null;
 
+        // 退出移动端聊天全屏模式
+        const chatContainer = document.getElementById('chat-container');
+        if (chatContainer) chatContainer.classList.remove('mobile-active');
+        document.body.style.overflow = '';
+
         // 更新标签样式
         document.querySelectorAll('.message-tab').forEach(tab => {
             tab.classList.toggle('active', tab.dataset.tab === tabName);

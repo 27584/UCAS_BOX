@@ -372,3 +372,116 @@
     font-family: var(--font-mono);
 }
 
+/* ============================================
+   移动端响应式
+   ============================================ */
+@media (max-width: 768px) {
+    .market-card {
+        grid-template-columns: 1fr auto;
+        grid-template-areas:
+            "item  item"
+            "info  actions";
+        gap: 10px;
+        padding: 12px;
+    }
+    .market-card::before {
+        width: 50px;
+        height: 14px;
+        top: -6px;
+    }
+    .market-card:hover {
+        box-shadow: var(--shadow-lift);
+        transform: none;
+    }
+    .market-card-item {
+        grid-area: item;
+        min-width: 0;
+    }
+    .market-card-item .avatar,
+    .market-card-item img {
+        width: 48px;
+        height: 48px;
+    }
+    .market-card-name {
+        font-size: 0.95rem;
+    }
+    .market-card-meta {
+        grid-area: info;
+        min-width: 0;
+    }
+    .market-card-unit-price {
+        font-size: 0.95rem;
+    }
+    .market-coin-icon {
+        width: 14px;
+        height: 14px;
+    }
+    .market-card-qty {
+        font-size: 0.75rem;
+    }
+    .market-card-seller {
+        font-size: 0.7rem;
+    }
+    .market-card-actions {
+        grid-area: actions;
+        gap: 6px;
+    }
+    .market-card-actions .btn {
+        padding: 6px 10px;
+        font-size: 0.8rem;
+    }
+    .market-card-actions .btn i {
+        width: 14px;
+        height: 14px;
+    }
+
+    /* 出售页：单列布局 */
+    .sell-layout {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+    .sell-chart-panel {
+        position: static;
+    }
+    .sell-form {
+        max-width: 100%;
+    }
+    .sell-item-grid {
+        grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+        max-height: 180px;
+    }
+    .sell-item-card {
+        padding: 6px;
+    }
+
+    /* 交易详情 */
+    .trade-history-card {
+        width: 95vw;
+        max-height: 90vh;
+    }
+    .trade-history-header,
+    .trade-history-item {
+        grid-template-columns: 2fr 1fr 1fr 1fr;
+        font-size: 0.7rem;
+        padding: 8px;
+    }
+    .trade-stats {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+    }
+    .trade-stat {
+        padding: 8px;
+    }
+    .stat-value {
+        font-size: 0.9rem;
+    }
+    .chart-container {
+        height: 200px;
+        padding: 8px;
+    }
+    .chart-tab {
+        padding: 5px 10px;
+        font-size: 0.75rem;
+    }
+}
+
