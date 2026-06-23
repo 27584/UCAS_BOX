@@ -4330,7 +4330,10 @@
     font-family: var(--font-mono);
 }
 
-.message-page > .message-content { min-height: 400px; }
+.message-page > .message-content { 
+    min-height: 400px; 
+    overflow-y: auto;
+}
 
 /* 私信列表 */
 .dm-list {
