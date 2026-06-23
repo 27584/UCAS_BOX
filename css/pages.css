@@ -4808,30 +4808,53 @@
         flex-direction: column !important;
         height: 100vh !important;
         background: var(--paper-bg) !important;
+        overflow: hidden !important;
     }
     .chat-container.mobile-active {
         display: flex !important;
+        overflow: hidden !important;
     }
     .chat-container.mobile-active .chat-main {
         display: flex !important;
         flex-direction: column !important;
         height: 100% !important;
+        overflow: hidden !important;
     }
     .chat-container.mobile-active .chat-messages {
         flex: 1 !important;
         overflow-y: auto !important;
         min-height: 0 !important;
+        padding-bottom: 130px !important;
+        padding-top: 100px !important;
     }
     .chat-container.mobile-active .chat-input-area {
         display: flex !important;
-        flex-shrink: 0 !important;
-        position: relative !important;
-        z-index: 10 !important;
+        position: fixed !important;
+        bottom: 60px !important;
+        left: 0 !important;
+        right: 0 !important;
+        z-index: 220 !important;
+        padding: 12px 16px !important;
+        background: var(--paper-card) !important;
+        border-top: 1.5px solid var(--ink) !important;
+        margin: 0 !important;
+        box-shadow: 0 -2px 4px rgba(0,0,0,0.1) !important;
+        gap: 12px !important;
     }
-    .chat-header {
-        padding: 12px 16px;
-        border-bottom: 1.5px solid var(--ink);
-        background: var(--paper-card);
+    .chat-container.mobile-active .chat-header {
+        display: flex !important;
+        align-items: flex-start !important;
+        justify-content: space-between !important;
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        z-index: 220 !important;
+        padding: 16px !important;
+        background: var(--paper-card) !important;
+        border-bottom: 1.5px solid var(--ink) !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+        min-height: 80px !important;
     }
     .chat-back-btn {
         display: flex;

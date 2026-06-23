@@ -282,6 +282,7 @@ export const messagePage = {
         const isMobile = window.innerWidth <= 600;
         if (isMobile && chatContainer) {
             chatContainer.classList.add('mobile-active');
+            document.body.style.overflow = 'hidden';
         }
 
         // 高亮选中的会话
@@ -312,6 +313,7 @@ export const messagePage = {
         if (backBtn) {
             backBtn.addEventListener('click', () => {
                 chatContainer.classList.remove('mobile-active');
+                document.body.style.overflow = '';
                 chatEmpty.style.display = 'flex';
                 chatMain.style.display = 'none';
                 this.currentChatUser = null;
