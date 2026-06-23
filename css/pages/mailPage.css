@@ -1,0 +1,78 @@
+﻿/* ============================================
+   邮件页
+   ============================================ */
+.mail-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.mail-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    background: var(--paper-card);
+    border: 1.5px solid var(--ink);
+    border-radius: 0;
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.15s;
+    box-shadow: 2px 2px 0 var(--ink-faded);
+    position: relative;
+}
+
+.mail-item:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: 3px 3px 0 var(--ink);
+}
+
+.mail-item.read {
+    opacity: 0.7;
+    box-shadow: none;
+}
+
+.mail-item.read .mail-title {
+    font-weight: 500;
+}
+
+.mail-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 0;
+    background: var(--seal-red);
+    flex-shrink: 0;
+    margin-top: 4px;
+    border: 1px solid var(--ink);
+    transform: rotate(45deg);
+}
+
+.mail-item.read .mail-dot {
+    background: var(--paper-bg);
+    box-shadow: none;
+}
+
+.mail-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.mail-title {
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 4px;
+    font-family: var(--font-display);
+}
+
+.mail-content {
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+    margin-bottom: 6px;
+    word-break: break-all;
+    font-family: var(--font-body);
+}
+
+.mail-date {
+    font-size: 0.75rem;
+    color: var(--ink-faded);
+    font-family: var(--font-mono);
+}

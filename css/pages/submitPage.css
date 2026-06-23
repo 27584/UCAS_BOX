@@ -1,0 +1,127 @@
+﻿/* ============================================
+   投稿页面
+   ============================================ */
+.submit-form { margin-bottom: 20px; }
+
+.submit-form h3 {
+    margin-bottom: 12px;
+    color: var(--ink);
+    font-family: var(--font-display);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+}
+
+.submission-card {
+    background: var(--paper-card);
+    border: 1.5px solid var(--ink);
+    border-radius: 0;
+    padding: 12px 16px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    box-shadow: 2px 2px 0 var(--ink-faded);
+}
+
+.submission-quality-bar {
+    width: 4px;
+    height: 48px;
+    border-radius: 0;
+    flex-shrink: 0;
+    background: currentColor;
+}
+
+.submission-quality-bar.quality-white,
+.submission-quality-bar.quality-green,
+.submission-quality-bar.quality-blue,
+.submission-quality-bar.quality-purple,
+.submission-quality-bar.quality-orange,
+.submission-quality-bar.quality-red { background: var(--q); }
+
+.submission-info { flex: 1; }
+
+.submission-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.submission-name {
+    font-weight: 700;
+    color: var(--ink);
+    font-family: var(--font-display);
+}
+
+.submission-status {
+    font-size: 0.75rem;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 1px 6px;
+    border: 1.5px solid currentColor;
+    border-radius: 0;
+}
+
+.submission-status.status-pending { color: var(--ink); background: var(--marker-soft); }
+.submission-status.status-approved { color: var(--leaf-green); }
+.submission-status.status-rejected { color: var(--seal-red); }
+
+.submission-desc {
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+    margin: 4px 0;
+    line-height: 1.4;
+    font-family: var(--font-body);
+}
+
+.submission-meta {
+    display: flex;
+    gap: 12px;
+    font-size: 0.75rem;
+    color: var(--ink-faded);
+    font-family: var(--font-mono);
+}
+
+.submission-meta .reward {
+    color: var(--seal-red);
+    font-weight: 700;
+}
+
+.submission-meta .reject-reason {
+    color: var(--seal-red);
+    font-style: italic;
+}
+
+.submission-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.btn-success {
+    background: var(--leaf-green);
+    border: 1.5px solid var(--ink);
+    color: var(--paper-card);
+    box-shadow: 2px 2px 0 var(--ink);
+}
+
+.btn-success:hover {
+    background: var(--ink);
+    box-shadow: 3px 3px 0 var(--leaf-green);
+}
+
+.btn-danger {
+    background: var(--paper-card);
+    color: var(--seal-red);
+    border: 1.5px solid var(--seal-red);
+    box-shadow: 2px 2px 0 var(--seal-red);
+}
+
+.btn-danger:hover {
+    background: var(--seal-red);
+    color: var(--paper-card);
+    box-shadow: 3px 3px 0 var(--ink);
+}

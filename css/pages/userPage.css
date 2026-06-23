@@ -1,0 +1,253 @@
+﻿/* ============================================
+   用户主页
+   ============================================ */
+.user-page {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.user-header-card {
+    text-align: center;
+    padding: 32px 24px;
+    margin-bottom: 20px;
+    background: var(--paper-card);
+    border: 1.5px solid var(--ink);
+    box-shadow: var(--shadow-card);
+    position: relative;
+}
+
+.user-avatar-large {
+    width: 80px;
+    height: 80px;
+    margin: 0 auto 16px;
+    border-radius: 0;
+    background: var(--ink);
+    border: 2.5px solid var(--ink);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-display);
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--paper-card);
+    box-shadow: 3px 3px 0 var(--seal-red);
+}
+
+.user-header-card h2 {
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    color: var(--ink);
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+}
+
+.user-joined {
+    font-size: 0.8rem;
+    color: var(--ink-faded);
+    margin-bottom: 16px;
+    font-family: var(--font-mono);
+}
+
+.user-stats {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    padding: 16px 0;
+    border-top: 1.5px dashed var(--ink-faded);
+    border-bottom: 1.5px dashed var(--ink-faded);
+}
+
+.user-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.user-stat svg {
+    width: 20px;
+    height: 20px;
+    color: var(--ink);
+}
+
+.user-follow-stats {
+    display: flex;
+    justify-content: center;
+    gap: 32px;
+    padding: 12px 0;
+}
+
+.follow-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.follow-value {
+    font-family: var(--font-display);
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--ink);
+}
+
+.follow-label {
+    font-size: 0.75rem;
+    color: var(--ink-faded);
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.user-content { margin-top: 16px; }
+
+.user-tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 16px;
+    border-bottom: 1.5px solid var(--ink);
+}
+
+.user-tab {
+    padding: 8px 18px;
+    background: transparent;
+    border: none;
+    color: var(--ink-soft);
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -1.5px;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.user-tab:hover { color: var(--ink); }
+
+.user-tab.active {
+    color: var(--ink);
+    border-bottom-color: var(--seal-red);
+    font-weight: 700;
+}
+
+.user-tab svg { width: 16px; height: 16px; }
+
+.user-posts-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.post-card-simple {
+    background: var(--paper-card);
+    border: 1.5px solid var(--ink);
+    border-radius: 0;
+    padding: 12px 16px;
+    box-shadow: 2px 2px 0 var(--ink-faded);
+}
+
+.post-card-simple.clickable-post {
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.post-card-simple.clickable-post:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: 3px 3px 0 var(--ink);
+}
+
+.post-card-simple .post-content {
+    color: var(--ink);
+    font-family: var(--font-body);
+    line-height: 1.5;
+    margin-bottom: 8px;
+}
+
+.post-card-simple .post-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.75rem;
+    color: var(--ink-faded);
+    font-family: var(--font-mono);
+}
+
+.post-card-simple .post-stats {
+    display: flex;
+    gap: 12px;
+}
+
+.post-card-simple .post-stats span {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.post-card-simple .post-stats svg {
+    width: 14px;
+    height: 14px;
+}
+
+.user-inventory-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 10px;
+}
+
+.inventory-item-card {
+    background: var(--paper-card);
+    border: 1.5px solid var(--ink);
+    border-radius: 0;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 2px 2px 0 var(--ink-faded);
+}
+
+.inventory-item-card .item-info {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    width: 100%;
+}
+
+.inventory-item-card .item-name {
+    font-size: 0.75rem;
+    color: var(--ink);
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+    font-family: var(--font-mono);
+}
+
+.inventory-item-card .item-qty {
+    font-size: 0.7rem;
+    color: var(--ink-faded);
+    font-family: var(--font-mono);
+}
+
+.empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--ink-faded);
+    font-family: var(--font-hand);
+    font-size: 1.1rem;
+}
+
+.empty-state svg {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 12px;
+    opacity: 0.5;
+    color: var(--ink-faded);
+}

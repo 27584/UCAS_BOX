@@ -1,0 +1,377 @@
+﻿/* ============================================
+   背包页 —— 合成 & 列表
+   ============================================ */
+.inventory-page .page-header { margin-bottom: 24px; }
+
+.btn-merge {
+    background: var(--ink);
+    border: 1.5px solid var(--ink);
+    color: var(--paper-card);
+    font-weight: 700;
+    padding: 10px 16px;
+    border-radius: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-decoration: none;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    box-shadow: 3px 3px 0 var(--seal-red);
+}
+
+.btn-merge:hover {
+    background: var(--seal-red);
+    box-shadow: 4px 4px 0 var(--ink);
+    transform: translate(-1px, -1px);
+}
+
+.btn-merge svg { width: 18px; height: 18px; }
+
+/* 合成弹窗 */
+.merge-modal-content {
+    max-width: 520px;
+    width: 95%;
+    max-height: 90vh;
+    overflow-y: auto;
+    background: var(--paper-card);
+    border: 1.5px solid var(--ink);
+    border-radius: 0;
+    padding: 28px 24px 24px;
+    box-shadow: var(--shadow-lift);
+    position: relative;
+}
+
+.merge-modal-content::before {
+    content: '';
+    position: absolute;
+    top: -10px;
+    left: 50%;
+    transform: translateX(-50%) rotate(-3deg);
+    width: 40px;
+    height: 20px;
+    background: var(--seal-red);
+    border-radius: 50%;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    opacity: 0.85;
+}
+
+.merge-title {
+    font-family: var(--font-display);
+    font-size: 1.3rem;
+    color: var(--ink);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    padding-bottom: 10px;
+    border-bottom: 1.5px solid var(--ink);
+    position: relative;
+}
+
+.merge-title::after {
+    content: '';
+    position: absolute;
+    left: 0; bottom: -3px;
+    width: 36px; height: 2px;
+    background: var(--seal-red);
+}
+
+.merge-title svg { width: 22px; height: 22px; }
+
+.merge-info { margin-bottom: 16px; }
+
+.merge-hint {
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+    background: var(--marker-soft);
+    border: 1px dashed var(--ink-faded);
+    padding: 8px 12px;
+    border-radius: 0;
+    display: block;
+    font-family: var(--font-hand);
+}
+
+/* 九宫格 */
+.merge-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 18px;
+    padding: 12px;
+    background: var(--paper-bg);
+    border: 1.5px dashed var(--ink-faded);
+    border-radius: 0;
+}
+
+.merge-slot {
+    aspect-ratio: 1;
+    background: var(--paper-card);
+    border: 2px dashed var(--ink-faded);
+    border-radius: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    min-height: 72px;
+    box-shadow: inset 1px 1px 0 rgba(0,0,0,0.05);
+}
+
+.merge-slot:hover {
+    border-color: var(--ink);
+    background: var(--paper-card);
+    box-shadow: 2px 2px 0 var(--ink-faded);
+}
+
+.merge-slot.filled {
+    border-style: solid;
+    border-color: var(--ink);
+    background: var(--paper-card);
+    box-shadow: 1px 1px 0 var(--ink);
+}
+
+.merge-slot .slot-item {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
+    cursor: pointer;
+}
+
+.merge-slot .slot-item:hover { opacity: 0.8; }
+
+.merge-slot .slot-item .item-icon { width: 40px; height: 40px; }
+
+.merge-slot .slot-item .item-name {
+    font-size: 0.65rem;
+    color: var(--ink-soft);
+    margin-top: 4px;
+    text-align: center;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+}
+
+.merge-slot .slot-remove {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 18px;
+    height: 18px;
+    background: var(--seal-red);
+    border: 1px solid var(--ink);
+    border-radius: 0;
+    color: var(--paper-card);
+    font-size: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.2s;
+    font-family: var(--font-mono);
+}
+
+.merge-slot:hover .slot-remove { opacity: 1; }
+
+/* 合成状态 */
+.merge-status {
+    text-align: center;
+    font-size: 0.9rem;
+    color: var(--ink-soft);
+    margin-bottom: 12px;
+    font-family: var(--font-mono);
+}
+
+.merge-status #merge-count {
+    color: var(--seal-red);
+    font-weight: 700;
+}
+
+.merge-quality {
+    margin-left: 12px;
+    padding: 2px 8px;
+    background: var(--paper-bg);
+    border: 1px solid var(--ink-faded);
+    border-radius: 0;
+    font-size: 0.8rem;
+    font-family: var(--font-mono);
+}
+
+.merge-quality.can-merge {
+    background: var(--ink);
+    color: var(--paper-card);
+    border-color: var(--ink);
+}
+
+/* 合成按钮 */
+.btn-merge-action {
+    width: 100%;
+    padding: 14px;
+    background: var(--ink);
+    border: 1.5px solid var(--ink);
+    border-radius: 0;
+    color: var(--paper-card);
+    font-family: var(--font-mono);
+    font-size: 0.95rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 16px;
+    box-shadow: 3px 3px 0 var(--seal-red);
+}
+
+.btn-merge-action:disabled {
+    background: var(--paper-bg);
+    color: var(--ink-faded);
+    border-color: var(--ink-faded);
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.btn-merge-action:not(:disabled):hover {
+    background: var(--seal-red);
+    box-shadow: 4px 4px 0 var(--ink);
+    transform: translate(-1px, -1px);
+}
+
+.btn-merge-action svg { width: 20px; height: 20px; }
+
+/* 可选收藏品列表 */
+.merge-items-section {
+    border-top: 1.5px dashed var(--ink-faded);
+    padding-top: 16px;
+}
+
+.merge-items-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    font-size: 0.9rem;
+    color: var(--ink-soft);
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.merge-items-hint {
+    font-size: 0.75rem;
+    color: var(--ink-faded);
+    font-family: var(--font-hand);
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.merge-items-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    gap: 8px;
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 8px;
+    background: var(--paper-bg);
+    border: 1.5px solid var(--ink-faded);
+    border-radius: 0;
+}
+
+.merge-item-card {
+    padding: 8px;
+    background: var(--paper-card);
+    border: 1.5px solid var(--ink-faded);
+    border-radius: 0;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.15s;
+    box-shadow: 1px 1px 0 var(--ink-faded);
+}
+
+.merge-item-card:hover {
+    border-color: var(--ink);
+    box-shadow: 2px 2px 0 var(--ink);
+    transform: translate(-1px, -1px);
+}
+
+.merge-item-card.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.merge-item-card .item-icon {
+    width: 40px;
+    height: 40px;
+    margin: 0 auto 4px;
+}
+
+.merge-item-card .item-name {
+    font-size: 0.7rem;
+    color: var(--ink-soft);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+}
+
+.merge-item-card .item-count {
+    font-size: 0.65rem;
+    color: var(--ink-faded);
+    font-family: var(--font-mono);
+}
+
+.merge-section { text-align: left; }
+
+/* ============================================
+   过滤栏
+   ============================================ */
+.filter-bar {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.filter-btn {
+    padding: 5px 14px;
+    background: var(--paper-card);
+    border: 1.5px solid var(--ink-faded);
+    border-radius: 0;
+    color: var(--ink-soft);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.15s;
+    box-shadow: 1px 1px 0 var(--ink-faded);
+}
+
+.filter-btn:hover {
+    border-color: var(--ink);
+    color: var(--ink);
+    box-shadow: 2px 2px 0 var(--ink-faded);
+}
+
+.filter-btn.active {
+    background: var(--ink);
+    color: var(--paper-card);
+    border-color: var(--ink);
+    box-shadow: 2px 2px 0 var(--seal-red);
+}

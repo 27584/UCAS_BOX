@@ -1,0 +1,97 @@
+﻿/* Toggle Switch —— 像老式电灯开关 */
+.toggle-switch {
+    position: relative;
+    width: 48px;
+    height: 26px;
+    display: inline-block;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--paper-bg);
+    border: 1.5px solid var(--ink);
+    border-radius: 0;
+    transition: all 0.2s;
+}
+
+.toggle-slider::before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 2px;
+    bottom: 2px;
+    background: var(--paper-card);
+    border: 1.5px solid var(--ink);
+    border-radius: 0;
+    transition: all 0.2s;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+    background: var(--ink);
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+    background: var(--paper-card);
+    transform: translateX(22px);
+}
+
+.changelog-content {
+    text-align: left;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.changelog-item {
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px dashed var(--ink-faded);
+}
+
+.changelog-item:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.changelog-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.changelog-version {
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--ink);
+    border: 1.5px solid var(--ink);
+    padding: 2px 8px;
+    border-radius: 0;
+}
+
+.changelog-date {
+    font-size: 0.8rem;
+    color: var(--ink-faded);
+    font-family: var(--font-mono);
+}
+
+.changelog-features {
+    margin: 0;
+    padding-left: 20px;
+    color: var(--ink-soft);
+    font-size: 0.9rem;
+    line-height: 1.8;
+}
+
+.changelog-features li { margin-bottom: 4px; }
+

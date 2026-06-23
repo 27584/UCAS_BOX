@@ -1,0 +1,118 @@
+﻿/* ============================================
+   挂机页 —— 收益卡像账本
+   ============================================ */
+.idle-page {
+    position: relative;
+    min-height: 60vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 0;
+}
+
+.idle-content {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+    max-width: 480px;
+    width: 100%;
+}
+
+.idle-header {
+    margin-bottom: 28px;
+}
+
+.idle-header svg {
+    width: 40px;
+    height: 40px;
+    color: var(--ink);
+    margin-bottom: 12px;
+}
+
+.idle-header h2 {
+    font-family: var(--font-display);
+    font-size: 1.75rem;
+    color: var(--ink);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.idle-header p {
+    color: var(--ink-soft);
+    font-family: var(--font-hand);
+    font-size: 1.05rem;
+}
+
+.idle-earning {
+    padding: 36px 24px;
+    background:
+        url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.7'/%3E%3CfeColorMatrix values='0 0 0 0 0.16 0 0 0 0 0.13 0 0 0 0 0.08 0 0 0 0.06 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+        var(--paper-card);
+    position: relative;
+}
+
+.earning-label {
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-family: var(--font-mono);
+}
+
+.earning-amount {
+    font-family: var(--font-display);
+    font-size: 4rem;
+    font-weight: 700;
+    color: var(--ink);
+    line-height: 1;
+}
+
+.earning-unit {
+    font-size: 1rem;
+    color: var(--ink-faded);
+    margin-top: 8px;
+    font-family: var(--font-hand);
+}
+
+.earning-rate {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1.5px dashed var(--ink-faded);
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+    font-family: var(--font-mono);
+}
+
+.earning-time {
+    margin-top: 8px;
+    font-size: 0.8rem;
+    color: var(--ink-faded);
+    font-family: var(--font-mono);
+}
+
+.btn-claim {
+    width: 100%;
+    padding: 16px;
+    font-size: 1.1rem;
+}
+
+.idle-tip {
+    margin-top: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: var(--ink-faded);
+    font-size: 0.8rem;
+    font-family: var(--font-hand);
+    font-size: 0.95rem;
+}
+
+.idle-tip svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
