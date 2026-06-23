@@ -74,6 +74,28 @@
     font-family: var(--font-display);
 }
 
+.dm-name .online-status {
+    font-size: 0.7rem;
+    padding: 1px 5px;
+    border-radius: 0;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    margin-left: 4px;
+}
+
+.dm-name .online-status.online {
+    background: #4ade80;
+    color: var(--ink);
+    border: 1px solid var(--ink);
+}
+
+.dm-name .online-status.offline {
+    background: var(--ink-faded);
+    color: var(--paper-card);
+    border: 1px solid var(--ink);
+    opacity: 0.7;
+}
+
 .dm-name .unread-badge {
     background: var(--seal-red);
     color: var(--paper-card);

@@ -27,7 +27,7 @@ export const settingsPage = {
     async loadSettings() {
         try {
             const settings = await getUserSettingsFull();
-            this.settings = settings || { show_collections_publicly: true, allow_follow: true, allow_stranger_dm: true, allow_search: true };
+            this.settings = settings || { show_collections_publicly: true, allow_follow: true, allow_stranger_dm: true, allow_search: true, show_online_status: true };
             this.renderSettings();
         } catch (e) {
             showToast('加载设置失败', 'error');
@@ -91,6 +91,21 @@ export const settingsPage = {
                 } catch (e) {
                     showToast('保存失败', 'error');
                     toggleSearch.checked = !e.target.checked;
+                }
+            });
+        }
+
+        // 显示在线状态设置
+        const toggleOnlineStatus = document.getElementById('toggle-show-online-status');
+        if (toggleOnlineStatus) {
+            toggleOnlineStatus.checked = this.settings.show_online_status !== false;
+            toggleOnlineStatus.addEventListener('change', async (e) => {
+                try {
+                    await updateProfileSetting('show_online_status', e.target.checked);
+                    showToast('设置已保存', 'success');
+                } catch (e) {
+                    showToast('保存失败', 'error');
+                    toggleOnlineStatus.checked = !e.target.checked;
                 }
             });
         }

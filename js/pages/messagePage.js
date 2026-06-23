@@ -1,6 +1,6 @@
 import { getMails, markMailRead, getDmConversations, getDmHistory, sendPrivateMessage, markDmRead, getUnreadDmCount, getReplyNotifications, markNotificationRead, markAllNotificationsRead, getUnreadNotificationCount } from '../api.js';
 import { createIcons, icons } from 'lucide';
-import { showToast, renderPagination, bindPagination } from '../utils.js';
+import { showToast, renderPagination, bindPagination, timeAgo } from '../utils.js';
 import { currentUser } from '../supabaseClient.js';
 import { router } from '../router.js';
 import { updateMailBadge } from '../auth.js';
@@ -377,6 +377,13 @@ export const messagePage = {
             const unreadBadge = conv.unread_count > 0 ? `<span class="unread-badge">${conv.unread_count}</span>` : '';
             const followIcon = conv.is_following ? '<i data-lucide="heart" class="follow-icon"></i>' : '';
             
+            let onlineStatus = '';
+            if (conv.is_online) {
+                onlineStatus = '<span class="online-status online">在线</span>';
+            } else if (conv.last_active_at) {
+                onlineStatus = `<span class="online-status offline">${timeAgo(conv.last_active_at)}</span>`;
+            }
+            
             return `
                 <div class="dm-item animate-fade-in-up" data-user-id="${conv.user_id}" data-nickname="${conv.nickname || '无名旅者'}" style="animation-delay:${idx * 0.05}s">
                     <div class="dm-avatar">
@@ -384,7 +391,7 @@ export const messagePage = {
                         ${followIcon}
                     </div>
                     <div class="dm-body">
-                        <div class="dm-name">${conv.nickname || '无名旅者'} ${unreadBadge}</div>
+                        <div class="dm-name">${conv.nickname || '无名旅者'} ${onlineStatus} ${unreadBadge}</div>
                         <div class="dm-preview">${conv.last_message || '开始聊天吧'}</div>
                         <div class="dm-time">${time}</div>
                     </div>

@@ -4276,6 +4276,9 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_settings' AND column_name = 'allow_search') THEN
         ALTER TABLE public.user_settings ADD COLUMN allow_search BOOLEAN DEFAULT true NOT NULL;
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_settings' AND column_name = 'show_online_status') THEN
+        ALTER TABLE public.user_settings ADD COLUMN show_online_status BOOLEAN DEFAULT true NOT NULL;
+    END IF;
 END $$;
 
 -- ============================================================
@@ -4672,14 +4675,15 @@ BEGIN
     END IF;
     
     -- 只允许设置白名单中的字段
-    IF p_key IN ('show_collections_publicly', 'allow_follow', 'allow_stranger_dm', 'allow_search') THEN
+    IF p_key IN ('show_collections_publicly', 'allow_follow', 'allow_stranger_dm', 'allow_search', 'show_online_status') THEN
         -- 使用 upsert 模式，如果记录不存在则插入，存在则更新
-        INSERT INTO public.user_settings (user_id, show_collections_publicly, allow_follow, allow_stranger_dm, allow_search, updated_at)
+        INSERT INTO public.user_settings (user_id, show_collections_publicly, allow_follow, allow_stranger_dm, allow_search, show_online_status, updated_at)
         VALUES (user_uuid, 
                 CASE WHEN p_key = 'show_collections_publicly' THEN p_value ELSE true END,
                 CASE WHEN p_key = 'allow_follow' THEN p_value ELSE true END,
                 CASE WHEN p_key = 'allow_stranger_dm' THEN p_value ELSE true END,
                 CASE WHEN p_key = 'allow_search' THEN p_value ELSE true END,
+                CASE WHEN p_key = 'show_online_status' THEN p_value ELSE true END,
                 now())
         ON CONFLICT (user_id) 
         DO UPDATE SET 
@@ -4687,6 +4691,7 @@ BEGIN
             allow_follow = CASE WHEN p_key = 'allow_follow' THEN p_value ELSE user_settings.allow_follow END,
             allow_stranger_dm = CASE WHEN p_key = 'allow_stranger_dm' THEN p_value ELSE user_settings.allow_stranger_dm END,
             allow_search = CASE WHEN p_key = 'allow_search' THEN p_value ELSE user_settings.allow_search END,
+            show_online_status = CASE WHEN p_key = 'show_online_status' THEN p_value ELSE user_settings.show_online_status END,
             updated_at = now();
     ELSE
         RAISE EXCEPTION '不支持的设置项';
@@ -4707,7 +4712,9 @@ RETURNS TABLE(
     last_message TEXT,
     last_message_time TIMESTAMPTZ,
     unread_count BIGINT,
-    is_following BOOLEAN
+    is_following BOOLEAN,
+    is_online BOOLEAN,
+    last_active_at TIMESTAMPTZ
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -4749,9 +4756,19 @@ BEGIN
         pm.created_at AS last_message_time,
         (SELECT COUNT(*) FROM public.private_messages pm2 
          WHERE pm2.receiver_id = user_uuid AND pm2.sender_id = au.other_user_id AND pm2.is_read = false) AS unread_count,
-        EXISTS(SELECT 1 FROM public.follows f WHERE f.follower_id = user_uuid AND f.following_id = au.other_user_id) AS is_following
+        EXISTS(SELECT 1 FROM public.follows f WHERE f.follower_id = user_uuid AND f.following_id = au.other_user_id) AS is_following,
+        CASE 
+            WHEN COALESCE(s.show_online_status, true) = false THEN false
+            WHEN p.last_active_at > NOW() - INTERVAL '5 minutes' THEN true
+            ELSE false
+        END AS is_online,
+        CASE 
+            WHEN COALESCE(s.show_online_status, true) = false THEN NULL
+            ELSE p.last_active_at
+        END AS last_active_at
     FROM all_users au
     LEFT JOIN public.profiles p ON au.other_user_id = p.id
+    LEFT JOIN public.user_settings s ON au.other_user_id = s.user_id
     LEFT JOIN public.private_messages pm ON 
         (pm.sender_id = user_uuid AND pm.receiver_id = au.other_user_id) OR 
         (pm.sender_id = au.other_user_id AND pm.receiver_id = user_uuid)
@@ -4909,7 +4926,8 @@ RETURNS TABLE(
     show_collections_publicly BOOLEAN,
     allow_follow BOOLEAN,
     allow_stranger_dm BOOLEAN,
-    allow_search BOOLEAN
+    allow_search BOOLEAN,
+    show_online_status BOOLEAN
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -4926,13 +4944,14 @@ BEGIN
         COALESCE(s.show_collections_publicly, true),
         COALESCE(s.allow_follow, true),
         COALESCE(s.allow_stranger_dm, true),
-        COALESCE(s.allow_search, true)
+        COALESCE(s.allow_search, true),
+        COALESCE(s.show_online_status, true)
     FROM public.user_settings s
     WHERE s.user_id = user_uuid;
     
     -- 如果没有设置记录，返回默认值
     IF NOT FOUND THEN
-        RETURN QUERY SELECT true, true, true, true;
+        RETURN QUERY SELECT true, true, true, true, true;
     END IF;
 END;
 $$;
@@ -5001,10 +5020,16 @@ BEGIN
                 p.is_admin,
                 p.is_bot,
                 CASE 
+                    WHEN COALESCE(s.show_online_status, true) = false THEN false
                     WHEN p.last_active_at > NOW() - INTERVAL '5 minutes' THEN true
                     ELSE false
-                END AS is_online
+                END AS is_online,
+                CASE 
+                    WHEN COALESCE(s.show_online_status, true) = false THEN NULL
+                    ELSE p.last_active_at
+                END AS last_active_at
             FROM public.profiles p
+            LEFT JOIN public.user_settings s ON p.id = s.user_id
             WHERE EXISTS (
                 SELECT 1 FROM public.follows f1 
                 WHERE f1.follower_id = p_user_id AND f1.following_id = p.id
@@ -5043,11 +5068,17 @@ BEGIN
                     WHERE f2.follower_id = p.id AND f2.following_id = p_user_id
                 ) AS is_mutual,
                 CASE 
+                    WHEN COALESCE(s.show_online_status, true) = false THEN false
                     WHEN p.last_active_at > NOW() - INTERVAL '5 minutes' THEN true
                     ELSE false
-                END AS is_online
+                END AS is_online,
+                CASE 
+                    WHEN COALESCE(s.show_online_status, true) = false THEN NULL
+                    ELSE p.last_active_at
+                END AS last_active_at
             FROM public.follows f
             JOIN public.profiles p ON f.following_id = p.id
+            LEFT JOIN public.user_settings s ON p.id = s.user_id
             WHERE f.follower_id = p_user_id
             ORDER BY p.last_active_at DESC
             LIMIT p_limit
@@ -5080,11 +5111,17 @@ BEGIN
                     WHERE f2.follower_id = p_user_id AND f2.following_id = p.id
                 ) AS is_mutual,
                 CASE 
+                    WHEN COALESCE(s.show_online_status, true) = false THEN false
                     WHEN p.last_active_at > NOW() - INTERVAL '5 minutes' THEN true
                     ELSE false
-                END AS is_online
+                END AS is_online,
+                CASE 
+                    WHEN COALESCE(s.show_online_status, true) = false THEN NULL
+                    ELSE p.last_active_at
+                END AS last_active_at
             FROM public.follows f
             JOIN public.profiles p ON f.follower_id = p.id
+            LEFT JOIN public.user_settings s ON p.id = s.user_id
             WHERE f.following_id = p_user_id
             ORDER BY p.last_active_at DESC
             LIMIT p_limit

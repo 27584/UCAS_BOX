@@ -2,10 +2,19 @@
 // 版本信息与更新日志
 // ============================================
 
-export const VERSION = 'v0.6.1_beta';
-export const VERSION_CODE = 5; // 绝对版本号
+export const VERSION = 'v0.6.2_beta';
+export const VERSION_CODE = 6; // 绝对版本号
 
 export const CHANGELOG = [{
+        version: 'v0.6.2_beta',
+        date: '2026-06-23',
+        type: 'feature',
+        features: [
+            "私信页面显示在线状态",
+            "新增在线状态隐私设置",
+            "回复通知区分一级评论和回复评论",
+        ]
+    }, {
         version: 'v0.6.1_beta',
         date: '2026-06-23',
         type: 'feature',

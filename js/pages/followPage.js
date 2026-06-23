@@ -1,5 +1,5 @@
 import { getFriendsWithOnline, getFollowingWithOnline, getFollowersWithOnline, toggleFollow } from '../api.js';
-import { userAvatarHTML, userBadgeHTML, showToast } from '../utils.js';
+import { userAvatarHTML, userBadgeHTML, showToast, timeAgo } from '../utils.js';
 import { createIcons, icons } from 'lucide';
 import { currentUser } from '../supabaseClient.js';
 import { router } from '../router.js';
@@ -100,7 +100,15 @@ export const followPage = {
             return;
         }
 
-        listEl.innerHTML = users.map(user => `
+        listEl.innerHTML = users.map(user => {
+            let onlineStatus = '';
+            if (user.is_online) {
+                onlineStatus = '<span class="online-tag">在线</span>';
+            } else if (user.last_active_at) {
+                onlineStatus = `<span class="offline-tag">${timeAgo(user.last_active_at)}</span>`;
+            }
+            
+            return `
             <div class="follow-item" data-user-id="${user.user_id}">
                 <div class="follow-avatar">
                     ${userAvatarHTML(user)}
@@ -110,7 +118,7 @@ export const followPage = {
                     <div class="follow-name">
                         ${user.nickname}
                         ${userBadgeHTML({ is_admin: user.is_admin, is_bot: user.is_bot })}
-                        ${user.is_online ? '<span class="online-tag">在线</span>' : ''}
+                        ${onlineStatus}
                     </div>
                     ${this.currentTab !== 'friends' && user.is_mutual ? '<span class="mutual-tag">互关</span>' : ''}
                 </div>
@@ -118,6 +126,10 @@ export const followPage = {
                     <button class="btn btn-outline btn-profile" data-user-id="${user.user_id}">
                         <i data-lucide="user"></i>
                         查看
+                    </button>
+                    <button class="btn btn-primary btn-dm" data-user-id="${user.user_id}" data-nickname="${user.nickname}">
+                        <i data-lucide="message-circle"></i>
+                        私信
                     </button>
                     ${this.currentTab === 'following' || this.currentTab === 'friends' ? `
                         <button class="btn btn-danger btn-unfollow" data-user-id="${user.user_id}">
@@ -133,7 +145,7 @@ export const followPage = {
                     ` : ''}
                 </div>
             </div>
-        `).join('');
+        `}).join('');
 
         createIcons({ icons });
 
