@@ -9,6 +9,7 @@ export async function rpc(functionName, params = {}) {
     const { data, error } = await supabase.rpc(functionName, params);
     if (error) {
         console.error(`RPC ${functionName} 失败:`, error);
+        console.error('RPC params:', JSON.stringify(params));
         showToast(error.message || '操作失败', 'error');
         throw error;
     }
@@ -173,6 +174,16 @@ export async function getMarketOrders(page = 1, limit = 10, quality = null, sort
         p_search: search,
         p_type: type
     });
+}
+
+export async function getItemTradeHistory(itemId, limit = 50) {
+    const data = await rpc('get_item_trade_history', { p_item_id: itemId, p_limit: limit });
+    return data || [];
+}
+
+export async function getItemTradeStats(itemId, groupBy = 'hour') {
+    const data = await rpc('get_item_trade_stats', { p_item_id: itemId, p_group_by: groupBy });
+    return data || [];
 }
 
 export async function getItems() {

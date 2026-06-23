@@ -1,4 +1,4 @@
-﻿/* ============================================
+/* ============================================
    市场页
    ============================================ */
 .market-list {
@@ -43,19 +43,7 @@
     pointer-events: none;
 }
 
-.market-card::after {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    right: 0;
-    width: 36px;
-    height: 36px;
-    background: linear-gradient(45deg, transparent 50%, var(--paper-bg) 50%);
-    border-top: 1.5px solid var(--ink);
-    border-left: 1.5px solid var(--ink);
-    box-shadow: -1px -1px 0 var(--ink-faded);
-    z-index: 2;
-}
+
 
 .market-card-item {
     display: flex;
@@ -166,6 +154,209 @@
     border-color: var(--ink);
     background: var(--marker-soft);
     box-shadow: 2px 2px 0 var(--ink);
+}
+
+.market-card-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: nowrap;
+}
+
+.trade-history-card {
+    max-width: 700px;
+    width: 90%;
+    max-height: 80vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.trade-header {
+    margin-bottom: 16px;
+}
+
+.trade-header h3 {
+    font-family: var(--font-mono);
+    font-size: 1.2rem;
+    color: var(--ink);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.trade-body {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 8px;
+}
+
+.chart-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.chart-tab {
+    padding: 6px 16px;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    background: var(--paper-card);
+    border: 2px solid var(--ink);
+    box-shadow: 2px 2px 0 var(--ink);
+    cursor: pointer;
+    transition: all 0.15s;
+    color: var(--ink);
+}
+
+.chart-tab:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: 3px 3px 0 var(--ink);
+}
+
+.chart-tab.active {
+    background: var(--ink);
+    color: var(--paper-card);
+}
+
+.chart-container {
+    height: 280px;
+    margin-bottom: 20px;
+    background: var(--paper-card);
+    border: 2px solid var(--ink);
+    box-shadow: inset 2px 2px 0 rgba(0,0,0,0.1);
+    padding: 16px;
+}
+
+.trade-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.trade-stat {
+    background: var(--paper-card);
+    border: 2px solid var(--ink);
+    box-shadow: 2px 2px 0 var(--ink);
+    padding: 12px;
+    text-align: center;
+}
+
+.stat-label {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+}
+
+.stat-value {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--ink);
+}
+
+.trade-history-list {
+    background: var(--paper-card);
+    border: 2px solid var(--ink);
+    box-shadow: 2px 2px 0 var(--ink);
+    overflow: hidden;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.trade-history-header {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+    gap: 8px;
+    padding: 10px 12px;
+    background: var(--ink);
+    color: var(--paper-card);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    position: sticky;
+    top: 0;
+}
+
+.trade-history-item {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+    gap: 8px;
+    padding: 10px 12px;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    border-bottom: 1px solid var(--ink-faded);
+    transition: background 0.15s;
+}
+
+.trade-history-item:hover {
+    background: var(--marker-soft);
+}
+
+.trade-history-item:last-child {
+    border-bottom: none;
+}
+
+.trade-footer {
+    margin-top: 16px;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.sell-layout {
+    display: grid;
+    grid-template-columns: 1fr 400px;
+    gap: 24px;
+    align-items: start;
+}
+
+.sell-chart-panel {
+    position: sticky;
+    top: 20px;
+}
+
+.sell-chart-panel h3 {
+    font-family: var(--font-mono);
+    font-size: 1rem;
+    color: var(--ink);
+    margin: 0 0 16px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sell-chart-empty {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--ink-soft);
+    font-family: var(--font-mono);
+}
+
+.empty-trade-info p {
+    margin: 8px 0;
+}
+
+.sell-chart-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+@media (max-width: 900px) {
+    .sell-layout {
+        grid-template-columns: 1fr;
+    }
+    
+    .sell-chart-panel {
+        position: static;
+    }
 }
 
 .sell-item-name {

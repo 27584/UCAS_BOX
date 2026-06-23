@@ -1,7 +1,9 @@
-import { getMarketOrders, getInventory, buyMarketOrder, cancelMarketOrder, placeMarketOrder, getProfile } from '../api.js';
+import { getMarketOrders, getInventory, buyMarketOrder, cancelMarketOrder, placeMarketOrder, getProfile, getItemTradeHistory, getItemTradeStats } from '../api.js';
 import { itemImageHTML, formatNumber, showToast, QUALITY_CONFIG, ITEM_TYPE_CONFIG, openItemDetail, initItemImages, userBadgeHTML } from '../utils.js';
 import { createIcons, icons } from 'lucide';
 import { updateGlobalShells } from '../auth.js';
+import { Chart, registerables } from 'chart.js';
+Chart.register(...registerables);
 
 const PAGE_SIZE = 10;
 
@@ -197,6 +199,15 @@ export const marketPage = {
             });
         });
 
+        container.querySelectorAll('.btn-trade-history').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const itemId = parseInt(btn.dataset.itemId);
+                const itemName = btn.dataset.itemName;
+                this.openTradeHistoryModal(itemId, itemName);
+            });
+        });
+
         container.querySelectorAll('.market-card-item').forEach(card => {
             card.addEventListener('click', () => {
                 const itemId = parseInt(card.dataset.itemId);
@@ -296,6 +307,15 @@ export const marketPage = {
             });
         });
 
+        container.querySelectorAll('.btn-trade-history').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const itemId = parseInt(btn.dataset.itemId);
+                const itemName = btn.dataset.itemName;
+                this.openTradeHistoryModal(itemId, itemName);
+            });
+        });
+
         createIcons({ icons });
     },
 
@@ -312,31 +332,63 @@ export const marketPage = {
         }
 
         container.innerHTML = `
-            <div class="sell-form card">
-                <div class="form-group">
-                    <label class="form-label">选择物品</label>
-                    <div class="sell-item-grid" id="sell-item-grid"></div>
+            <div class="sell-layout">
+                <div class="sell-form card">
+                    <div class="form-group">
+                        <label class="form-label">选择物品</label>
+                        <div class="sell-item-grid" id="sell-item-grid"></div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">单价（果壳币）</label>
+                        <input type="number" class="form-input" id="sell-price" placeholder="输入价格" min="1" />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">数量</label>
+                        <input type="number" class="form-input" id="sell-qty" value="1" min="1" />
+                    </div>
+                    <button class="btn btn-primary" id="btn-publish">
+                        <i data-lucide="upload"></i>
+                        <span>发布出售</span>
+                    </button>
                 </div>
-                <div class="form-group">
-                    <label class="form-label">单价（果壳币）</label>
-                    <input type="number" class="form-input" id="sell-price" placeholder="输入价格" min="1" />
+                <div class="sell-chart-panel card">
+                    <h3><i data-lucide="trending-up"></i> 物品行情</h3>
+                    <div class="sell-chart-empty" id="sell-chart-empty">
+                        <p>请选择一个物品查看行情</p>
+                    </div>
+                    <div class="sell-chart-container" id="sell-chart-container" style="display:none;">
+                        <div class="chart-tabs">
+                            <button class="chart-tab active" data-group="hour">小时</button>
+                            <button class="chart-tab" data-group="day">日</button>
+                        </div>
+                        <div class="chart-container" style="height:200px;">
+                            <canvas id="sell-trade-chart"></canvas>
+                        </div>
+                        <div class="trade-stats">
+                            <div class="trade-stat">
+                                <span class="stat-label">总交易量</span>
+                                <span class="stat-value" id="sell-stat-qty">-</span>
+                            </div>
+                            <div class="trade-stat">
+                                <span class="stat-label">总交易额</span>
+                                <span class="stat-value" id="sell-stat-price">-</span>
+                            </div>
+                            <div class="trade-stat">
+                                <span class="stat-label">交易次数</span>
+                                <span class="stat-value" id="sell-stat-count">-</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label class="form-label">数量</label>
-                    <input type="number" class="form-input" id="sell-qty" value="1" min="1" />
-                </div>
-                <button class="btn btn-primary" id="btn-publish">
-                    <i data-lucide="upload"></i>
-                    <span>发布出售</span>
-                </button>
             </div>
         `;
 
         const grid = container.querySelector('#sell-item-grid');
         let selectedId = null;
+        let selectedName = '';
 
         grid.innerHTML = this.inventory.map(inv => `
-            <div class="sell-item-card" data-id="${inv.item_id}" data-max="${inv.quantity}">
+            <div class="sell-item-card" data-id="${inv.item_id}" data-name="${inv.item_name}" data-max="${inv.quantity}">
                 ${itemImageHTML(inv.item_name, inv.item_quality, inv.item_image)}
                 <div class="sell-item-name">${inv.item_name}</div>
                 <div class="sell-item-qty">拥有: ${inv.quantity}</div>
@@ -344,11 +396,25 @@ export const marketPage = {
         `).join('');
         initItemImages();
 
+        const self = this;
         grid.querySelectorAll('.sell-item-card').forEach(card => {
-            card.addEventListener('click', () => {
+            card.addEventListener('click', function() {
                 grid.querySelectorAll('.sell-item-card').forEach(c => c.classList.remove('selected'));
-                card.classList.add('selected');
-                selectedId = parseInt(card.dataset.id);
+                this.classList.add('selected');
+                selectedId = parseInt(this.dataset.id);
+                selectedName = this.dataset.name;
+                console.log('Selected item:', selectedId, selectedName);
+                self.loadSellItemStats(selectedId, selectedName);
+            });
+        });
+
+        container.querySelectorAll('.chart-tab').forEach(tab => {
+            tab.addEventListener('click', function() {
+                container.querySelectorAll('.chart-tab').forEach(t => t.classList.remove('active'));
+                this.classList.add('active');
+                if (selectedId) {
+                    self.loadSellItemStats(selectedId, selectedName, this.dataset.group);
+                }
             });
         });
 
@@ -391,10 +457,16 @@ export const marketPage = {
                     </div>
                     ${!isOwner ? `<div class="market-card-seller">卖家: ${order.seller_nickname || '未知'}${userBadgeHTML({is_admin: order.seller_is_admin, is_bot: order.seller_is_bot})}</div>` : ''}
                 </div>
-                ${isOwner
-                    ? `<button class="btn btn-danger btn-cancel" data-id="${order.order_id}">下架</button>`
-                    : `<button class="btn btn-primary btn-buy" data-id="${order.order_id}">购买</button>`
-                }
+                <div class="market-card-actions">
+                    ${isOwner
+                        ? `<button class="btn btn-danger btn-cancel" data-id="${order.order_id}">下架</button>`
+                        : `<button class="btn btn-primary btn-buy" data-id="${order.order_id}">购买</button>`
+                    }
+                    <button class="btn btn-outline btn-trade-history" data-item-id="${order.item_id}" data-item-name="${order.item_name}">
+                        <i data-lucide="trending-up"></i>
+                        行情
+                    </button>
+                </div>
             </div>
         `;
     },
@@ -518,5 +590,440 @@ export const marketPage = {
                 createIcons({ icons });
             }
         });
+    },
+
+    tradeChart: null,
+    sellTradeChart: null,
+
+    openTradeHistoryModal(itemId, itemName) {
+        const existingModal = document.getElementById('trade-history-modal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+
+        const modalHtml = `
+            <div id="trade-history-modal" class="modal" style="display:flex;">
+                <div class="modal-overlay" id="trade-overlay"></div>
+                <div class="modal-content trade-history-card">
+                    <button class="btn-close" id="trade-close"><i data-lucide="x"></i></button>
+                    <div class="trade-header">
+                        <h3><i data-lucide="trending-up"></i> ${itemName} 交易行情</h3>
+                    </div>
+                    <div class="trade-body">
+                        <div class="chart-tabs">
+                            <button class="chart-tab active" data-group="hour">小时</button>
+                            <button class="chart-tab" data-group="day">日</button>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="trade-chart"></canvas>
+                        </div>
+                        <div class="trade-stats">
+                            <div class="trade-stat">
+                                <span class="stat-label">总交易量</span>
+                                <span class="stat-value" id="stat-total-qty">-</span>
+                            </div>
+                            <div class="trade-stat">
+                                <span class="stat-label">总交易额</span>
+                                <span class="stat-value" id="stat-total-price">-</span>
+                            </div>
+                            <div class="trade-stat">
+                                <span class="stat-label">交易次数</span>
+                                <span class="stat-value" id="stat-trade-count">-</span>
+                            </div>
+                        </div>
+                        <div class="trade-history-list" id="trade-history-list">
+                            <div class="skeleton" style="height:150px;"></div>
+                        </div>
+                    </div>
+                    <div class="trade-footer">
+                        <button id="trade-close-btn" class="btn btn-secondary">关闭</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        createIcons({ icons });
+
+        const modal = document.getElementById('trade-history-modal');
+        const closeBtn = document.getElementById('trade-close');
+        const overlay = document.getElementById('trade-overlay');
+        const closeBtn2 = document.getElementById('trade-close-btn');
+
+        function closeModal() {
+            modal.remove();
+            if (this.tradeChart) {
+                this.tradeChart.destroy();
+                this.tradeChart = null;
+            }
+        }
+
+        closeBtn.addEventListener('click', closeModal.bind(this));
+        closeBtn2.addEventListener('click', closeModal.bind(this));
+        overlay.addEventListener('click', closeModal.bind(this));
+
+        document.querySelectorAll('.chart-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.chart-tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                this.loadTradeStats(itemId, tab.dataset.group);
+            });
+        });
+
+        this.loadTradeStats(itemId, 'hour');
+        this.loadTradeHistory(itemId);
+    },
+
+    async loadTradeStats(itemId, groupBy) {
+        try {
+            const stats = await getItemTradeStats(itemId, groupBy);
+            this.renderChart(stats);
+            this.updateStats(stats);
+        } catch (e) {
+            console.error('加载交易统计失败:', e);
+            const ctx = document.getElementById('trade-chart');
+            if (ctx) {
+                ctx.style.display = 'none';
+            }
+            document.getElementById('stat-total-qty').textContent = 'N/A';
+            document.getElementById('stat-total-price').textContent = 'N/A';
+            document.getElementById('stat-trade-count').textContent = 'N/A';
+        }
+    },
+
+    async loadTradeHistory(itemId) {
+        const listEl = document.getElementById('trade-history-list');
+        try {
+            const history = await getItemTradeHistory(itemId, 20);
+            if (!history || history.length === 0) {
+                listEl.innerHTML = '<div class="empty-state"><p>暂无交易记录</p></div>';
+                return;
+            }
+
+            listEl.innerHTML = `
+                <div class="trade-history-header">
+                    <span>时间</span>
+                    <span>单价</span>
+                    <span>数量</span>
+                    <span>总额</span>
+                </div>
+                ${history.map(h => `
+                    <div class="trade-history-item">
+                        <span>${new Date(h.created_at).toLocaleString()}</span>
+                        <span>${formatNumber(h.price_per_unit)}</span>
+                        <span>${h.quantity}</span>
+                        <span>${formatNumber(h.total_price)}</span>
+                    </div>
+                `).join('')}
+            `;
+        } catch (e) {
+            listEl.innerHTML = '<div class="empty-state"><p>加载失败</p></div>';
+        }
+    },
+
+    renderChart(stats) {
+        const ctx = document.getElementById('trade-chart');
+        if (!ctx) return;
+
+        if (this.tradeChart) {
+            this.tradeChart.destroy();
+        }
+
+        if (!stats || stats.length === 0) {
+            ctx.style.display = 'none';
+            return;
+        }
+
+        ctx.style.display = 'block';
+        const labels = stats.map(s => s.period);
+        const prices = stats.map(s => s.avg_price);
+        const quantities = stats.map(s => s.total_quantity);
+
+        this.tradeChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: '平均价格',
+                        data: prices,
+                        borderColor: '#e74c3c',
+                        backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                        yAxisID: 'y',
+                        tension: 0.4,
+                        fill: true
+                    },
+                    {
+                        label: '成交数量',
+                        data: quantities,
+                        borderColor: '#3498db',
+                        backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                        yAxisID: 'y1',
+                        tension: 0.4,
+                        fill: true
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: {
+                            font: {
+                                family: 'Special Elite, monospace'
+                            }
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: '#2c2c2c',
+                        titleFont: { family: 'Special Elite' },
+                        bodyFont: { family: 'Special Elite' },
+                        padding: 12,
+                        cornerRadius: 4
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: {
+                            color: 'rgba(0,0,0,0.1)'
+                        },
+                        ticks: {
+                            font: {
+                                family: 'Special Elite, monospace'
+                            },
+                            maxRotation: 45,
+                            minRotation: 45
+                        }
+                    },
+                    y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        grid: {
+                            color: 'rgba(0,0,0,0.1)'
+                        },
+                        ticks: {
+                            font: {
+                                family: 'Special Elite, monospace'
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: '价格 (果壳币)',
+                            font: {
+                                family: 'Special Elite'
+                            }
+                        }
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        grid: {
+                            drawOnChartArea: false
+                        },
+                        ticks: {
+                            font: {
+                                family: 'Special Elite, monospace'
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: '数量',
+                            font: {
+                                family: 'Special Elite'
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    },
+
+    updateStats(stats) {
+        if (!stats || stats.length === 0) return;
+
+        const totalQty = stats.reduce((sum, s) => sum + s.total_quantity, 0);
+        const totalPrice = stats.reduce((sum, s) => sum + (s.avg_price * s.total_quantity), 0);
+        const tradeCount = stats.reduce((sum, s) => sum + s.trade_count, 0);
+
+        document.getElementById('stat-total-qty').textContent = formatNumber(totalQty);
+        document.getElementById('stat-total-price').textContent = formatNumber(totalPrice);
+        document.getElementById('stat-trade-count').textContent = tradeCount;
+    },
+
+    async loadSellItemStats(itemId, itemName, groupBy = 'hour') {
+        console.log('loadSellItemStats called:', itemId, itemName, groupBy);
+        try {
+            const stats = await getItemTradeStats(itemId, groupBy);
+            console.log('Stats received:', stats);
+            this.renderSellChart(stats, itemName);
+            this.updateSellStats(stats);
+        } catch (e) {
+            console.error('加载交易统计失败:', e);
+            this.renderSellChart([], itemName);
+            this.updateSellStats([]);
+        }
+    },
+
+    renderSellChart(stats, itemName = '') {
+        const ctx = document.getElementById('sell-trade-chart');
+        const emptyEl = document.getElementById('sell-chart-empty');
+        const containerEl = document.getElementById('sell-chart-container');
+        
+        if (!ctx) return;
+
+        if (this.sellTradeChart) {
+            this.sellTradeChart.destroy();
+            this.sellTradeChart = null;
+        }
+
+        if (!stats || stats.length === 0) {
+            emptyEl.innerHTML = `
+                <div class="empty-trade-info">
+                    <p><strong>${itemName || '该物品'}</strong></p>
+                    <p>暂无交易记录</p>
+                    <p style="font-size:0.8rem;color:var(--ink-mute);">成为第一个交易此物品的人吧！</p>
+                </div>
+            `;
+            emptyEl.style.display = 'block';
+            containerEl.style.display = 'none';
+            return;
+        }
+
+        emptyEl.style.display = 'none';
+        containerEl.style.display = 'block';
+
+        const labels = stats.map(s => s.period);
+        const prices = stats.map(s => s.avg_price);
+        const quantities = stats.map(s => s.total_quantity);
+
+        this.sellTradeChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: '平均价格',
+                        data: prices,
+                        borderColor: '#e74c3c',
+                        backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                        yAxisID: 'y',
+                        tension: 0.4,
+                        fill: true
+                    },
+                    {
+                        label: '成交数量',
+                        data: quantities,
+                        borderColor: '#3498db',
+                        backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                        yAxisID: 'y1',
+                        tension: 0.4,
+                        fill: true
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: {
+                            font: {
+                                family: 'Special Elite, monospace'
+                            }
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: '#2c2c2c',
+                        titleFont: { family: 'Special Elite' },
+                        bodyFont: { family: 'Special Elite' },
+                        padding: 12,
+                        cornerRadius: 4
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: {
+                            color: 'rgba(0,0,0,0.1)'
+                        },
+                        ticks: {
+                            font: {
+                                family: 'Special Elite, monospace'
+                            },
+                            maxRotation: 45,
+                            minRotation: 45
+                        }
+                    },
+                    y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        grid: {
+                            color: 'rgba(0,0,0,0.1)'
+                        },
+                        ticks: {
+                            font: {
+                                family: 'Special Elite, monospace'
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: '价格',
+                            font: {
+                                family: 'Special Elite'
+                            }
+                        }
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        grid: {
+                            drawOnChartArea: false
+                        },
+                        ticks: {
+                            font: {
+                                family: 'Special Elite, monospace'
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: '数量',
+                            font: {
+                                family: 'Special Elite'
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    },
+
+    updateSellStats(stats) {
+        if (!stats || stats.length === 0) {
+            document.getElementById('sell-stat-qty').textContent = 'N/A';
+            document.getElementById('sell-stat-price').textContent = 'N/A';
+            document.getElementById('sell-stat-count').textContent = 'N/A';
+            return;
+        }
+
+        const totalQty = stats.reduce((sum, s) => sum + s.total_quantity, 0);
+        const totalPrice = stats.reduce((sum, s) => sum + (s.avg_price * s.total_quantity), 0);
+        const tradeCount = stats.reduce((sum, s) => sum + s.trade_count, 0);
+
+        document.getElementById('sell-stat-qty').textContent = formatNumber(totalQty);
+        document.getElementById('sell-stat-price').textContent = formatNumber(totalPrice);
+        document.getElementById('sell-stat-count').textContent = tradeCount;
     }
 };

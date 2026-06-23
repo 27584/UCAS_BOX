@@ -805,6 +805,25 @@ BEGIN
     ON CONFLICT ON CONSTRAINT inventory_user_id_item_id_key
     DO UPDATE SET quantity = public.inventory.quantity + EXCLUDED.quantity;
 
+    -- 记录交易历史
+    INSERT INTO public.market_trade_history (
+        item_id,
+        order_id,
+        seller_id,
+        buyer_id,
+        price_per_unit,
+        quantity,
+        total_price
+    ) VALUES (
+        order_rec.item_id,
+        p_order_id,
+        order_rec.seller_id,
+        buyer_uuid,
+        order_rec.price_per_unit,
+        buy_qty,
+        total_price
+    );
+
     -- 如果购买全部，完成订单；否则减少订单数量
     IF buy_qty >= order_rec.quantity THEN
         -- 完成订单
@@ -831,6 +850,118 @@ BEGIN
             order_rec.seller_id,
             '订单部分出售',
             '你上架的「' || public.sanitize_text(item_name) || '」被「' || public.sanitize_text(buyer_nickname) || '」购买 ' || buy_qty || ' 件，获得 ' || total_price || ' 果壳币，剩余 ' || (order_rec.quantity - buy_qty) || ' 件。'
+        );
+    END IF;
+END;
+$$;
+
+-- ============================================================
+-- 11.5 交易历史表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.market_trade_history (
+    id BIGSERIAL PRIMARY KEY,
+    item_id BIGINT REFERENCES public.items(id) ON DELETE CASCADE,
+    order_id BIGINT REFERENCES public.market_orders(id) ON DELETE CASCADE,
+    seller_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+    buyer_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+    price_per_unit BIGINT NOT NULL,
+    quantity INT NOT NULL,
+    total_price BIGINT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_trade_history_item_id ON public.market_trade_history(item_id);
+CREATE INDEX IF NOT EXISTS idx_trade_history_created_at ON public.market_trade_history(created_at);
+
+ALTER TABLE public.market_trade_history ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Trade history public read" ON public.market_trade_history;
+CREATE POLICY "Trade history public read" ON public.market_trade_history FOR SELECT USING (true);
+
+-- ============================================================
+-- 11.6 RPC 函数：获取物品交易历史
+-- ============================================================
+DROP FUNCTION IF EXISTS public.get_item_trade_history(BIGINT, INT);
+CREATE OR REPLACE FUNCTION public.get_item_trade_history(p_item_id BIGINT, p_limit INT)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    RETURN (
+        SELECT jsonb_agg(t) FROM (
+            SELECT
+                h.id AS trade_id,
+                h.item_id,
+                i.name AS item_name,
+                h.price_per_unit,
+                h.quantity,
+                h.total_price,
+                h.created_at,
+                s.nickname AS seller_nickname,
+                b.nickname AS buyer_nickname
+            FROM public.market_trade_history h
+            JOIN public.items i ON h.item_id = i.id
+            LEFT JOIN public.profiles s ON h.seller_id = s.id
+            LEFT JOIN public.profiles b ON h.buyer_id = b.id
+            WHERE h.item_id = p_item_id
+            ORDER BY h.created_at DESC
+            LIMIT p_limit
+        ) t
+    );
+END;
+$$;
+
+-- ============================================================
+-- 11.7 RPC 函数：获取物品交易统计（用于图表）
+-- ============================================================
+DROP FUNCTION IF EXISTS public.get_item_trade_stats(BIGINT, TEXT);
+CREATE OR REPLACE FUNCTION public.get_item_trade_stats(p_item_id BIGINT, p_group_by TEXT)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    IF p_group_by = 'day' THEN
+        RETURN (
+            SELECT jsonb_agg(t) FROM (
+                SELECT
+                    TO_CHAR(h.created_at, 'YYYY-MM-DD') AS period,
+                    ROUND(AVG(h.price_per_unit))::BIGINT AS avg_price,
+                    SUM(h.quantity) AS total_quantity,
+                    COUNT(*) AS trade_count
+                FROM public.market_trade_history h
+                WHERE h.item_id = p_item_id
+                GROUP BY TO_CHAR(h.created_at, 'YYYY-MM-DD')
+                ORDER BY period
+            ) t
+        );
+    ELSIF p_group_by = 'hour' THEN
+        RETURN (
+            SELECT jsonb_agg(t) FROM (
+                SELECT
+                    TO_CHAR(h.created_at, 'YYYY-MM-DD HH24:00') AS period,
+                    ROUND(AVG(h.price_per_unit))::BIGINT AS avg_price,
+                    SUM(h.quantity) AS total_quantity,
+                    COUNT(*) AS trade_count
+                FROM public.market_trade_history h
+                WHERE h.item_id = p_item_id
+                GROUP BY TO_CHAR(h.created_at, 'YYYY-MM-DD HH24:00')
+                ORDER BY period
+            ) t
+        );
+    ELSE
+        RETURN (
+            SELECT jsonb_agg(t) FROM (
+                SELECT
+                    TO_CHAR(h.created_at, 'YYYY-MM-DD HH24:MI') AS period,
+                    h.price_per_unit AS avg_price,
+                    h.quantity AS total_quantity,
+                    1 AS trade_count
+                FROM public.market_trade_history h
+                WHERE h.item_id = p_item_id
+                ORDER BY h.created_at
+            ) t
         );
     END IF;
 END;
