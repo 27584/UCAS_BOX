@@ -1,4 +1,4 @@
-﻿/* ============================================
+/* ============================================
    背包页 —— 合成 & 列表
    ============================================ */
 .inventory-page .page-header { margin-bottom: 24px; }
@@ -374,4 +374,67 @@
     color: var(--paper-card);
     border-color: var(--ink);
     box-shadow: 2px 2px 0 var(--seal-red);
+}
+
+/* ============================================
+   移动端响应式
+   ============================================ */
+@media (max-width: 768px) {
+    .merge-modal-content {
+        padding: 20px 16px 16px;
+        max-height: 95vh;
+    }
+    .merge-title {
+        font-size: 1.1rem;
+        gap: 8px;
+    }
+    .merge-title svg {
+        width: 18px;
+        height: 18px;
+    }
+    .merge-grid {
+        gap: 6px;
+        padding: 8px;
+    }
+    .merge-slot {
+        min-height: 56px;
+    }
+    .merge-slot .slot-item .item-icon {
+        width: 32px;
+        height: 32px;
+    }
+    .merge-slot .slot-item .item-name {
+        font-size: 0.6rem;
+    }
+    .btn-merge-action {
+        padding: 12px;
+        font-size: 0.85rem;
+    }
+    .btn-merge-action svg {
+        width: 18px;
+        height: 18px;
+    }
+    .merge-items-list {
+        grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+        gap: 6px;
+        max-height: 160px;
+    }
+    .merge-item-card {
+        padding: 6px;
+    }
+    .merge-item-card .item-icon {
+        width: 32px;
+        height: 32px;
+    }
+    .filter-bar {
+        gap: 6px;
+    }
+    .filter-btn {
+        padding: 4px 10px;
+        font-size: 0.7rem;
+    }
+    .btn-merge {
+        padding: 8px 12px;
+        font-size: 0.8rem;
+    }
 }

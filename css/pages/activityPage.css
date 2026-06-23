@@ -1,4 +1,4 @@
-﻿/* ============================================
+/* ============================================
    活动页 —— 端午 + 彩票
    ============================================ */
 .activity-page {
@@ -1274,4 +1274,134 @@
     font-size: 0.85rem;
     font-weight: 500;
     font-family: var(--font-mono);
+}
+
+/* ============================================
+   移动端响应式
+   ============================================ */
+@media (max-width: 768px) {
+    .activity-page {
+        padding: 12px;
+        padding-bottom: 90px;
+    }
+    .activity-hero h1 {
+        font-size: 1.5rem;
+    }
+    .lottery-header h1 {
+        font-size: 1.5rem;
+    }
+    .activity-card {
+        padding: 14px;
+    }
+    .activity-card-header {
+        gap: 10px;
+        margin-bottom: 12px;
+    }
+    .activity-icon {
+        width: 40px;
+        height: 40px;
+    }
+    .activity-icon svg {
+        width: 18px;
+        height: 18px;
+    }
+    .activity-card-title h2 {
+        font-size: 1rem;
+    }
+    .activity-item-row {
+        gap: 8px;
+    }
+    .activity-item .item-icon-placeholder {
+        width: 48px;
+        height: 48px;
+        font-size: 1.2rem;
+    }
+    .activity-item span {
+        font-size: 0.75rem;
+    }
+    .activity-tab {
+        padding: 8px 6px;
+        font-size: 0.75rem;
+    }
+    .activity-tab svg {
+        width: 14px;
+        height: 14px;
+    }
+    .online-reward-item {
+        padding: 10px;
+        gap: 8px;
+    }
+    .online-reward-time {
+        min-width: 70px;
+        font-size: 0.8rem;
+    }
+    .online-reward-gift {
+        font-size: 0.85rem;
+    }
+
+    .lottery-card {
+        padding: 14px;
+    }
+    .lottery-number-grid {
+        grid-template-columns: repeat(8, 1fr);
+        gap: 3px;
+    }
+    .lottery-number-btn {
+        font-size: 0.75rem;
+        padding: 4px 0;
+    }
+    .lottery-info-row {
+        gap: 10px;
+    }
+    .lottery-info-item {
+        gap: 2px;
+    }
+    .info-label {
+        font-size: 0.7rem;
+    }
+    .info-value {
+        font-size: 0.95rem;
+    }
+    .lottery-actions {
+        flex-direction: column;
+        gap: 8px;
+    }
+    .lottery-actions .btn {
+        width: 100%;
+    }
+    .prize-row {
+        padding: 8px 10px;
+        gap: 8px;
+    }
+    .prize-level {
+        min-width: 50px;
+        font-size: 0.85rem;
+    }
+    .prize-matches {
+        font-size: 0.8rem;
+    }
+
+    .bot-card-header {
+        padding: 10px 12px;
+        gap: 8px;
+    }
+    .bot-card-name {
+        font-size: 0.85rem;
+    }
+    .bot-card-status {
+        min-width: 80px;
+    }
+    .bot-card-body {
+        padding: 12px;
+    }
+    .bot-q-grid {
+        grid-template-columns: 1fr;
+        gap: 6px;
+    }
+    .bot-cfg-main-row {
+        gap: 8px;
+    }
+    .bot-cfg-group {
+        min-width: 60px;
+    }
 }

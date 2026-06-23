@@ -1,4 +1,4 @@
-﻿/* ============================================
+/* ============================================
    个人中心 —— ID 卡片
    ============================================ */
 .profile-page {
@@ -187,5 +187,55 @@
     width: 16px;
     height: 16px;
     color: var(--ink);
+}
+
+/* ============================================
+   移动端响应式
+   ============================================ */
+@media (max-width: 768px) {
+    .profile-page {
+        padding-top: 12px;
+    }
+    .profile-card {
+        padding: 40px 16px 24px;
+    }
+    .profile-postmark {
+        width: 56px;
+        height: 56px;
+        top: 32px;
+        right: 8px;
+    }
+    .profile-avatar {
+        width: 72px;
+        height: 72px;
+        font-size: 1.8rem;
+    }
+    .profile-card h2 {
+        font-size: 1.3rem;
+        min-width: 0;
+    }
+    .profile-email {
+        font-size: 0.8rem;
+        margin-bottom: 16px;
+    }
+    .profile-stats {
+        padding: 12px 0;
+    }
+    .stat-value {
+        font-size: 1.3rem;
+    }
+    .stat-label {
+        font-size: 0.65rem;
+    }
+    .profile-stat svg {
+        width: 16px;
+        height: 16px;
+    }
+    .profile-settings {
+        padding: 10px;
+    }
+    .setting-info {
+        font-size: 0.85rem;
+    }
 }
 

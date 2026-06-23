@@ -524,6 +524,16 @@
     display: flex;
     align-items: center;
     gap: 6px;
+    min-width: 0;
+    flex-wrap: wrap;
+}
+
+.notification-author-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+    flex: 0 1 auto;
 }
 
 .notification-author .badge {
@@ -532,6 +542,8 @@
     border-radius: 0;
     font-weight: 700;
     font-family: var(--font-mono);
+    flex-shrink: 0;
+    white-space: nowrap;
 }
 
 .notification-author .admin-badge {
@@ -561,18 +573,36 @@
 .notification-meta {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
     font-size: 0.75rem;
     color: var(--ink-faded);
     font-family: var(--font-mono);
+    flex-wrap: wrap;
+    min-width: 0;
 }
 
 .notification-post {
     font-family: var(--font-hand);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 .notification-date {
     font-family: var(--font-mono);
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+/* 防止消息页出现横向滚动条 */
+.message-page,
+#system-messages,
+#notification-list,
+.notification-list {
+    overflow-x: hidden;
+    max-width: 100%;
 }
 
 /* ============================================

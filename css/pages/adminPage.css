@@ -1,4 +1,4 @@
-﻿/* ============================================
+/* ============================================
    管理员面板
    ============================================ */
 .admin-stats {
@@ -299,6 +299,65 @@
     color: var(--ink-faded);
     font-weight: 500;
     font-family: var(--font-mono);
+}
+
+/* ============================================
+   移动端响应式
+   ============================================ */
+@media (max-width: 768px) {
+    .admin-stats {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+    }
+    .stat-card {
+        padding: 10px 12px;
+        gap: 8px;
+    }
+    .stat-icon {
+        width: 32px;
+        height: 32px;
+    }
+    .stat-icon svg {
+        width: 16px;
+        height: 16px;
+    }
+    .stat-number {
+        font-size: 1.2rem;
+    }
+    .stat-label {
+        font-size: 0.65rem;
+    }
+    .user-card {
+        padding: 10px 12px;
+        gap: 10px;
+    }
+    .user-avatar-small {
+        width: 32px;
+        height: 32px;
+    }
+    .user-actions {
+        width: 100%;
+        justify-content: flex-end;
+        gap: 6px;
+    }
+    .user-actions .btn {
+        padding: 4px 8px;
+        font-size: 0.75rem;
+    }
+    .detail-grid {
+        grid-template-columns: 1fr;
+        gap: 6px;
+    }
+    .detail-item {
+        padding: 8px 10px;
+    }
+    .user-detail-content {
+        width: 95vw;
+        max-height: 90vh;
+    }
+    .user-detail-body {
+        max-height: 70vh;
+    }
 }
 
 .inv-more {

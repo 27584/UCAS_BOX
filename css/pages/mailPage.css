@@ -1,4 +1,4 @@
-﻿/* ============================================
+/* ============================================
    邮件页
    ============================================ */
 .mail-list {
@@ -75,4 +75,23 @@
     font-size: 0.75rem;
     color: var(--ink-faded);
     font-family: var(--font-mono);
+}
+
+/* ============================================
+   移动端响应式
+   ============================================ */
+@media (max-width: 768px) {
+    .mail-item {
+        padding: 12px;
+        gap: 10px;
+    }
+    .mail-item:hover {
+        transform: none;
+    }
+    .mail-title {
+        font-size: 0.95rem;
+    }
+    .mail-content {
+        font-size: 0.8rem;
+    }
 }

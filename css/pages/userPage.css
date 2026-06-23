@@ -1,4 +1,4 @@
-﻿/* ============================================
+/* ============================================
    用户主页
    ============================================ */
 .user-page {
@@ -250,4 +250,49 @@
     margin-bottom: 12px;
     opacity: 0.5;
     color: var(--ink-faded);
+}
+
+/* ============================================
+   移动端响应式
+   ============================================ */
+@media (max-width: 768px) {
+    .user-header-card {
+        padding: 20px 16px;
+    }
+    .user-avatar-large {
+        width: 64px;
+        height: 64px;
+        font-size: 1.5rem;
+    }
+    .user-header-card h2 {
+        font-size: 1.2rem;
+    }
+    .user-stats {
+        gap: 16px;
+        padding: 12px 0;
+    }
+    .user-follow-stats {
+        gap: 20px;
+    }
+    .user-tab {
+        padding: 6px 10px;
+        font-size: 0.75rem;
+    }
+    .user-tab svg {
+        width: 14px;
+        height: 14px;
+    }
+    .user-inventory-grid {
+        grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+        gap: 8px;
+    }
+    .post-card-simple {
+        padding: 10px 12px;
+    }
+    .post-card-simple .post-content {
+        font-size: 0.9rem;
+    }
+    .post-card-simple .post-stats {
+        gap: 8px;
+    }
 }

@@ -1,4 +1,4 @@
-﻿/* ============================================
+/* ============================================
    帖子详情页
    ============================================ */
 .post-detail-card {
@@ -229,4 +229,54 @@
 .message-page > .message-content { 
     min-height: 400px; 
     overflow-y: auto;
+}
+
+/* ============================================
+   移动端响应式
+   ============================================ */
+@media (max-width: 768px) {
+    .post-detail-header {
+        padding: 10px 12px;
+    }
+    .back-btn {
+        padding: 6px 10px;
+        font-size: 0.75rem;
+    }
+    .back-btn svg {
+        width: 16px;
+        height: 16px;
+    }
+    .post-detail-card .post-author {
+        padding: 12px;
+        gap: 10px;
+    }
+    .post-detail-card .post-content {
+        padding: 0 12px 12px;
+        font-size: 0.95rem;
+    }
+    .post-detail-card .post-tags {
+        padding: 0 12px 12px;
+    }
+    .post-detail-card .post-actions {
+        padding: 10px 12px;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    .post-detail-card .post-actions .action-btn {
+        padding: 6px 10px;
+        font-size: 0.8rem;
+    }
+    .post-detail-page .comments-section {
+        padding: 12px;
+    }
+    .post-detail-page .comment-create {
+        flex-direction: column;
+        gap: 8px;
+    }
+    .post-detail-page .comment-create button {
+        align-self: flex-end;
+    }
+    .post-detail-page .comments-list {
+        max-height: 300px;
+    }
 }

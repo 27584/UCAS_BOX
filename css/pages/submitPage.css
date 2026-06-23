@@ -1,4 +1,4 @@
-﻿/* ============================================
+/* ============================================
    投稿页面
    ============================================ */
 .submit-form { margin-bottom: 20px; }
@@ -124,4 +124,37 @@
     background: var(--seal-red);
     color: var(--paper-card);
     box-shadow: 3px 3px 0 var(--ink);
+}
+
+/* ============================================
+   移动端响应式
+   ============================================ */
+@media (max-width: 768px) {
+    .submission-card {
+        padding: 10px 12px;
+        gap: 10px;
+    }
+    .submission-quality-bar {
+        height: 40px;
+    }
+    .submission-name {
+        font-size: 0.95rem;
+    }
+    .submission-desc {
+        font-size: 0.8rem;
+    }
+    .submission-meta {
+        gap: 8px;
+        font-size: 0.7rem;
+        flex-wrap: wrap;
+    }
+    .submission-actions {
+        width: 100%;
+        justify-content: flex-end;
+        margin-top: 4px;
+    }
+    .submission-actions .btn {
+        padding: 4px 8px;
+        font-size: 0.75rem;
+    }
 }

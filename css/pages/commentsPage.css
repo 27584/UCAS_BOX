@@ -1,4 +1,4 @@
-﻿/* ============================================
+/* ============================================
    评论弹窗
    ============================================ */
 .comments-modal-content {
@@ -181,4 +181,38 @@
 .btn-sm {
     padding: 6px 12px;
     font-size: 0.85rem;
+}
+
+/* ============================================
+   移动端响应式
+   ============================================ */
+@media (max-width: 768px) {
+    .comments-modal-content {
+        max-height: 90vh;
+        width: 95vw;
+    }
+    .comments-header {
+        padding: 0 12px 10px;
+    }
+    .comments-header h3 {
+        font-size: 1rem;
+    }
+    .comments-list {
+        padding: 8px 12px;
+        max-height: 60vh;
+    }
+    .comment-item {
+        padding: 10px 0;
+    }
+    .comment-content {
+        font-size: 0.85rem;
+    }
+    .comment-create {
+        padding: 10px 12px 0;
+        gap: 8px;
+    }
+    .comment-create textarea {
+        font-size: 0.85rem;
+        padding: 6px 10px;
+    }
 }

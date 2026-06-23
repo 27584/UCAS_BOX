@@ -303,7 +303,7 @@ export const messagePage = {
                     </div>
                     <div class="notification-body">
                         <div class="notification-author">
-                            ${n.reply_author_name} ${adminBadge} ${botBadge}
+                            <span class="notification-author-name">${this.escapeHtml(n.reply_author_name)}</span>${adminBadge} ${botBadge}
                         </div>
                         <div class="notification-content-text">${this.escapeHtml(n.content)}</div>
                         <div class="notification-meta">
