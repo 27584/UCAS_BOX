@@ -125,6 +125,48 @@ export const adminPage = {
         // 添加用户按钮
         const addUserBtn = container.querySelector('#btn-open-add-user');
         if (addUserBtn) addUserBtn.addEventListener('click', () => this.showAddUserModal());
+
+        // 用户列表事件委托（详情按钮、发放按钮）- 绑定到document确保万无一失
+        const adminPage = this;
+        if (!this._userListDelegateBound) {
+            this._userListDelegateBound = true;
+            document.addEventListener('click', (e) => {
+                // 详情按钮
+                const detailBtn = e.target.closest('button.btn-user-detail');
+                if (detailBtn && document.getElementById('tab-users')) {
+                    const userId = detailBtn.dataset.userId;
+                    if (userId) adminPage.showUserDetail(userId);
+                    return;
+                }
+
+                // 发放物品按钮
+                const giveBtn = e.target.closest('button[data-give-to]');
+                if (giveBtn && document.getElementById('tab-users')) {
+                    const userId = giveBtn.dataset.giveTo;
+                    const select = document.querySelector(`select[data-user-id="${userId}"]`);
+                    const qtyInput = document.querySelector(`input[data-qty-for="${userId}"]`);
+                    if (!select || !qtyInput) return;
+
+                    const itemId = parseInt(select.value);
+                    const quantity = parseInt(qtyInput.value) || 1;
+
+                    if (!itemId) {
+                        showToast('请选择物品', 'error');
+                        return;
+                    }
+
+                    (async () => {
+                        try {
+                            await adminAddItem(userId, itemId, quantity);
+                            showToast('发放成功', 'success');
+                        } catch (err) {
+                            showToast('发放失败', 'error');
+                        }
+                    })();
+                    return;
+                }
+            });
+        }
     },
 
     async loadStats() {
@@ -173,8 +215,10 @@ export const adminPage = {
         let html = this.users.map(user => {
             const isSelf = user.user_id === this.currentUserId;
             const isBanned = user.is_banned;
+            const banTitle = isBanned ? this.formatBanTime(user.banned_until) : '';
+            const cardStyle = isBanned ? 'border-color:var(--seal-red);background:#fff5f5;' : '';
             return `
-            <div class="user-card" ${isBanned ? 'style="opacity:0.7;"' : ''}>
+            <div class="user-card" style="${cardStyle}">
                 <div class="user-avatar-small clickable-avatar" style="overflow:hidden;padding:0;">
                     ${userAvatarHTML(user)}
                 </div>
@@ -186,7 +230,7 @@ export const adminPage = {
                     <span class="user-shells">${(user.shells ?? 0).toLocaleString()} 果壳币</span>
                     ${user.is_admin ? '<span class="admin-badge">管理员</span>' : ''}
                     ${user.is_bot ? '<span class="bot-tag">机器人</span>' : ''}
-                    ${isBanned ? '<span class="ban-badge">已封禁</span>' : ''}
+                    ${isBanned ? `<span class="ban-badge" title="${this.escHtml(banTitle)}">已封禁</span>` : ''}
                 </div>
                 <div class="user-actions">
                     <button class="btn btn-secondary btn-sm btn-user-detail" data-user-id="${user.user_id}">
@@ -197,23 +241,6 @@ export const adminPage = {
                     </select>
                     <input type="number" class="form-input" data-qty-for="${user.user_id}" value="1" min="1" style="width:60px;" />
                     <button class="btn btn-secondary btn-sm" data-give-to="${user.user_id}">发放</button>
-                    ${!user.is_admin && !isSelf ? `
-                    <button class="btn btn-sm ${isBanned ? 'btn-success' : 'btn-warning'} btn-ban-user"
-                        data-user-id="${user.user_id}"
-                        data-user-name="${this.escHtml(user.nickname || '无名')}"
-                        data-is-banned="${isBanned ? '1' : '0'}"
-                        title="${isBanned ? '解封用户' : '封禁用户'}">
-                        <i data-lucide="${isBanned ? 'unlock' : 'ban'}"></i> ${isBanned ? '解封' : '封禁'}
-                    </button>
-                    ` : ''}
-                    <button class="btn btn-danger btn-sm btn-delete-user"
-                        data-user-id="${user.user_id}"
-                        data-user-name="${this.escHtml(user.nickname || '无名')}"
-                        data-is-admin="${user.is_admin ? '1' : '0'}"
-                        data-is-self="${isSelf ? '1' : '0'}"
-                        ${isSelf || user.is_admin ? 'disabled title="不能删除自己或管理员"' : ''}>
-                        <i data-lucide="trash-2"></i> 删除
-                    </button>
                 </div>
             </div>
         `;
@@ -240,79 +267,6 @@ export const adminPage = {
     },
 
     attachUserActions() {
-        // 查看详情按钮
-        document.querySelectorAll('button.btn-user-detail').forEach(btn => {
-            btn.addEventListener('click', async () => {
-                const userId = btn.dataset.userId;
-                this.showUserDetail(userId);
-            });
-        });
-
-        // 发放物品按钮
-        document.querySelectorAll('button[data-give-to]').forEach(btn => {
-            btn.addEventListener('click', async () => {
-                const userId = btn.dataset.giveTo;
-                const select = document.querySelector(`select[data-user-id="${userId}"]`);
-                const qtyInput = document.querySelector(`input[data-qty-for="${userId}"]`);
-                if (!select || !qtyInput) return;
-
-                const itemId = parseInt(select.value);
-                const quantity = parseInt(qtyInput.value) || 1;
-
-                if (!itemId) {
-                    showToast('请选择物品', 'error');
-                    return;
-                }
-
-                try {
-                    await adminAddItem(userId, itemId, quantity);
-                    showToast('发放成功', 'success');
-                } catch (e) {
-                    showToast('发放失败', 'error');
-                }
-            });
-        });
-
-        // 封禁/解封用户按钮
-        document.querySelectorAll('button.btn-ban-user').forEach(btn => {
-            btn.addEventListener('click', async () => {
-                const userId = btn.dataset.userId;
-                const userName = btn.dataset.userName;
-                const isBanned = btn.dataset.isBanned === '1';
-
-                if (isBanned) {
-                    this.confirmUnbanUser(userId, userName);
-                } else {
-                    this.showBanUserModal(userId, userName, () => {
-                        this.loadUsers(this.userPage);
-                    });
-                }
-            });
-        });
-
-        // 删除用户按钮
-        document.querySelectorAll('button.btn-delete-user').forEach(btn => {
-            btn.addEventListener('click', async () => {
-                if (btn.disabled) return;
-                const userId = btn.dataset.userId;
-                const userName = btn.dataset.userName;
-                const isAdmin = btn.dataset.isAdmin === '1';
-
-                // 按需查询邮箱激活状态（读取 auth.users.email_confirmed_at 原生字段）
-                let isVerified = true;
-                try {
-                    btn.disabled = true;
-                    isVerified = await getUserEmailVerified(userId);
-                } catch (e) {
-                    // 查询失败按已激活处理（走严格流程更安全）
-                    isVerified = true;
-                } finally {
-                    btn.disabled = false;
-                }
-
-                this.confirmDeleteUser(userId, userName, isAdmin, isVerified);
-            });
-        });
     },
 
     showBanUserModal(userId, userName, onSuccess) {
@@ -361,8 +315,8 @@ export const adminPage = {
 
         let selectedHours = null;
         const durationBtns = modal.querySelectorAll('.ban-duration-btn');
-        const customInput = modal.getElementById('ban-custom-hours');
-        const confirmBtn = modal.getElementById('btn-confirm-ban');
+        const customInput = document.getElementById('ban-custom-hours');
+        const confirmBtn = document.getElementById('btn-confirm-ban');
 
         const updateConfirmBtn = () => {
             const hasCustom = customInput.value && parseFloat(customInput.value) > 0;
@@ -495,6 +449,7 @@ export const adminPage = {
         // 如果已有弹窗（切页），只更新loading状态，不重建
         const existingModal = document.getElementById('user-detail-modal');
         if (existingModal) {
+            existingModal.style.display = 'flex';
             const body = existingModal.querySelector('.user-detail-body');
             if (body) {
                 body.innerHTML = '<div class="user-detail-loading"><i data-lucide="loader-2" class="spin"></i> 加载中...</div>';
@@ -580,9 +535,9 @@ export const adminPage = {
                             <span class="detail-value" style="color:${(d.is_banned ?? user.is_banned) ? 'var(--seal-red)' : 'inherit'};">${(d.is_banned ?? user.is_banned) ? '已封禁' : '正常'}</span>
                         </div>
                         ${(d.is_banned ?? user.is_banned) && d.banned_until ? `
-                        <div class="detail-item">
+                        <div class="detail-item" style="grid-column:span 2;">
                             <span class="detail-label">解封时间</span>
-                            <span class="detail-value">${d.banned_until === 'infinity' || d.banned_until > '2999-01-01' ? '永久封禁' : new Date(d.banned_until).toLocaleString()}</span>
+                            <span class="detail-value">${this.formatBanTime(d.banned_until)}（${d.banned_until === 'infinity' || d.banned_until > '2999-01-01' ? '永久' : new Date(d.banned_until).toLocaleString()}）</span>
                         </div>
                         ` : ''}
                         <div class="detail-item">
@@ -1044,6 +999,28 @@ export const adminPage = {
         const div = document.createElement('div');
         div.textContent = str;
         return div.innerHTML;
+    },
+
+    formatBanTime(bannedUntil) {
+        if (!bannedUntil) return '已封禁';
+        if (bannedUntil === 'infinity' || bannedUntil === Infinity) return '永久封禁';
+        try {
+            const until = new Date(bannedUntil);
+            const now = new Date();
+            const diffMs = until - now;
+            if (diffMs <= 0) return '已过期';
+            const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+            if (diffDays > 30) {
+                return `封至${until.getFullYear()}/${String(until.getMonth() + 1).padStart(2, '0')}/${String(until.getDate()).padStart(2, '0')}`;
+            } else if (diffDays > 1) {
+                return `还有${diffDays}天`;
+            } else {
+                const diffHours = Math.ceil(diffMs / (1000 * 60 * 60));
+                return `还有${diffHours}小时`;
+            }
+        } catch (e) {
+            return '已封禁';
+        }
     },
 
     showAddItemModal() {

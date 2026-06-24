@@ -29,7 +29,7 @@ export async function signUp(email, password, nickname) {
             showToast('操作太频繁，请 1 小时后再试', 'error');
         } else if (msg.includes('already registered') || msg.includes('already exists')) {
             showToast('该邮箱已注册，请直接登录', 'error');
-        } else if (msg.includes('password') && (msg.includes('weak') || msg.includes('too short') || msg.includes('length'))) {
+        } else if (msg.includes('password') && (msg.includes('weak') || msg.includes('too short') || msg.includes('length') || msg.includes('at least') || msg.includes('character') || msg.includes('minimum'))) {
             showToast('密码太短，至少需要6位字符', 'error');
         } else if (msg.includes('email') && (msg.includes('invalid') || msg.includes('malformed') || msg.includes('format'))) {
             showToast('邮箱格式不正确', 'error');
@@ -54,6 +54,32 @@ export async function signIn(email, password) {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
         const msg = error.message?.toLowerCase?.() || '';
+
+        let isBanned = false;
+        let bannedUntil = null;
+        try {
+            const bannedResult = await checkBannedByEmail(email);
+            if (bannedResult?.is_banned) {
+                isBanned = true;
+                bannedUntil = bannedResult.banned_until;
+            }
+        } catch (e) {}
+
+        if (isBanned) {
+            let tip = '账号已被封禁';
+            if (bannedUntil && bannedUntil !== 'infinity') {
+                try {
+                    const until = new Date(bannedUntil);
+                    tip += `，解封时间：${until.toLocaleString()}`;
+                } catch (e) {}
+            } else {
+                tip += '（永久）';
+            }
+            tip += '，如有疑问请联系管理员';
+            showToast(tip, 'error');
+            throw new Error('账号已被封禁');
+        }
+
         if (msg.includes('rate limit') || msg.includes('429') || msg.includes('over email send rate limit')) {
             showToast('操作太频繁，请 1 小时后再试', 'error');
         } else if (msg.includes('email not confirmed') || msg.includes('not confirmed')) {
@@ -456,6 +482,11 @@ export async function adminUnbanUser(userId) {
 // 检查当前用户是否被封禁
 export async function checkBannedStatus() {
     return rpc('check_banned_status');
+}
+
+// 通过邮箱检查用户是否被封禁（无需登录）
+export async function checkBannedByEmail(email) {
+    return rpc('check_banned_by_email', { p_email: email });
 }
 
 // 查询某用户邮箱是否已激活（按需调用，读取 auth.users.email_confirmed_at 原生字段）

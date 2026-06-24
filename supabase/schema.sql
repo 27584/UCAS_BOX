@@ -2024,9 +2024,9 @@ BEGIN
         IF p_hours < 24 THEN
             v_duration_text := p_hours || '小时';
         ELSIF p_hours < 24 * 30 THEN
-            v_duration_text := ROUND(p_hours / 24, 1) || '天';
+            v_duration_text := ROUND((p_hours / 24)::numeric, 1) || '天';
         ELSE
-            v_duration_text := ROUND(p_hours / 24 / 30, 1) || '个月';
+            v_duration_text := ROUND((p_hours / 24 / 30)::numeric, 1) || '个月';
         END IF;
     END IF;
 
@@ -2116,6 +2116,34 @@ BEGIN
     SELECT banned_until INTO v_banned_until
     FROM auth.users
     WHERE id = user_uuid;
+
+    RETURN jsonb_build_object(
+        'is_banned', (v_banned_until IS NOT NULL AND v_banned_until > now()),
+        'banned_until', v_banned_until
+    );
+END;
+$$;
+
+-- ============================================================
+-- 21g6. RPC 函数：通过邮箱检查用户是否被封禁（无需登录）
+-- ============================================================
+DROP FUNCTION IF EXISTS public.check_banned_by_email(TEXT);
+CREATE OR REPLACE FUNCTION public.check_banned_by_email(p_email TEXT)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+AS $$
+DECLARE
+    v_banned_until TIMESTAMPTZ;
+BEGIN
+    IF p_email IS NULL OR p_email = '' THEN
+        RETURN jsonb_build_object('is_banned', false);
+    END IF;
+
+    SELECT banned_until INTO v_banned_until
+    FROM auth.users
+    WHERE email = lower(p_email);
 
     RETURN jsonb_build_object(
         'is_banned', (v_banned_until IS NOT NULL AND v_banned_until > now()),
