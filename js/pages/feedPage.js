@@ -1,5 +1,5 @@
 import { getPosts, createPost, toggleLike, getComments, createComment, deletePost, deleteComment, searchPosts, searchUsers } from '../api.js';
-import { showToast, formatNumber, timeAgo, showConfirm, userBadgeHTML } from '../utils.js';
+import { showToast, formatNumber, timeAgo, showConfirm, userBadgeHTML, escapeHtml } from '../utils.js';
 import { createIcons, icons } from 'lucide';
 import { router } from '../router.js';
 
@@ -185,12 +185,12 @@ export const feedPage = {
                     <div class="post-author" data-user-id="${post.user_id}">
                         <div class="author-avatar clickable-avatar" data-user-id="${post.user_id}">
                             ${post.user_avatar 
-                                ? `<img src="${post.user_avatar}" alt="avatar" />`
+                                ? `<img src="${escapeHtml(post.user_avatar)}" alt="avatar" />`
                                 : `<i data-lucide="user" style="width:24;height:24;"></i>`
                             }
                         </div>
                         <div class="author-info">
-                            <span class="author-name clickable-name" data-user-id="${post.user_id}">${post.user_nickname || '匿名用户'}${userBadgeHTML(post)}</span>
+                            <span class="author-name clickable-name" data-user-id="${post.user_id}">${escapeHtml(post.user_nickname || '匿名用户')}${userBadgeHTML(post)}</span>
                             <span class="post-time">${timeAgo(post.created_at)}</span>
                         </div>
                     </div>
@@ -412,11 +412,11 @@ export const feedPage = {
                     <div class="comment-author">
                         <div class="author-avatar-sm clickable-avatar" data-user-id="${comment.user_id}">
                             ${comment.user_avatar 
-                                ? `<img src="${comment.user_avatar}" alt="avatar" />`
+                                ? `<img src="${escapeHtml(comment.user_avatar)}" alt="avatar" />`
                                 : `<i data-lucide="user" style="width:16;height:16;"></i>`
                             }
                         </div>
-                        <span class="author-name clickable-name" data-user-id="${comment.user_id}">${comment.user_nickname || '匿名'}${userBadgeHTML(comment)}</span>
+                        <span class="author-name clickable-name" data-user-id="${comment.user_id}">${escapeHtml(comment.user_nickname || '匿名')}${userBadgeHTML(comment)}</span>
                         <span class="comment-time">${timeAgo(comment.created_at)}</span>
                     </div>
                     <div class="comment-actions">

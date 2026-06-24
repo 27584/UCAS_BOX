@@ -6249,8 +6249,8 @@ BEGIN
         RAISE EXCEPTION '未登录';
     END IF;
 
-    IF p_price <= 0 OR p_quantity <= 0 THEN
-        RAISE EXCEPTION '价格和数量必须大于0';
+    IF p_price < 20 OR p_quantity <= 0 THEN
+        RAISE EXCEPTION '价格最低20果壳币，数量必须大于0';
     END IF;
 
     -- 获取物品名称
@@ -6724,8 +6724,13 @@ BEGIN
         RAISE EXCEPTION '未登录';
     END IF;
 
-    IF p_avatar_url IS NOT NULL AND length(p_avatar_url) > 500000 THEN
-        RAISE EXCEPTION '头像文件过大';
+    IF p_avatar_url IS NOT NULL THEN
+        IF length(p_avatar_url) > 500000 THEN
+            RAISE EXCEPTION '头像文件过大';
+        END IF;
+        IF p_avatar_url NOT LIKE 'data:image/%' THEN
+            RAISE EXCEPTION '头像格式不正确';
+        END IF;
     END IF;
 
     UPDATE public.profiles

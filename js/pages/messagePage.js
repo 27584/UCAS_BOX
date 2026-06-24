@@ -1,6 +1,6 @@
 import { getMails, markMailRead, markAllMailsRead, getDmConversations, getDmHistory, sendPrivateMessage, markDmRead, getUnreadDmCount, getReplyNotifications, markNotificationRead, markAllNotificationsRead, getUnreadNotificationCount } from '../api.js';
 import { createIcons, icons } from 'lucide';
-import { showToast, renderPagination, bindPagination, timeAgo } from '../utils.js';
+import { showToast, renderPagination, bindPagination, timeAgo, escapeHtml } from '../utils.js';
 import { currentUser } from '../supabaseClient.js';
 import { router } from '../router.js';
 import { updateMailBadge } from '../auth.js';
@@ -299,7 +299,7 @@ export const messagePage = {
         let html = this.notifications.map((n, idx) => {
             const date = new Date(n.created_at).toLocaleString('zh-CN');
             const avatarHtml = n.reply_author_avatar ?
-                `<img src="${n.reply_author_avatar}" alt="${n.reply_author_name}" class="notification-avatar-img" />` :
+                `<img src="${escapeHtml(n.reply_author_avatar)}" alt="${escapeHtml(n.reply_author_name)}" class="notification-avatar-img" />` :
                 `<i data-lucide="user"></i>`;
             const adminBadge = n.reply_author_is_admin ? '<span class="badge admin-badge">管理员</span>' : '';
             const botBadge = n.reply_author_is_bot ? '<span class="badge bot-badge">机器人</span>' : '';

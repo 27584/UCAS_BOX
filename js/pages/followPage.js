@@ -1,5 +1,5 @@
 import { getFriendsWithOnline, getFollowingWithOnline, getFollowersWithOnline, toggleFollow } from '../api.js';
-import { userAvatarHTML, userBadgeHTML, showToast, timeAgo } from '../utils.js';
+import { userAvatarHTML, userBadgeHTML, showToast, timeAgo, escapeHtml } from '../utils.js';
 import { createIcons, icons } from 'lucide';
 import { currentUser } from '../supabaseClient.js';
 import { router } from '../router.js';
@@ -116,7 +116,7 @@ export const followPage = {
                 </div>
                 <div class="follow-info follow-info-clickable">
                     <div class="follow-name">
-                        ${user.nickname}
+                        ${escapeHtml(user.nickname)}
                         ${userBadgeHTML({ is_admin: user.is_admin, is_bot: user.is_bot })}
                         ${onlineStatus}
                     </div>

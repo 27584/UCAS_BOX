@@ -134,7 +134,7 @@ export const postPage = {
                 <div class="post-author" data-user-id="${user_id}">
                     <div class="author-avatar clickable-avatar" data-user-id="${user_id}">
                         ${user_avatar 
-                            ? `<img src="${user_avatar}" alt="avatar" />`
+                            ? `<img src="${escapeHtml(user_avatar)}" alt="avatar" />`
                             : `<div class="avatar-placeholder">${(user_nickname || '匿').charAt(0).toUpperCase()}</div>`
                         }
                     </div>
@@ -246,11 +246,11 @@ export const postPage = {
                     <div class="comment-author">
                         <div class="author-avatar-sm clickable-avatar">
                             ${comment.user_avatar 
-                                ? `<img src="${comment.user_avatar}" alt="avatar" />`
+                                ? `<img src="${escapeHtml(comment.user_avatar)}" alt="avatar" />`
                                 : `<i data-lucide="user" style="width:16;height:16;"></i>`
                             }
                         </div>
-                        <span class="author-name clickable-name" data-user-id="${comment.user_id}">${comment.user_nickname || '匿名'}${userBadgeHTML(comment)}</span>
+                        <span class="author-name clickable-name" data-user-id="${comment.user_id}">${escapeHtml(comment.user_nickname || '匿名')}${userBadgeHTML(comment)}</span>
                         <span class="comment-time">${timeAgo(comment.created_at)}</span>
                     </div>
                     <div class="comment-actions">
