@@ -1974,6 +1974,137 @@ END;
 $$;
 
 -- ============================================================
+-- 21g3. RPC 函数：封禁用户（管理员，使用Supabase原生banned_until）
+-- ============================================================
+DROP FUNCTION IF EXISTS public.admin_ban_user(UUID);
+CREATE OR REPLACE FUNCTION public.admin_ban_user(p_user_id UUID)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+    v_user_nickname TEXT;
+    v_is_target_admin BOOLEAN;
+BEGIN
+    IF user_uuid IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '未登录');
+    END IF;
+
+    IF NOT public.check_admin() THEN
+        RETURN jsonb_build_object('success', false, 'message', '无权限');
+    END IF;
+
+    IF p_user_id = user_uuid THEN
+        RETURN jsonb_build_object('success', false, 'message', '不能封禁自己的账号');
+    END IF;
+
+    SELECT p.nickname, p.is_admin
+        INTO v_user_nickname, v_is_target_admin
+    FROM public.profiles p
+    WHERE p.id = p_user_id;
+
+    IF v_user_nickname IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '用户不存在');
+    END IF;
+
+    IF v_is_target_admin THEN
+        RETURN jsonb_build_object('success', false, 'message', '不能封禁其他管理员账号');
+    END IF;
+
+    UPDATE auth.users
+    SET banned_until = 'infinity'::timestamptz
+    WHERE id = p_user_id;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'message', '用户「' || v_user_nickname || '」已被封禁',
+        'nickname', v_user_nickname
+    );
+EXCEPTION WHEN OTHERS THEN
+    RETURN jsonb_build_object(
+        'success', false,
+        'message', '封禁失败：' || SQLERRM
+    );
+END;
+$$;
+
+-- ============================================================
+-- 21g4. RPC 函数：解封用户（管理员，使用Supabase原生banned_until）
+-- ============================================================
+DROP FUNCTION IF EXISTS public.admin_unban_user(UUID);
+CREATE OR REPLACE FUNCTION public.admin_unban_user(p_user_id UUID)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+    v_user_nickname TEXT;
+BEGIN
+    IF user_uuid IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '未登录');
+    END IF;
+
+    IF NOT public.check_admin() THEN
+        RETURN jsonb_build_object('success', false, 'message', '无权限');
+    END IF;
+
+    SELECT p.nickname INTO v_user_nickname
+    FROM public.profiles p
+    WHERE p.id = p_user_id;
+
+    IF v_user_nickname IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '用户不存在');
+    END IF;
+
+    UPDATE auth.users
+    SET banned_until = NULL
+    WHERE id = p_user_id;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'message', '用户「' || v_user_nickname || '」已解封',
+        'nickname', v_user_nickname
+    );
+EXCEPTION WHEN OTHERS THEN
+    RETURN jsonb_build_object(
+        'success', false,
+        'message', '解封失败：' || SQLERRM
+    );
+END;
+$$;
+
+-- ============================================================
+-- 21g5. RPC 函数：检查当前用户是否被封禁（使用Supabase原生banned_until）
+-- ============================================================
+DROP FUNCTION IF EXISTS public.check_banned_status();
+CREATE OR REPLACE FUNCTION public.check_banned_status()
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+    v_banned_until TIMESTAMPTZ;
+BEGIN
+    IF user_uuid IS NULL THEN
+        RETURN jsonb_build_object('is_banned', false);
+    END IF;
+
+    SELECT banned_until INTO v_banned_until
+    FROM auth.users
+    WHERE id = user_uuid;
+
+    RETURN jsonb_build_object(
+        'is_banned', (v_banned_until IS NOT NULL AND v_banned_until > now()),
+        'banned_until', v_banned_until
+    );
+END;
+$$;
+
+-- ============================================================
 -- 21h. RPC 函数：修改用户昵称（管理员）
 -- ============================================================
 DROP FUNCTION IF EXISTS public.admin_change_user_nickname(UUID, TEXT);
@@ -2056,6 +2187,9 @@ RETURNS TABLE(
     shells BIGINT,
     is_admin BOOLEAN,
     is_bot BOOLEAN,
+    avatar_url TEXT,
+    is_banned BOOLEAN,
+    banned_until TIMESTAMPTZ,
     created_at TIMESTAMPTZ,
     total_count BIGINT
 )
@@ -2080,8 +2214,9 @@ BEGIN
     RETURN QUERY
     WITH filtered AS (
         SELECT
-            p.id, p.nickname, p.shells, p.is_admin, p.is_bot, p.created_at,
-            au.email AS user_email
+            p.id, p.nickname, p.shells, p.is_admin, p.is_bot, p.avatar_url, p.created_at,
+            au.email AS user_email,
+            au.banned_until AS user_banned_until
         FROM public.profiles p
         LEFT JOIN auth.users au ON au.id = p.id
         WHERE
@@ -2100,6 +2235,9 @@ BEGIN
         f.shells,
         f.is_admin,
         f.is_bot,
+        f.avatar_url,
+        (f.user_banned_until IS NOT NULL AND f.user_banned_until > now()) AS is_banned,
+        f.user_banned_until AS banned_until,
         f.created_at,
         (SELECT COUNT(*) FROM filtered)::BIGINT AS total_count
     FROM filtered f
@@ -4196,6 +4334,7 @@ CREATE OR REPLACE FUNCTION public.search_users(
 RETURNS TABLE(
     user_id UUID,
     nickname TEXT,
+    avatar_url TEXT,
     is_admin BOOLEAN,
     is_bot BOOLEAN,
     created_at TIMESTAMPTZ
@@ -4210,6 +4349,7 @@ BEGIN
     SELECT 
         p.id AS user_id,
         p.nickname,
+        p.avatar_url,
         COALESCE(p.is_admin, false) AS is_admin,
         COALESCE(p.is_bot, false) AS is_bot,
         p.created_at
@@ -4482,6 +4622,8 @@ BEGIN
         'shells', p.shells,
         'is_admin', p.is_admin,
         'is_bot', p.is_bot,
+        'is_banned', (au.banned_until IS NOT NULL AND au.banned_until > now()),
+        'banned_until', au.banned_until,
         'created_at', p.created_at,
         'last_open_at', p.last_open_at,
         'last_claim_at', p.last_claim_at,

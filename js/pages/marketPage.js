@@ -1499,10 +1499,10 @@ export const marketPage = {
             try {
                 const result = await sellToBuyRequest(requestId, qty);
                 showToast(`成功出售 ${result.quantity} 件，获得 ${formatNumber(result.received_shells)} 果壳币`, 'success');
-                await updateGlobalShells();
-                this.loadInventory();
-                this.loadBuyRequestsData();
                 close();
+                await updateGlobalShells();
+                try { this.loadInventory(); } catch (e) {}
+                try { this.loadBuyRequestsData(); } catch (e) {}
             } catch (e) {
                 confirmBtn.disabled = false;
                 confirmBtn.textContent = '确认出售';

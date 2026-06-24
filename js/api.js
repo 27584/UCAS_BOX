@@ -29,6 +29,10 @@ export async function signUp(email, password, nickname) {
             showToast('操作太频繁，请 1 小时后再试', 'error');
         } else if (msg.includes('already registered') || msg.includes('already exists')) {
             showToast('该邮箱已注册，请直接登录', 'error');
+        } else if (msg.includes('password') && (msg.includes('weak') || msg.includes('too short') || msg.includes('length'))) {
+            showToast('密码太短，至少需要6位字符', 'error');
+        } else if (msg.includes('email') && (msg.includes('invalid') || msg.includes('malformed') || msg.includes('format'))) {
+            showToast('邮箱格式不正确', 'error');
         } else {
             showToast(error.message, 'error');
         }
@@ -54,11 +58,29 @@ export async function signIn(email, password) {
             showToast('操作太频繁，请 1 小时后再试', 'error');
         } else if (msg.includes('email not confirmed') || msg.includes('not confirmed')) {
             showToast('邮箱尚未验证，请查收验证邮件后登录', 'error');
+        } else if (msg.includes('invalid') && (msg.includes('credentials') || msg.includes('password') || msg.includes('login'))) {
+            showToast('邮箱或密码错误', 'error');
+        } else if (msg.includes('user') && msg.includes('not found')) {
+            showToast('该邮箱未注册，请先注册', 'error');
+        } else if (msg.includes('banned') || msg.includes('blocked') || msg.includes('disabled')) {
+            showToast('账号已被封禁，请联系管理员', 'error');
         } else {
             showToast(error.message, 'error');
         }
         throw error;
     }
+
+    try {
+        const bannedStatus = await rpc('check_banned_status');
+        if (bannedStatus?.is_banned) {
+            await supabase.auth.signOut();
+            showToast('账号已被封禁，如有疑问请联系管理员', 'error');
+            throw new Error('账号已被封禁');
+        }
+    } catch (e) {
+        if (e.message === '账号已被封禁') throw e;
+    }
+
     showToast('登录成功', 'success');
     return data;
 }
@@ -418,6 +440,21 @@ export async function adminDeleteItem(itemId) {
 // 删除用户（管理员）
 export async function adminDeleteUser(userId) {
     return rpc('admin_delete_user', { p_user_id: userId });
+}
+
+// 封禁用户（管理员，使用Supabase原生banned_until）
+export async function adminBanUser(userId) {
+    return rpc('admin_ban_user', { p_user_id: userId });
+}
+
+// 解封用户（管理员）
+export async function adminUnbanUser(userId) {
+    return rpc('admin_unban_user', { p_user_id: userId });
+}
+
+// 检查当前用户是否被封禁
+export async function checkBannedStatus() {
+    return rpc('check_banned_status');
 }
 
 // 查询某用户邮箱是否已激活（按需调用，读取 auth.users.email_confirmed_at 原生字段）

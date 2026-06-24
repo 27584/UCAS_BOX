@@ -219,19 +219,14 @@
 
 /* 用户头像小图标 */
 .user-avatar-small {
-    width: 36px;
-    height: 36px;
-    border-radius: 0;
-    background: var(--paper-card);
-    border: 1.5px solid var(--ink);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--ink);
     flex-shrink: 0;
+    line-height: 0;
 }
 
-.user-avatar-small i { width: 18px; height: 18px; }
+.user-avatar-small .avatar {
+    width: 36px;
+    height: 36px;
+}
 
 /* 机器人标签 */
 .bot-tag {
@@ -246,6 +241,21 @@
     text-transform: uppercase;
     letter-spacing: 1px;
     transform: rotate(1.5deg);
+    display: inline-block;
+}
+
+.ban-badge {
+    background: transparent;
+    color: var(--seal-red);
+    padding: 2px 8px;
+    border-radius: 0;
+    font-size: 0.7rem;
+    font-weight: 700;
+    border: 1.5px solid var(--seal-red);
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transform: rotate(-1deg);
     display: inline-block;
 }
 

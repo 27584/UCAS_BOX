@@ -266,18 +266,13 @@
 }
 
 .user-search-avatar {
+    flex-shrink: 0;
+    line-height: 0;
+}
+
+.user-search-avatar .avatar {
     width: 40px;
     height: 40px;
-    border-radius: 0;
-    background: var(--ink);
-    border: 1.5px solid var(--ink);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
-    color: var(--paper-card);
-    flex-shrink: 0;
-    font-family: var(--font-display);
 }
 
 .user-search-info { flex: 1; min-width: 0; }

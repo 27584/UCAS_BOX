@@ -12,6 +12,7 @@ export const CHANGELOG = [{
         features: [
             "新增农场",
             "新增求购",
+            "新增更改头像",
         ]
     },{
         version: 'v0.6.2_beta',

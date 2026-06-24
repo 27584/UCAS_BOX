@@ -1,8 +1,8 @@
-import { checkAdmin, getUserDetail, getUserInventory, getSystemStats, adminGetItems, adminGetAllItems, adminAddItem, adminAddItemDefinition, adminUpdateItemDefinition, getItems, getPendingSubmissions, approveSubmission, rejectSubmission, getLotteryRound, drawLotteryRound, getLotteryHistory, adminBotReplenish, getAllBotsWithConfig, updateBotConfig, adminBotListItem, adminBotCancelOrder, getBotOrders, adminUpdateUserShells, adminAdjustUserShells, adminRemoveUserItem, adminClearUserItems, adminSetUserAdmin, adminGetUsers, adminChangeUserNickname, adminUpdateCropConfig, adminGetCropBySeedId, adminDeleteItem, adminDeleteUser, getUserEmailVerified, adminCreateUser } from '../api.js';
+import { checkAdmin, getUserDetail, getUserInventory, getSystemStats, adminGetItems, adminGetAllItems, adminAddItem, adminAddItemDefinition, adminUpdateItemDefinition, getItems, getPendingSubmissions, approveSubmission, rejectSubmission, getLotteryRound, drawLotteryRound, getLotteryHistory, adminBotReplenish, getAllBotsWithConfig, updateBotConfig, adminBotListItem, adminBotCancelOrder, getBotOrders, adminUpdateUserShells, adminAdjustUserShells, adminRemoveUserItem, adminClearUserItems, adminSetUserAdmin, adminGetUsers, adminChangeUserNickname, adminUpdateCropConfig, adminGetCropBySeedId, adminDeleteItem, adminDeleteUser, getUserEmailVerified, adminCreateUser, adminBanUser, adminUnbanUser } from '../api.js';
 import { supabase } from '../supabaseClient.js';
 import { router } from '../router.js';
 import { createIcons, icons } from 'lucide';
-import { showToast, showConfirm, showConfirmTyped, QUALITY_CONFIG, QUALITY_OPTIONS, ITEM_TYPES, itemTypeOptionsHTML, qualityOptionsHTML, renderPagination, bindPagination, itemImageHTML, initItemImages, replaceWithSearchableSelect, upgradeSelectsToSearchable } from '../utils.js';
+import { showToast, showConfirm, showConfirmTyped, QUALITY_CONFIG, QUALITY_OPTIONS, ITEM_TYPES, itemTypeOptionsHTML, qualityOptionsHTML, renderPagination, bindPagination, itemImageHTML, initItemImages, replaceWithSearchableSelect, upgradeSelectsToSearchable, userAvatarHTML } from '../utils.js';
 
 export const adminPage = {
     users: [],
@@ -172,10 +172,11 @@ export const adminPage = {
 
         let html = this.users.map(user => {
             const isSelf = user.user_id === this.currentUserId;
+            const isBanned = user.is_banned;
             return `
-            <div class="user-card">
-                <div class="user-avatar-small clickable-avatar">
-                    <i data-lucide="user"></i>
+            <div class="user-card" ${isBanned ? 'style="opacity:0.7;"' : ''}>
+                <div class="user-avatar-small clickable-avatar" style="overflow:hidden;padding:0;">
+                    ${userAvatarHTML(user)}
                 </div>
                 <div class="user-info">
                     <span class="user-name clickable-name">${user.nickname || '无名'}</span>
@@ -185,6 +186,7 @@ export const adminPage = {
                     <span class="user-shells">${(user.shells ?? 0).toLocaleString()} 果壳币</span>
                     ${user.is_admin ? '<span class="admin-badge">管理员</span>' : ''}
                     ${user.is_bot ? '<span class="bot-tag">机器人</span>' : ''}
+                    ${isBanned ? '<span class="ban-badge">已封禁</span>' : ''}
                 </div>
                 <div class="user-actions">
                     <button class="btn btn-secondary btn-sm btn-user-detail" data-user-id="${user.user_id}">
@@ -195,6 +197,15 @@ export const adminPage = {
                     </select>
                     <input type="number" class="form-input" data-qty-for="${user.user_id}" value="1" min="1" style="width:60px;" />
                     <button class="btn btn-secondary btn-sm" data-give-to="${user.user_id}">发放</button>
+                    ${!user.is_admin && !isSelf ? `
+                    <button class="btn btn-sm ${isBanned ? 'btn-success' : 'btn-warning'} btn-ban-user"
+                        data-user-id="${user.user_id}"
+                        data-user-name="${this.escHtml(user.nickname || '无名')}"
+                        data-is-banned="${isBanned ? '1' : '0'}"
+                        title="${isBanned ? '解封用户' : '封禁用户'}">
+                        <i data-lucide="${isBanned ? 'unlock' : 'ban'}"></i> ${isBanned ? '解封' : '封禁'}
+                    </button>
+                    ` : ''}
                     <button class="btn btn-danger btn-sm btn-delete-user"
                         data-user-id="${user.user_id}"
                         data-user-name="${this.escHtml(user.nickname || '无名')}"
@@ -262,6 +273,21 @@ export const adminPage = {
             });
         });
 
+        // 封禁/解封用户按钮
+        document.querySelectorAll('button.btn-ban-user').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const userId = btn.dataset.userId;
+                const userName = btn.dataset.userName;
+                const isBanned = btn.dataset.isBanned === '1';
+
+                if (isBanned) {
+                    this.confirmUnbanUser(userId, userName);
+                } else {
+                    this.banUser(userId, userName);
+                }
+            });
+        });
+
         // 删除用户按钮
         document.querySelectorAll('button.btn-delete-user').forEach(btn => {
             btn.addEventListener('click', async () => {
@@ -285,6 +311,46 @@ export const adminPage = {
                 this.confirmDeleteUser(userId, userName, isAdmin, isVerified);
             });
         });
+    },
+
+    async banUser(userId, userName) {
+        const ok = await showConfirm(
+            `确定要封禁用户「${userName}」吗？\n\n封禁后该用户将无法登录系统。`,
+            { okText: '确认封禁', okClass: 'btn-warning', title: '封禁用户', danger: true }
+        );
+        if (!ok) return;
+
+        try {
+            const result = await adminBanUser(userId);
+            if (result?.success) {
+                showToast(result.message || '封禁成功', 'success');
+                this.loadUsers(this.userPage);
+            } else {
+                showToast(result?.message || '封禁失败', 'error');
+            }
+        } catch (e) {
+            showToast('封禁失败：' + e.message, 'error');
+        }
+    },
+
+    async confirmUnbanUser(userId, userName) {
+        const ok = await showConfirm(
+            `确定要解封用户「${userName}」吗？\n\n解封后该用户将可以正常登录系统。`,
+            { okText: '确认解封', okClass: 'btn-success', title: '解封用户' }
+        );
+        if (!ok) return;
+
+        try {
+            const result = await adminUnbanUser(userId);
+            if (result?.success) {
+                showToast(result.message || '解封成功', 'success');
+                this.loadUsers(this.userPage);
+            } else {
+                showToast(result?.message || '解封失败', 'error');
+            }
+        } catch (e) {
+            showToast('解封失败：' + e.message, 'error');
+        }
     },
 
     async confirmDeleteUser(userId, userName, isAdmin, isVerified = true) {
@@ -424,6 +490,16 @@ export const adminPage = {
                             <span class="detail-value">${(d.is_bot ?? user.is_bot) ? '是' : '否'}</span>
                         </div>
                         <div class="detail-item">
+                            <span class="detail-label">封禁状态</span>
+                            <span class="detail-value" style="color:${(d.is_banned ?? user.is_banned) ? 'var(--seal-red)' : 'inherit'};">${(d.is_banned ?? user.is_banned) ? '已封禁' : '正常'}</span>
+                        </div>
+                        ${(d.is_banned ?? user.is_banned) && d.banned_until ? `
+                        <div class="detail-item">
+                            <span class="detail-label">解封时间</span>
+                            <span class="detail-value">${d.banned_until === 'infinity' || d.banned_until > '2999-01-01' ? '永久封禁' : new Date(d.banned_until).toLocaleString()}</span>
+                        </div>
+                        ` : ''}
+                        <div class="detail-item">
                             <span class="detail-label">订单数</span>
                             <span class="detail-value">${d.order_count ?? 0}</span>
                         </div>
@@ -464,8 +540,15 @@ export const adminPage = {
                         </div>
                         ${!(d.is_admin ?? user.is_admin) && (d.user_id || user.user_id) !== this.currentUserId ? `
                         <div class="admin-action-group">
+                            <label>账号状态</label>
+                            <button class="btn btn-sm ${(d.is_banned ?? user.is_banned) ? 'btn-success' : 'btn-warning'}" id="btn-toggle-ban">
+                                <i data-lucide="${(d.is_banned ?? user.is_banned) ? 'unlock' : 'ban'}" style="width:14px;height:14px;"></i>
+                                ${(d.is_banned ?? user.is_banned) ? '解封账号' : '封禁账号'}
+                            </button>
+                        </div>
+                        <div class="admin-action-group">
                             <label>危险操作</label>
-                            <button class="btn btn-sm btn-danger" id="btn-delete-user-detail" style="background:var(--seal-red);">
+                            <button class="btn btn-sm btn-danger" id="btn-delete-user-detail" style="background:var(--seal-red);color:var(--paper-card);border-color:var(--seal-red);">
                                 <i data-lucide="trash-2" style="width:14px;height:14px;"></i> 永久删除此用户
                             </button>
                         </div>
@@ -1723,9 +1806,13 @@ export const adminPage = {
         const btnClearItems = document.getElementById('btn-clear-items');
         if (btnClearItems) {
             btnClearItems.addEventListener('click', async () => {
-                const ok = await showConfirm(
-                    '确定要清空该用户的所有物品吗？此操作不可撤销！',
-                    { okText: '清空', okClass: 'btn-danger' }
+                const user = this.users.find(u => u.user_id === userId);
+                const userName = user?.nickname || '无名';
+                const ok = await showConfirmTyped(
+                    `⚠️ 危险操作：清空「${userName}」的所有物品\n\n` +
+                    `此操作将删除该用户背包中的所有物品，不可撤销！`,
+                    userName,
+                    { okText: '清空所有物品', okClass: 'btn-danger', placeholder: '请输入用户昵称以确认' }
                 );
                 if (!ok) return;
                 btnClearItems.disabled = true;
@@ -1772,6 +1859,43 @@ export const adminPage = {
                     showToast('操作失败', 'error');
                 }
                 btnToggleAdmin.disabled = false;
+            });
+        }
+
+        // 封禁/解封用户
+        const btnToggleBan = document.getElementById('btn-toggle-ban');
+        if (btnToggleBan) {
+            btnToggleBan.addEventListener('click', async () => {
+                const user = this.users.find(u => u.user_id === userId);
+                const detailUser = user || {};
+                const isBanned = detailUser.is_banned;
+                const userName = detailUser.nickname || '无名';
+
+                if (isBanned) {
+                    const ok = await showConfirm(
+                        `确定要解封用户「${userName}」吗？\n\n解封后该用户将可以正常登录系统。`,
+                        { okText: '确认解封', okClass: 'btn-success', title: '解封用户' }
+                    );
+                    if (!ok) return;
+                    btnToggleBan.disabled = true;
+                    try {
+                        const result = await adminUnbanUser(userId);
+                        if (result?.success) {
+                            showToast(result.message, 'success');
+                            this.showUserDetail(userId, 1);
+                            this.loadUsers();
+                        } else {
+                            showToast(result?.message || '解封失败', 'error');
+                        }
+                    } catch (e) {
+                        showToast('解封失败：' + e.message, 'error');
+                    }
+                    btnToggleBan.disabled = false;
+                } else {
+                    await this.banUser(userId, userName);
+                    this.showUserDetail(userId, 1);
+                    this.loadUsers();
+                }
             });
         }
 

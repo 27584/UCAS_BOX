@@ -1,6 +1,6 @@
 import { supabase, currentUser, refreshSession } from './supabaseClient.js';
 import { router } from './router.js';
-import { getProfile, getMails, getUnreadDmCount, getUnreadNotificationCount, checkAdmin, userPing } from './api.js';
+import { getProfile, getMails, getUnreadDmCount, getUnreadNotificationCount, checkAdmin, userPing, checkBannedStatus } from './api.js';
 import { formatNumber, showToast } from './utils.js';
 
 let pingInterval = null;
@@ -16,6 +16,7 @@ export async function initAuth() {
     updateMailBadge();
     updateAdminNav();
     checkEmailVerification();
+    checkBannedAndLogout();
     startOnlinePing();
 
     supabase.auth.onAuthStateChange((event, session) => {
@@ -28,6 +29,7 @@ export async function initAuth() {
         if (session) {
             userPing().catch(() => {});
             startOnlinePing();
+            checkBannedAndLogout();
         } else {
             stopOnlinePing();
         }
@@ -47,11 +49,27 @@ export async function initAuth() {
     });
 }
 
+async function checkBannedAndLogout() {
+    if (!currentUser) return;
+    try {
+        const status = await checkBannedStatus();
+        if (status?.is_banned) {
+            await supabase.auth.signOut();
+            showToast('账号已被封禁，如有疑问请联系管理员', 'error');
+            router.navigate('auth');
+        }
+    } catch (e) {
+        // 静默失败，不影响用户使用
+    }
+}
+
 function startOnlinePing() {
     if (pingInterval) return;
     userPing().catch(() => {});
+    checkBannedAndLogout();
     pingInterval = setInterval(() => {
         userPing().catch(() => {});
+        checkBannedAndLogout();
     }, 2 * 60 * 1000);
 }
 

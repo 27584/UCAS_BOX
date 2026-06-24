@@ -1,5 +1,5 @@
 import { getPosts, createPost, toggleLike, getComments, createComment, deletePost, deleteComment, searchPosts, searchUsers } from '../api.js';
-import { showToast, formatNumber, timeAgo, showConfirm, userBadgeHTML, escapeHtml } from '../utils.js';
+import { showToast, formatNumber, timeAgo, showConfirm, userBadgeHTML, escapeHtml, userAvatarHTML } from '../utils.js';
 import { createIcons, icons } from 'lucide';
 import { router } from '../router.js';
 
@@ -611,9 +611,11 @@ export const feedPage = {
                 if (results && results.length > 0) {
                     list.innerHTML = results.map(user => `
                         <div class="user-search-result" data-user-id="${user.user_id}">
-                            <div class="user-search-avatar">${(user.nickname || '?').charAt(0).toUpperCase()}</div>
+                            <div class="user-search-avatar" style="padding:0;overflow:hidden;">
+                                ${userAvatarHTML(user)}
+                            </div>
                             <div class="user-search-info">
-                                <div class="user-search-name">${user.nickname || '无名旅者'}${userBadgeHTML(user)}</div>
+                                <div class="user-search-name">${escapeHtml(user.nickname || '无名旅者')}${userBadgeHTML(user)}</div>
                                 <div class="user-search-time">加入于 ${new Date(user.created_at).toLocaleDateString('zh-CN')}</div>
                             </div>
                         </div>
