@@ -259,6 +259,42 @@
     display: inline-block;
 }
 
+.ban-duration-options {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+.ban-duration-btn {
+    padding: 10px 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    background: var(--paper-card);
+    color: var(--ink);
+    border: 2px solid var(--ink);
+    box-shadow: 2px 2px 0 var(--ink);
+    cursor: pointer;
+    transition: all 0.1s;
+    font-family: var(--font-mono);
+}
+
+.ban-duration-btn:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: 3px 3px 0 var(--ink);
+}
+
+.ban-duration-btn:active {
+    transform: translate(1px, 1px);
+    box-shadow: 1px 1px 0 var(--ink);
+}
+
+.ban-duration-btn.active {
+    background: var(--accent);
+    color: var(--ink);
+    box-shadow: inset 2px 2px 0 rgba(0,0,0,0.15);
+    transform: translate(1px, 1px);
+}
+
 /* 未激活用户标签 */
 .unverified-tag {
     background: transparent;

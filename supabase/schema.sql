@@ -1975,9 +1975,10 @@ $$;
 
 -- ============================================================
 -- 21g3. RPC 函数：封禁用户（管理员，使用Supabase原生banned_until）
+-- p_hours: 封禁时长（小时），NULL 或 <=0 表示永久封禁
 -- ============================================================
-DROP FUNCTION IF EXISTS public.admin_ban_user(UUID);
-CREATE OR REPLACE FUNCTION public.admin_ban_user(p_user_id UUID)
+DROP FUNCTION IF EXISTS public.admin_ban_user(UUID, DOUBLE PRECISION);
+CREATE OR REPLACE FUNCTION public.admin_ban_user(p_user_id UUID, p_hours DOUBLE PRECISION DEFAULT NULL)
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -1986,6 +1987,8 @@ DECLARE
     user_uuid UUID := auth.uid();
     v_user_nickname TEXT;
     v_is_target_admin BOOLEAN;
+    v_banned_until TIMESTAMPTZ;
+    v_duration_text TEXT;
 BEGIN
     IF user_uuid IS NULL THEN
         RETURN jsonb_build_object('success', false, 'message', '未登录');
@@ -2012,14 +2015,31 @@ BEGIN
         RETURN jsonb_build_object('success', false, 'message', '不能封禁其他管理员账号');
     END IF;
 
+    -- 计算封禁截止时间
+    IF p_hours IS NULL OR p_hours <= 0 THEN
+        v_banned_until := 'infinity'::timestamptz;
+        v_duration_text := '永久';
+    ELSE
+        v_banned_until := now() + (p_hours || ' hours')::interval;
+        IF p_hours < 24 THEN
+            v_duration_text := p_hours || '小时';
+        ELSIF p_hours < 24 * 30 THEN
+            v_duration_text := ROUND(p_hours / 24, 1) || '天';
+        ELSE
+            v_duration_text := ROUND(p_hours / 24 / 30, 1) || '个月';
+        END IF;
+    END IF;
+
     UPDATE auth.users
-    SET banned_until = 'infinity'::timestamptz
+    SET banned_until = v_banned_until
     WHERE id = p_user_id;
 
     RETURN jsonb_build_object(
         'success', true,
-        'message', '用户「' || v_user_nickname || '」已被封禁',
-        'nickname', v_user_nickname
+        'message', '用户「' || v_user_nickname || '」已被封禁（' || v_duration_text || '）',
+        'nickname', v_user_nickname,
+        'banned_until', v_banned_until,
+        'duration_text', v_duration_text
     );
 EXCEPTION WHEN OTHERS THEN
     RETURN jsonb_build_object(

@@ -443,8 +443,9 @@ export async function adminDeleteUser(userId) {
 }
 
 // 封禁用户（管理员，使用Supabase原生banned_until）
-export async function adminBanUser(userId) {
-    return rpc('admin_ban_user', { p_user_id: userId });
+// hours: 封禁时长（小时），null 或 0 表示永久封禁
+export async function adminBanUser(userId, hours = null) {
+    return rpc('admin_ban_user', { p_user_id: userId, p_hours: hours });
 }
 
 // 解封用户（管理员）

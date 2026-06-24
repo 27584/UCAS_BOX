@@ -283,7 +283,9 @@ export const adminPage = {
                 if (isBanned) {
                     this.confirmUnbanUser(userId, userName);
                 } else {
-                    this.banUser(userId, userName);
+                    this.showBanUserModal(userId, userName, () => {
+                        this.loadUsers(this.userPage);
+                    });
                 }
             });
         });
@@ -313,24 +315,108 @@ export const adminPage = {
         });
     },
 
-    async banUser(userId, userName) {
-        const ok = await showConfirm(
-            `确定要封禁用户「${userName}」吗？\n\n封禁后该用户将无法登录系统。`,
-            { okText: '确认封禁', okClass: 'btn-warning', title: '封禁用户', danger: true }
-        );
-        if (!ok) return;
+    showBanUserModal(userId, userName, onSuccess) {
+        const existing = document.getElementById('ban-user-modal');
+        if (existing) existing.remove();
 
-        try {
-            const result = await adminBanUser(userId);
-            if (result?.success) {
-                showToast(result.message || '封禁成功', 'success');
-                this.loadUsers(this.userPage);
-            } else {
-                showToast(result?.message || '封禁失败', 'error');
+        const modalHtml = `
+            <div id="ban-user-modal" class="modal" style="display:flex;">
+                <div class="modal-overlay"></div>
+                <div class="modal-content" style="max-width:440px;">
+                    <div class="modal-header">
+                        <h3><i data-lucide="ban"></i> 封禁用户</h3>
+                        <button class="modal-close-btn">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <p style="margin-bottom:16px;">封禁用户「<strong>${this.escHtml(userName)}</strong>」，请选择封禁时长：</p>
+                        
+                        <div class="ban-duration-options">
+                            <button class="btn btn-outline ban-duration-btn" data-hours="1">1 小时</button>
+                            <button class="btn btn-outline ban-duration-btn" data-hours="24">1 天</button>
+                            <button class="btn btn-outline ban-duration-btn" data-hours="72">3 天</button>
+                            <button class="btn btn-outline ban-duration-btn" data-hours="168">7 天</button>
+                            <button class="btn btn-outline ban-duration-btn" data-hours="720">30 天</button>
+                            <button class="btn btn-outline ban-duration-btn" data-hours="-1">永久封禁</button>
+                        </div>
+                        
+                        <div class="form-group" style="margin-top:16px;">
+                            <label class="form-label">自定义时长（小时，留空使用上方选项）</label>
+                            <input type="number" class="form-input" id="ban-custom-hours" min="0.5" step="0.5" placeholder="输入小时数，如 2.5 表示2个半小时">
+                        </div>
+                        
+                        <button class="btn btn-warning" id="btn-confirm-ban" style="width:100%;margin-top:8px;" disabled>
+                            <i data-lucide="ban"></i> 确认封禁
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        const modal = document.getElementById('ban-user-modal');
+        const closeModal = () => modal.remove();
+        modal.querySelector('.modal-overlay').addEventListener('click', closeModal);
+        modal.querySelector('.modal-close-btn').addEventListener('click', closeModal);
+        createIcons({ icons });
+
+        let selectedHours = null;
+        const durationBtns = modal.querySelectorAll('.ban-duration-btn');
+        const customInput = modal.getElementById('ban-custom-hours');
+        const confirmBtn = modal.getElementById('btn-confirm-ban');
+
+        const updateConfirmBtn = () => {
+            const hasCustom = customInput.value && parseFloat(customInput.value) > 0;
+            confirmBtn.disabled = selectedHours === null && !hasCustom;
+        };
+
+        durationBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                durationBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                customInput.value = '';
+                selectedHours = parseFloat(btn.dataset.hours);
+                updateConfirmBtn();
+            });
+        });
+
+        customInput.addEventListener('input', () => {
+            durationBtns.forEach(b => b.classList.remove('active'));
+            selectedHours = null;
+            updateConfirmBtn();
+        });
+
+        confirmBtn.addEventListener('click', async () => {
+            let hours = selectedHours;
+            const customVal = parseFloat(customInput.value);
+            if (customVal > 0) {
+                hours = customVal;
             }
-        } catch (e) {
-            showToast('封禁失败：' + e.message, 'error');
-        }
+            if (hours === null || (hours <= 0 && hours !== -1)) return;
+            if (hours === -1) hours = null;
+
+            confirmBtn.disabled = true;
+            confirmBtn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> 封禁中...';
+            createIcons({ icons });
+
+            try {
+                const result = await adminBanUser(userId, hours);
+                if (result?.success) {
+                    showToast(result.message || '封禁成功', 'success');
+                    closeModal();
+                    if (onSuccess) onSuccess();
+                } else {
+                    showToast(result?.message || '封禁失败', 'error');
+                    confirmBtn.disabled = false;
+                    confirmBtn.innerHTML = '<i data-lucide="ban"></i> 确认封禁';
+                    createIcons({ icons });
+                }
+            } catch (e) {
+                showToast('封禁失败：' + e.message, 'error');
+                confirmBtn.disabled = false;
+                confirmBtn.innerHTML = '<i data-lucide="ban"></i> 确认封禁';
+                createIcons({ icons });
+            }
+        });
     },
 
     async confirmUnbanUser(userId, userName) {
@@ -1892,9 +1978,21 @@ export const adminPage = {
                     }
                     btnToggleBan.disabled = false;
                 } else {
-                    await this.banUser(userId, userName);
-                    this.showUserDetail(userId, 1);
-                    this.loadUsers();
+                    const detailModal = document.getElementById('user-detail-modal');
+                    if (detailModal) detailModal.style.display = 'none';
+                    this.showBanUserModal(userId, userName, () => {
+                        this.showUserDetail(userId, 1);
+                        this.loadUsers();
+                    });
+                    const banModal = document.getElementById('ban-user-modal');
+                    if (banModal) {
+                        const handleClose = () => {
+                            const dm = document.getElementById('user-detail-modal');
+                            if (dm) dm.style.display = 'flex';
+                        };
+                        banModal.querySelector('.modal-overlay').addEventListener('click', handleClose);
+                        banModal.querySelector('.modal-close-btn').addEventListener('click', handleClose);
+                    }
                 }
             });
         }
