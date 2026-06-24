@@ -243,6 +243,11 @@ CREATE TABLE IF NOT EXISTS public.market_orders (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
+CREATE INDEX IF NOT EXISTS idx_market_orders_status ON public.market_orders(status);
+CREATE INDEX IF NOT EXISTS idx_market_orders_seller_id ON public.market_orders(seller_id);
+CREATE INDEX IF NOT EXISTS idx_market_orders_item_id ON public.market_orders(item_id);
+CREATE INDEX IF NOT EXISTS idx_market_orders_active_item ON public.market_orders(item_id, price_per_unit) WHERE status = 'active';
+
 -- ============================================================
 -- 5. 系统邮件
 -- ============================================================
@@ -1148,10 +1153,21 @@ AS $$
 DECLARE
     offset_val INT;
     quality_order INT;
+    v_total_count BIGINT;
 BEGIN
     offset_val := (COALESCE(p_page, 1) - 1) * COALESCE(p_limit, 10);
     -- 转义 LIKE 通配符防止通配符注入
     p_search := REPLACE(REPLACE(p_search, '%', '\%'), '_', '\_');
+
+    -- 先计算总数（只查一次）
+    SELECT COUNT(*) INTO v_total_count
+    FROM public.market_orders mo2
+    JOIN public.items i2 ON mo2.item_id = i2.id
+    LEFT JOIN public.profiles p2 ON mo2.seller_id = p2.id
+    WHERE mo2.status = 'active'
+    AND (p_quality IS NULL OR i2.quality = p_quality)
+    AND (p_type IS NULL OR i2.item_type = p_type)
+    AND (p_search IS NULL OR i2.name ILIKE '%' || p_search || '%' OR p2.nickname ILIKE '%' || p_search || '%');
 
     RETURN QUERY
     SELECT
@@ -1171,15 +1187,7 @@ BEGIN
         p.nickname AS seller_nickname,
         COALESCE(p.is_admin, false) AS seller_is_admin,
         COALESCE(p.is_bot, false) AS seller_is_bot,
-        (
-            SELECT COUNT(*) FROM public.market_orders mo2
-            JOIN public.items i2 ON mo2.item_id = i2.id
-            LEFT JOIN public.profiles p2 ON mo2.seller_id = p2.id
-            WHERE mo2.status = 'active'
-            AND (p_quality IS NULL OR i2.quality = p_quality)
-            AND (p_type IS NULL OR i2.item_type = p_type)
-            AND (p_search IS NULL OR i2.name ILIKE '%' || p_search || '%' OR p2.nickname ILIKE '%' || p_search || '%')
-        )::BIGINT AS total_count
+        v_total_count AS total_count
     FROM public.market_orders mo
     JOIN public.items i ON mo.item_id = i.id
     LEFT JOIN public.profiles p ON mo.seller_id = p.id
@@ -6410,8 +6418,21 @@ AS $$
 DECLARE
     v_offset INT;
     v_quality_order INT;
+    v_total_count BIGINT;
 BEGIN
     v_offset := (p_page - 1) * p_limit;
+    -- 转义 LIKE 通配符防止通配符注入
+    p_search := REPLACE(REPLACE(p_search, '%', '\%'), '_', '\_');
+
+    -- 先计算筛选后的总数
+    SELECT COUNT(*) INTO v_total_count
+    FROM public.buy_requests br2
+    JOIN public.items i2 ON br2.item_id = i2.id
+    LEFT JOIN public.profiles p2 ON br2.buyer_id = p2.id
+    WHERE br2.status = 'active'
+    AND (p_quality IS NULL OR i2.quality = p_quality)
+    AND (p_type IS NULL OR i2.item_type = p_type)
+    AND (p_search IS NULL OR i2.name ILIKE '%' || p_search || '%' OR p2.nickname ILIKE '%' || p_search || '%');
 
     RETURN (
         SELECT jsonb_agg(t) FROM (
@@ -6430,7 +6451,7 @@ BEGIN
                 p.is_admin AS buyer_is_admin,
                 p.is_bot AS buyer_is_bot,
                 br.created_at,
-                (SELECT COUNT(*) FROM public.buy_requests br2 WHERE br2.status = 'active')::BIGINT AS total_count
+                v_total_count AS total_count
             FROM public.buy_requests br
             JOIN public.items i ON br.item_id = i.id
             LEFT JOIN public.profiles p ON br.buyer_id = p.id
@@ -6584,7 +6605,7 @@ AS $$
 BEGIN
     RETURN (
         SELECT jsonb_agg(t) FROM (
-            SELECT id, name, quality, image_name, description, drop_weight, item_type
+            SELECT id, name, quality, image_name, description, item_type
             FROM public.items
             ORDER BY id
         ) t
