@@ -3014,22 +3014,9 @@ END $$;
 -- ============================================================
 -- 更新用户活跃时间触发器
 -- ============================================================
+-- 删除触发器：活跃时间仅通过 user_ping 手动更新，防止系统自动操作（如交易、开奖）误触在线状态
 DROP TRIGGER IF EXISTS trigger_update_last_active_at ON public.profiles;
 DROP FUNCTION IF EXISTS public.update_last_active_at();
-CREATE OR REPLACE FUNCTION public.update_last_active_at()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-AS $$
-BEGIN
-    NEW.last_active_at = NOW();
-    RETURN NEW;
-END;
-$$;
-
-CREATE TRIGGER trigger_update_last_active_at
-    BEFORE UPDATE ON public.profiles
-    FOR EACH ROW
-    EXECUTE FUNCTION public.update_last_active_at();
 
 -- ============================================================
 -- 用户在线状态Ping函数
