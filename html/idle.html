@@ -1,37 +1,106 @@
 <div class="idle-page">
     <div class="particle-container" id="idle-particles"></div>
-    <div class="idle-content">
-        <div class="idle-header">
+
+    <div class="idle-tabs">
+        <button class="idle-tab active" data-tab="idle">
             <i data-lucide="hourglass"></i>
-            <h2>挂机收益</h2>
-            <p>时间流逝，果壳币自然累积</p>
-        </div>
-        <div class="idle-earning card animate-bounce-in">
-            <div class="earning-label">当前累计</div>
-            <div class="earning-amount" id="earning-amount">0</div>
-            <div class="earning-unit">果壳币</div>
-            <div class="earning-rate">基础速率：<span id="base-rate">1</span> / 分钟</div>
-            <div class="earning-boost" id="earning-boost" style="display:none;">
-                收藏加成：<span id="boost-value">+0</span> / 分钟
+            挂机收益
+        </button>
+        <button class="idle-tab" data-tab="farm">
+            <i data-lucide="sprout"></i>
+            我的农场
+        </button>
+    </div>
+
+    <!-- 挂机分页 -->
+    <div class="idle-tab-content active" data-tab="idle">
+        <div class="idle-content">
+            <div class="idle-header">
+                <i data-lucide="hourglass"></i>
+                <h2>挂机收益</h2>
+                <p>时间流逝，果壳币自然累积</p>
             </div>
-            <div class="earning-total" id="earning-total">总速率：1 / 分钟</div>
-            <div class="earning-time" id="earning-time">已挂机：00:00:00 / 08:00:00</div>
+            <div class="idle-earning card animate-bounce-in">
+                <div class="earning-label">当前累计</div>
+                <div class="earning-amount" id="earning-amount">0</div>
+                <div class="earning-unit">果壳币</div>
+                <div class="earning-rate">基础速率：<span id="base-rate">1</span> / 分钟</div>
+                <div class="earning-boost" id="earning-boost" style="display:none;">
+                    收藏加成：<span id="boost-value">+0</span> / 分钟
+                </div>
+                <div class="earning-total" id="earning-total">总速率：1 / 分钟</div>
+                <div class="earning-time" id="earning-time">已挂机：00:00:00 / 08:00:00</div>
+            </div>
+            <button class="btn btn-primary btn-claim" id="btn-claim">
+                <i data-lucide="coins"></i>
+                <span>领取收益</span>
+            </button>
+            <button class="btn btn-secondary btn-watch-ad" id="btn-watch-ad" style="margin-top:12px;width:100%;">
+                <i data-lucide="play-circle"></i>
+                <span>浏览广告领取果壳币 (1000-5000)</span>
+            </button>
+            <a href="#activity" class="btn btn-secondary" style="margin-top:12px;width:100%;display:flex;align-items:center;justify-content:center;gap:8px;">
+                <i data-lucide="gift"></i>
+                <span>端午活动</span>
+            </a>
+            <div class="idle-tip">
+                <i data-lucide="info"></i>
+                <span>收益会自动累积，随时可领取。离开后仍然继续计算。持有蓝色以上收藏品可以获得加成！</span>
+            </div>
         </div>
-        <button class="btn btn-primary btn-claim" id="btn-claim">
-            <i data-lucide="coins"></i>
-            <span>领取收益</span>
-        </button>
-        <button class="btn btn-secondary btn-watch-ad" id="btn-watch-ad" style="margin-top:12px;width:100%;">
-            <i data-lucide="play-circle"></i>
-            <span>浏览广告领取果壳币 (1000-5000)</span>
-        </button>
-        <a href="#activity" class="btn btn-secondary" style="margin-top:12px;width:100%;display:flex;align-items:center;justify-content:center;gap:8px;">
-            <i data-lucide="gift"></i>
-            <span>端午活动</span>
-        </a>
-        <div class="idle-tip">
-            <i data-lucide="info"></i>
-            <span>收益会自动累积，随时可领取。离开后仍然继续计算。持有蓝色以上收藏品可以获得加成！</span>
+    </div>
+
+    <!-- 农场分页 -->
+    <div class="idle-tab-content" data-tab="farm" style="display:none;">
+        <div class="farm-content">
+            <div class="farm-header card">
+                <div class="farm-level-info">
+                    <div class="farm-level-badge">
+                        <i data-lucide="trophy"></i>
+                        <span id="farm-level">1</span>
+                    </div>
+                    <div class="farm-level-details">
+                        <div class="farm-level-title" id="farm-level-title">新农夫</div>
+                        <div class="farm-exp-bar">
+                            <div class="farm-exp-fill" id="farm-exp-fill"></div>
+                        </div>
+                        <div class="farm-exp-text">
+                            <span id="farm-exp-current">0</span> / <span id="farm-exp-next">50</span> EXP
+                        </div>
+                    </div>
+                </div>
+                <div class="farm-stats">
+                    <div class="farm-stat">
+                        <i data-lucide="wheat"></i>
+                        <span>总收获：<strong id="farm-total-harvests">0</strong></span>
+                    </div>
+                    <button class="btn btn-primary btn-harvest-all" id="btn-harvest-all">
+                        <i data-lucide="package"></i>
+                        一键收获
+                    </button>
+                </div>
+            </div>
+
+            <div class="farm-plots-grid" id="farm-plots-grid">
+                <!-- 动态生成12块土地 -->
+            </div>
+
+            <div class="farm-tip">
+                <i data-lucide="info"></i>
+                <span>每升3级解锁一块土地，使用种子播种，成熟后可收获作物获得经验。</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 播种模态框 -->
+<div id="plant-modal" class="modal" style="display:none;">
+    <div class="modal-overlay" data-close-modal></div>
+    <div class="modal-content plant-modal-content">
+        <button class="btn-close" data-close-modal><i data-lucide="x"></i></button>
+        <h3><i data-lucide="sprout"></i> 选择种子</h3>
+        <div class="plant-modal-body" id="plant-modal-body">
+            <!-- 动态生成可选种子 -->
         </div>
     </div>
 </div>

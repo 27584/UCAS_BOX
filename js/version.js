@@ -2,10 +2,17 @@
 // 版本信息与更新日志
 // ============================================
 
-export const VERSION = 'v0.6.2_beta';
-export const VERSION_CODE = 6; // 绝对版本号
+export const VERSION = 'v0.7.0_beta';
+export const VERSION_CODE = 7; // 绝对版本号
 
 export const CHANGELOG = [{
+        version: 'v0.7.0_beta',
+        date: '2026-06-24',
+        type: 'feature',
+        features: [
+            "新增农场",
+        ]
+    },{
         version: 'v0.6.2_beta',
         date: '2026-06-23',
         type: 'feature',

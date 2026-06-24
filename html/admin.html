@@ -44,8 +44,14 @@
 
     <div class="tab-content" id="tab-users">
         <div class="user-search-bar">
-            <i data-lucide="search" class="search-icon"></i>
-            <input type="text" class="form-input" id="user-search-input" placeholder="搜索用户（昵称或ID）..." />
+            <button class="btn btn-primary" id="btn-open-add-user">
+                <i data-lucide="user-plus"></i>
+                <span>添加用户</span>
+            </button>
+            <div class="user-search-input-wrap">
+                <i data-lucide="search" class="search-icon"></i>
+                <input type="text" class="form-input" id="user-search-input" placeholder="搜索用户（昵称或ID）..." />
+            </div>
         </div>
         <div class="user-list" id="user-list">
             <div class="skeleton" style="height:60px;"></div>
@@ -54,50 +60,41 @@
     </div>
 
     <div class="tab-content" id="tab-items" style="display:none;">
-        <div class="item-form card">
-            <h3>添加收藏品</h3>
-            <div class="form-row">
-                <div class="form-group">
-                    <label class="form-label">名称</label>
-                    <input type="text" class="form-input" id="item-name" placeholder="物品名称" />
-                </div>
-                <div class="form-group">
-                    <label class="form-label">品质</label>
-                    <select class="form-input" id="item-quality">
-                        <option value="white">普通</option>
-                        <option value="green">稀有</option>
-                        <option value="blue">珍奇</option>
-                        <option value="purple">史诗</option>
-                        <option value="orange">传说</option>
-                        <option value="red">神圣</option>
-                    </select>
-                </div>
+        <div class="item-filter-bar">
+            <div class="item-toolbar-actions">
+                <button class="btn btn-primary" id="btn-open-add-item">
+                    <i data-lucide="plus"></i>
+                    <span>添加物品</span>
+                </button>
             </div>
-            <div class="form-row">
-                <div class="form-group">
-                    <label class="form-label">描述</label>
-                    <input type="text" class="form-input" id="item-desc" placeholder="物品描述" />
-                </div>
-                <div class="form-group">
-                    <label class="form-label">图像链接（可选，支持外链）</label>
-                    <input type="text" class="form-input" id="item-image" placeholder="留空使用默认，填 https://... 使用外链" />
-                </div>
+            <div class="item-search-bar">
+                <i data-lucide="search"></i>
+                <input type="text" class="form-input" id="item-search" placeholder="搜索物品名称..." />
             </div>
-            <div class="form-row">
-                <div class="form-group">
-                    <label class="form-label">权重（越小越稀有）</label>
-                    <input type="number" class="form-input" id="item-weight" placeholder="100" value="100" />
-                </div>
+            <div class="item-type-filter">
+                <label class="filter-label">类型：</label>
+                <select class="form-input" id="item-type-filter">
+                    <option value="">全部</option>
+                    <option value="collection">收藏品</option>
+                    <option value="consumable">消耗品</option>
+                    <option value="equipment">装备</option>
+                    <option value="material">材料</option>
+                    <option value="currency">货币</option>
+                    <option value="seed">种子</option>
+                </select>
             </div>
-            <button class="btn btn-primary" id="btn-add-item">
-                <i data-lucide="plus"></i>
-                <span>添加物品</span>
-            </button>
-        </div>
-
-        <div class="item-search-bar">
-            <i data-lucide="search"></i>
-            <input type="text" class="form-input" id="item-search" placeholder="搜索物品名称或品质..." />
+            <div class="item-type-filter">
+                <label class="filter-label">品质：</label>
+                <select class="form-input" id="item-quality-filter">
+                    <option value="">全部</option>
+                    <option value="white">普通</option>
+                    <option value="green">稀有</option>
+                    <option value="blue">珍奇</option>
+                    <option value="purple">史诗</option>
+                    <option value="orange">传说</option>
+                    <option value="red">神圣</option>
+                </select>
+            </div>
         </div>
 
         <div class="item-list" id="item-list">

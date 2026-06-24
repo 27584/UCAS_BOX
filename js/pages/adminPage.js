@@ -1,16 +1,16 @@
-import { checkAdmin, getAllUsers, getUserDetail, getUserInventory, getSystemStats, adminGetItems, adminAddItem, adminAddItemDefinition, adminUpdateItemDefinition, getItems, getPendingSubmissions, approveSubmission, rejectSubmission, getLotteryRound, drawLotteryRound, getLotteryHistory, adminBotReplenish, getAllBotsWithConfig, updateBotConfig, adminBotListItem, adminBotCancelOrder, getBotOrders, adminUpdateUserShells, adminAdjustUserShells, adminRemoveUserItem, adminClearUserItems, adminSetUserAdmin, adminGetUsers, adminChangeUserNickname } from '../api.js';
+import { checkAdmin, getUserDetail, getUserInventory, getSystemStats, adminGetItems, adminGetAllItems, adminAddItem, adminAddItemDefinition, adminUpdateItemDefinition, getItems, getPendingSubmissions, approveSubmission, rejectSubmission, getLotteryRound, drawLotteryRound, getLotteryHistory, adminBotReplenish, getAllBotsWithConfig, updateBotConfig, adminBotListItem, adminBotCancelOrder, getBotOrders, adminUpdateUserShells, adminAdjustUserShells, adminRemoveUserItem, adminClearUserItems, adminSetUserAdmin, adminGetUsers, adminChangeUserNickname, adminUpdateCropConfig, adminGetCropBySeedId, adminDeleteItem, adminDeleteUser, getUserEmailVerified, adminCreateUser } from '../api.js';
 import { supabase } from '../supabaseClient.js';
 import { router } from '../router.js';
 import { createIcons, icons } from 'lucide';
-import { showToast, QUALITY_CONFIG, renderPagination, bindPagination, itemImageHTML, initItemImages } from '../utils.js';
+import { showToast, showConfirm, showConfirmTyped, QUALITY_CONFIG, QUALITY_OPTIONS, ITEM_TYPES, itemTypeOptionsHTML, qualityOptionsHTML, renderPagination, bindPagination, itemImageHTML, initItemImages, replaceWithSearchableSelect, upgradeSelectsToSearchable } from '../utils.js';
 
 export const adminPage = {
     users: [],
     items: [],
     submissions: [],
     // 分页状态
-    userPage: 1, userLimit: 20, userTotal: 0,
-    itemPage: 1, itemLimit: 50, itemTotal: 0,
+    userPage: 1, userLimit: 20, userTotal: 0, userSearch: '',
+    itemPage: 1, itemLimit: 50, itemTotal: 0, itemSearch: '',
     subPage: 1, subLimit: 20, subTotal: 0,
     invPage: 1, invLimit: 20, invTotal: 0,
     lottoPage: 1, lottoLimit: 10, lottoTotal: 0,
@@ -19,6 +19,10 @@ export const adminPage = {
         // 先校验权限，成功再渲染DOM、绑定事件
         const pass = await this.checkPermission();
         if (!pass) return;
+
+        // 获取当前用户ID（用于禁用"删除自己"按钮）
+        const { data: { user } } = await supabase.auth.getUser();
+        this.currentUserId = user?.id || null;
 
         await this.loadStats();
         await this.loadUsers();
@@ -69,16 +73,43 @@ export const adminPage = {
             });
         }); // 修复：原代码缺失这个闭合括号
 
-        // 新增物品按钮
-        const addItemBtn = container.querySelector('#btn-add-item');
-        if (addItemBtn) addItemBtn.addEventListener('click', () => this.addItem());
+        // 打开添加物品弹窗
+        const openAddItemBtn = container.querySelector('#btn-open-add-item');
+        if (openAddItemBtn) openAddItemBtn.addEventListener('click', () => this.showAddItemModal());
 
-        // 物品搜索
+        // 用户搜索（后端去抖）
+        const userSearch = container.querySelector('#user-search-input');
+        if (userSearch) {
+            let userSearchTimer = null;
+            userSearch.addEventListener('input', () => {
+                clearTimeout(userSearchTimer);
+                userSearchTimer = setTimeout(() => {
+                    this.userSearch = userSearch.value.trim();
+                    this.loadUsers(1);  // 搜索后回到第 1 页
+                }, 300);
+            });
+        }
+
+        // 物品搜索（后端）
         const itemSearch = container.querySelector('#item-search');
         if (itemSearch) {
-            itemSearch.addEventListener('input', (e) => {
-                this.renderItems(e.target.value.trim());
+            let searchTimer = null;
+            itemSearch.addEventListener('input', () => {
+                clearTimeout(searchTimer);
+                searchTimer = setTimeout(() => this.loadItems(1), 300);
             });
+        }
+
+        // 物品类型筛选（后端）
+        const itemTypeFilter = container.querySelector('#item-type-filter');
+        if (itemTypeFilter) {
+            itemTypeFilter.addEventListener('change', () => this.loadItems(1));
+        }
+
+        // 物品品质筛选（后端）
+        const itemQualityFilter = container.querySelector('#item-quality-filter');
+        if (itemQualityFilter) {
+            itemQualityFilter.addEventListener('change', () => this.loadItems(1));
         }
 
         // 彩票开奖按钮
@@ -90,6 +121,10 @@ export const adminPage = {
 
         const botReplenishBtn = container.querySelector('#btn-bot-replenish');
         if (botReplenishBtn) botReplenishBtn.addEventListener('click', () => this.botReplenish());
+
+        // 添加用户按钮
+        const addUserBtn = container.querySelector('#btn-open-add-user');
+        if (addUserBtn) addUserBtn.addEventListener('click', () => this.showAddUserModal());
     },
 
     async loadStats() {
@@ -110,35 +145,34 @@ export const adminPage = {
         const list = document.getElementById('user-list');
         if (!list) return;
         try {
-            const data = await getAllUsers(page, this.userLimit);
+            // 统一走 adminGetUsers（带搜索 + 后端分页）
+            const data = await adminGetUsers(
+                this.userSearch || '',
+                page,
+                this.userLimit,
+                null  // 不筛选机器人
+            );
             this.users = data || [];
-            if (data.length > 0) {
-                this.userTotal = parseInt(data[0].total_count) || 0;
-            }
+            this.userTotal = this.users.length > 0
+                ? parseInt(this.users[0].total_count) || 0
+                : 0;
             this.renderUsers();
         } catch (e) {
             list.innerHTML = '<div class="empty-state"><p>加载失败</p></div>';
         }
     },
 
-    renderUsers(filterText = '') {
+    renderUsers() {
         const list = document.getElementById('user-list');
         if (!list) return;
         if (this.users.length === 0) {
-            list.innerHTML = '<div class="empty-state"><p>暂无用户</p></div>';
+            list.innerHTML = `<div class="empty-state"><p>${this.userSearch ? '无匹配用户' : '暂无用户'}</p></div>`;
             return;
         }
 
-        const filtered = filterText
-            ? this.users.filter(u => (u.nickname || '').toLowerCase().includes(filterText.toLowerCase()) || (u.user_id || '').toString().includes(filterText))
-            : this.users;
-
-        if (filtered.length === 0) {
-            list.innerHTML = '<div class="empty-state"><p>无匹配用户</p></div>';
-            return;
-        }
-
-        let html = filtered.map(user => `
+        let html = this.users.map(user => {
+            const isSelf = user.user_id === this.currentUserId;
+            return `
             <div class="user-card">
                 <div class="user-avatar-small clickable-avatar">
                     <i data-lucide="user"></i>
@@ -161,9 +195,18 @@ export const adminPage = {
                     </select>
                     <input type="number" class="form-input" data-qty-for="${user.user_id}" value="1" min="1" style="width:60px;" />
                     <button class="btn btn-secondary btn-sm" data-give-to="${user.user_id}">发放</button>
+                    <button class="btn btn-danger btn-sm btn-delete-user"
+                        data-user-id="${user.user_id}"
+                        data-user-name="${this.escHtml(user.nickname || '无名')}"
+                        data-is-admin="${user.is_admin ? '1' : '0'}"
+                        data-is-self="${isSelf ? '1' : '0'}"
+                        ${isSelf || user.is_admin ? 'disabled title="不能删除自己或管理员"' : ''}>
+                        <i data-lucide="trash-2"></i> 删除
+                    </button>
                 </div>
             </div>
-        `).join('');
+        `;
+        }).join('');
 
         html += renderPagination(this.userPage, this.userTotal, this.userLimit);
 
@@ -178,17 +221,8 @@ export const adminPage = {
     async loadItemsForSelect() {
         try {
             const items = await adminGetItems(1, 1000);
-            const selects = document.querySelectorAll('select[data-user-id]');
-            selects.forEach(select => {
-                // 清空旧选项防止重复叠加
-                select.innerHTML = '<option value="">选择物品</option>';
-                items.forEach(item => {
-                    const opt = document.createElement('option');
-                    opt.value = item.item_id;
-                    opt.textContent = `[${item.quality}] ${item.name}`;
-                    select.appendChild(opt);
-                });
-            });
+            // 把所有"选择物品"原生 select 升级为可搜索下拉
+            upgradeSelectsToSearchable('select[data-user-id]', items, { placeholder: '选择物品' });
         } catch (e) {
             console.error('Failed to load items:', e);
         }
@@ -227,6 +261,78 @@ export const adminPage = {
                 }
             });
         });
+
+        // 删除用户按钮
+        document.querySelectorAll('button.btn-delete-user').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                if (btn.disabled) return;
+                const userId = btn.dataset.userId;
+                const userName = btn.dataset.userName;
+                const isAdmin = btn.dataset.isAdmin === '1';
+
+                // 按需查询邮箱激活状态（读取 auth.users.email_confirmed_at 原生字段）
+                let isVerified = true;
+                try {
+                    btn.disabled = true;
+                    isVerified = await getUserEmailVerified(userId);
+                } catch (e) {
+                    // 查询失败按已激活处理（走严格流程更安全）
+                    isVerified = true;
+                } finally {
+                    btn.disabled = false;
+                }
+
+                this.confirmDeleteUser(userId, userName, isAdmin, isVerified);
+            });
+        });
+    },
+
+    async confirmDeleteUser(userId, userName, isAdmin, isVerified = true) {
+        if (isAdmin) {
+            showToast('不能删除管理员账号', 'error');
+            return;
+        }
+        if (userId === this.currentUserId) {
+            showToast('不能删除自己', 'error');
+            return;
+        }
+
+        // 未激活用户：单次简洁确认
+        if (!isVerified) {
+            const ok = await showConfirm(
+                `该用户邮箱尚未激活，确定要删除「${userName}」吗？`,
+                { okText: '删除', okClass: 'btn-danger', title: '删除未激活用户' }
+            );
+            if (!ok) return;
+        } else {
+            // 已激活用户：输入昵称 + 二次确认
+            const ok = await showConfirmTyped(
+                `⚠️ 危险操作：永久删除用户「${userName}」\n\n` +
+                `此操作将删除该用户的所有数据：\n` +
+                `• 账号本身\n` +
+                `• 背包物品\n` +
+                `• 挂单记录\n` +
+                `• 邮件\n` +
+                `• 所有关联数据\n\n` +
+                `此操作不可撤销！`,
+                userName,
+                { okText: '永久删除', placeholder: `请输入用户昵称以确认` }
+            );
+            if (!ok) return;
+        }
+
+        try {
+            const result = await adminDeleteUser(userId);
+            if (result?.success) {
+                showToast(result.message || '用户已删除', 'success');
+                this.loadUsers(this.userPage);
+                this.loadStats();
+            } else {
+                showToast(result?.message || '删除失败', 'error');
+            }
+        } catch (e) {
+            showToast('删除失败：' + e.message, 'error');
+        }
     },
 
     async showUserDetail(userId, invPage = 1) {
@@ -356,6 +462,14 @@ export const adminPage = {
                                 ${(d.is_admin ?? user.is_admin) ? '撤销管理员' : '设为管理员'}
                             </button>
                         </div>
+                        ${!(d.is_admin ?? user.is_admin) && (d.user_id || user.user_id) !== this.currentUserId ? `
+                        <div class="admin-action-group">
+                            <label>危险操作</label>
+                            <button class="btn btn-sm btn-danger" id="btn-delete-user-detail" style="background:var(--seal-red);">
+                                <i data-lucide="trash-2" style="width:14px;height:14px;"></i> 永久删除此用户
+                            </button>
+                        </div>
+                        ` : ''}
                     </div>
                 </div>`;
 
@@ -415,42 +529,46 @@ export const adminPage = {
         this.itemPage = page;
         const list = document.getElementById('item-list');
         if (!list) return;
+        const search = (document.getElementById('item-search')?.value || '').trim();
+        const quality = document.getElementById('item-quality-filter')?.value || '';
+        const itemType = document.getElementById('item-type-filter')?.value || '';
         try {
-            const data = await adminGetItems(page, this.itemLimit);
+            const [data, allItemsData] = await Promise.all([
+                adminGetItems(page, this.itemLimit, search, quality, itemType),
+                adminGetAllItems()
+            ]);
             this.items = data || [];
+            this.allItems = allItemsData || [];
+            // 关键修复：total_count 在每一行都返回，0条数据时需要单独查询
             if (data.length > 0) {
                 this.itemTotal = parseInt(data[0].total_count) || 0;
+            } else {
+                // 没数据时，total 是 0（但分页要正确显示）
+                this.itemTotal = 0;
+            }
+            // 如果当前页超出范围，重置到第 1 页
+            const totalPages = Math.max(1, Math.ceil(this.itemTotal / this.itemLimit));
+            if (this.itemPage > totalPages) {
+                this.itemPage = 1;
+                return this.loadItems(1);
             }
             this.renderItems();
         } catch (e) {
+            console.error('loadItems error:', e);
             list.innerHTML = '<div class="empty-state"><p>加载失败</p></div>';
         }
     },
 
-    renderItems(filterText = '') {
+    renderItems() {
         const list = document.getElementById('item-list');
         if (!list) return;
         if (this.items.length === 0) {
-            list.innerHTML = '<div class="empty-state"><p>暂无收藏品</p></div>';
+            list.innerHTML = '<div class="empty-state"><p>暂无匹配物品</p></div>';
             return;
         }
 
-        const filtered = filterText
-            ? this.items.filter(item => {
-                const qLabel = (QUALITY_CONFIG[item.quality] || QUALITY_CONFIG.white).label;
-                const search = filterText.toLowerCase();
-                return (item.name || '').toLowerCase().includes(search) ||
-                    qLabel.includes(search) ||
-                    (item.quality || '').toLowerCase().includes(search);
-            })
-            : this.items;
-
-        if (filtered.length === 0) {
-            list.innerHTML = '<div class="empty-state"><p>无匹配物品</p></div>';
-            return;
-        }
-
-        let html = filtered.map(item => {
+        const items = this.items;
+        let html = items.map(item => {
             const cfg = QUALITY_CONFIG[item.quality] || QUALITY_CONFIG.white;
             const qClass = 'quality-' + (item.quality || 'white');
             return `
@@ -471,6 +589,9 @@ export const adminPage = {
                         <button class="btn btn-secondary btn-sm btn-edit-item" data-item-id="${item.item_id}">
                             <i data-lucide="edit-3"></i> 编辑
                         </button>
+                        <button class="btn btn-danger btn-sm btn-delete-item" data-item-id="${item.item_id}" data-item-name="${this.escHtml(item.name)}" data-item-type="${item.item_type || ''}">
+                            <i data-lucide="trash-2"></i> 删除
+                        </button>
                     </div>
                 </div>
             `;
@@ -489,33 +610,53 @@ export const adminPage = {
                 this.editItem(itemId);
             });
         });
+        list.querySelectorAll('.btn-delete-item').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const itemId = parseInt(btn.dataset.itemId);
+                const itemName = btn.dataset.itemName;
+                const itemType = btn.dataset.itemType;
+                this.confirmDeleteItem(itemId, itemName, itemType);
+            });
+        });
     },
 
-    editItem(itemId) {
+    async confirmDeleteItem(itemId, itemName, itemType) {
+        const ok = await showConfirm(
+            `确定要删除物品「${itemName}」吗？\n\n` +
+            `此操作不可撤销！\n` +
+            `类型：${itemType || '未知'}\n` +
+            `ID：${itemId}`,
+            { okText: '删除', okClass: 'btn-danger', danger: true }
+        );
+        if (!ok) return;
+
+        try {
+            const result = await adminDeleteItem(itemId);
+            if (result?.success) {
+                showToast(result.message || '删除成功', 'success');
+                this.loadItems(this.itemPage);
+                this.loadStats();
+            } else {
+                showToast(result?.message || '删除失败', 'error');
+            }
+        } catch (e) {
+            showToast('删除失败：' + e.message, 'error');
+        }
+    },
+
+    async editItem(itemId) {
         const item = this.items.find(i => i.item_id === itemId);
         if (!item) return;
 
         const existing = document.getElementById('item-edit-modal');
         if (existing) existing.remove();
 
-        const qualities = [
-            { v: 'white', l: '普通' }, { v: 'green', l: '稀有' },
-            { v: 'blue', l: '珍奇' }, { v: 'purple', l: '史诗' },
-            { v: 'orange', l: '传说' }, { v: 'red', l: '神圣' }
-        ];
-
-        const itemTypes = [
-            { v: 'collection', l: '收藏品' },
-            { v: 'consumable', l: '消耗品' },
-            { v: 'equipment', l: '装备' },
-            { v: 'material', l: '材料' },
-            { v: 'currency', l: '货币' }
-        ];
+        const allItems = this.allItems || [];
 
         const modalHtml = `
             <div id="item-edit-modal" class="modal" style="display:flex;">
                 <div class="modal-overlay"></div>
-                <div class="modal-content" style="max-width:480px;">
+                <div class="modal-content" style="max-width:520px;max-height:90vh;overflow-y:auto;">
                     <div class="modal-header">
                         <h3>编辑物品 #${item.item_id}</h3>
                         <button class="modal-close-btn">&times;</button>
@@ -525,17 +666,19 @@ export const adminPage = {
                             <label class="form-label">名称</label>
                             <input type="text" class="form-input" id="edit-item-name" value="${this.escHtml(item.name)}" />
                         </div>
-                        <div class="form-group">
-                            <label class="form-label">品质</label>
-                            <select class="form-input" id="edit-item-quality">
-                                ${qualities.map(q => `<option value="${q.v}" ${item.quality === q.v ? 'selected' : ''}>${q.l}</option>`).join('')}
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">类型</label>
-                            <select class="form-input" id="edit-item-type">
-                                ${itemTypes.map(t => `<option value="${t.v}" ${item.item_type === t.v ? 'selected' : ''}>${t.l}</option>`).join('')}
-                            </select>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">品质</label>
+                                <select class="form-input" id="edit-item-quality">
+                                    ${qualityOptionsHTML({ selected: item.quality })}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">类型</label>
+                                <select class="form-input" id="edit-item-type">
+                                    ${itemTypeOptionsHTML({ selected: item.item_type })}
+                                </select>
+                            </div>
                         </div>
                         <div class="form-group">
                             <label class="form-label">图像链接</label>
@@ -552,7 +695,38 @@ export const adminPage = {
                             <label class="form-label">权重</label>
                             <input type="number" class="form-input" id="edit-item-weight" value="${item.drop_weight}" />
                         </div>
-                        <button class="btn btn-primary" id="btn-save-item" style="width:100%;margin-top:8px;">保存</button>
+
+                        <div id="crop-config-section" style="display:none;margin-top:16px;padding-top:16px;border-top:1.5px dashed var(--ink-faded);">
+                            <h4 style="margin:0 0 12px;font-family:var(--font-mono);font-size:0.95rem;"><i data-lucide="sprout" style="width:16px;height:16px;vertical-align:middle;"></i> 作物配置</h4>
+                            <div class="form-group">
+                                <label class="form-label">收获物品</label>
+                                <select class="form-input" id="edit-crop-id" data-searchable-item-select>
+                                    ${allItems.map(i => `<option value="${i.id || i.item_id}">${this.escHtml(i.name)} (${i.item_type || 'collection'})</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label class="form-label">生长时间（秒）</label>
+                                    <input type="number" class="form-input" id="edit-grow-seconds" value="60" min="1" />
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">经验奖励</label>
+                                    <input type="number" class="form-input" id="edit-exp-reward" value="10" min="0" />
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label class="form-label">掉落数量最小值</label>
+                                    <input type="number" class="form-input" id="edit-drop-min" value="1" min="1" />
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">掉落数量最大值</label>
+                                    <input type="number" class="form-input" id="edit-drop-max" value="1" min="1" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <button class="btn btn-primary" id="btn-save-item" style="width:100%;margin-top:16px;">保存</button>
                     </div>
                 </div>
             </div>
@@ -564,7 +738,40 @@ export const adminPage = {
         modal.querySelector('.modal-overlay').addEventListener('click', closeModal);
         modal.querySelector('.modal-close-btn').addEventListener('click', closeModal);
 
-        // 图片预览实时更新
+        createIcons({ icons });
+
+        // 把收获物品下拉升级为可搜索下拉
+        upgradeSelectsToSearchable('#edit-crop-id', allItems, { placeholder: '选择收获物品' });
+
+        const typeSelect = modal.querySelector('#edit-item-type');
+        const cropSection = modal.querySelector('#crop-config-section');
+
+        const toggleCropSection = () => {
+            if (typeSelect.value === 'seed') {
+                cropSection.style.display = 'block';
+            } else {
+                cropSection.style.display = 'none';
+            }
+        };
+        typeSelect.addEventListener('change', toggleCropSection);
+        toggleCropSection();
+
+        if (item.item_type === 'seed') {
+            const cropConfig = await adminGetCropBySeedId(itemId);
+            if (cropConfig) {
+                const cropIdSelect = modal.querySelector('#edit-crop-id');
+                if (cropIdSelect) {
+                    cropIdSelect.value = cropConfig.crop_id;
+                    // 触发 change 事件，让可搜索下拉更新显示
+                    cropIdSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+                modal.querySelector('#edit-grow-seconds').value = cropConfig.grow_seconds;
+                modal.querySelector('#edit-exp-reward').value = cropConfig.exp_reward;
+                modal.querySelector('#edit-drop-min').value = cropConfig.drop_quantity_min;
+                modal.querySelector('#edit-drop-max').value = cropConfig.drop_quantity_max;
+            }
+        }
+
         const imgInput = modal.querySelector('#edit-item-image');
         const imgPreview = modal.querySelector('#edit-item-preview');
         if (imgInput && imgPreview) {
@@ -592,11 +799,31 @@ export const adminPage = {
 
             try {
                 await adminUpdateItemDefinition(itemId, name, quality, itemType, imageName, description, weightVal);
+
+                if (itemType === 'seed') {
+                    const cropId = parseInt(document.getElementById('edit-crop-id').value);
+                    const growSeconds = parseInt(document.getElementById('edit-grow-seconds').value);
+                    const expReward = parseInt(document.getElementById('edit-exp-reward').value);
+                    const dropMin = parseInt(document.getElementById('edit-drop-min').value);
+                    const dropMax = parseInt(document.getElementById('edit-drop-max').value);
+
+                    if (!cropId || !growSeconds || growSeconds <= 0) {
+                        showToast('请正确填写作物配置', 'error');
+                        return;
+                    }
+
+                    const cropResult = await adminUpdateCropConfig(itemId, cropId, growSeconds, expReward, dropMin, dropMax);
+                    if (!cropResult?.success) {
+                        showToast(cropResult?.message || '作物配置保存失败', 'error');
+                        return;
+                    }
+                }
+
                 showToast('保存成功', 'success');
                 closeModal();
                 this.loadItems(this.itemPage);
             } catch (e) {
-                showToast('保存失败', 'error');
+                showToast('保存失败：' + e.message, 'error');
             }
         });
     },
@@ -607,37 +834,222 @@ export const adminPage = {
         return div.innerHTML;
     },
 
-    async addItem() {
-        const nameEl = document.getElementById('item-name');
-        const qualityEl = document.getElementById('item-quality');
-        const descEl = document.getElementById('item-desc');
-        const weightEl = document.getElementById('item-weight');
-        const imageEl = document.getElementById('item-image');
-        if (!nameEl || !qualityEl || !descEl || !weightEl) return;
+    showAddItemModal() {
+        const existing = document.getElementById('add-item-modal');
+        if (existing) existing.remove();
 
-        const name = nameEl.value.trim();
-        const quality = qualityEl.value;
-        const description = descEl.value.trim();
-        const w = parseInt(weightEl.value);
-        const weight = isNaN(w) ? 100 : w;
-        const imageName = (imageEl?.value || '').trim();
+        const modalHtml = `
+            <div id="add-item-modal" class="modal" style="display:flex;">
+                <div class="modal-overlay"></div>
+                <div class="modal-content" style="max-width:520px;max-height:90vh;overflow-y:auto;">
+                    <div class="modal-header">
+                        <h3>添加收藏品</h3>
+                        <button class="modal-close-btn">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">名称 <span class="required">*</span></label>
+                                <input type="text" class="form-input" id="add-item-name" placeholder="物品名称" />
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">品质 <span class="required">*</span></label>
+                                <select class="form-input" id="add-item-quality">
+                                    ${qualityOptionsHTML({ selected: 'white' })}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">描述</label>
+                            <input type="text" class="form-input" id="add-item-desc" placeholder="物品描述" />
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">图像链接（可选，支持外链）</label>
+                            <input type="text" class="form-input" id="add-item-image" placeholder="留空使用默认，填 https://... 使用外链" />
+                            <div style="margin-top:8px;text-align:center;">
+                                <img id="add-item-preview" src="" alt="预览" style="max-width:100%;max-height:120px;object-fit:contain;border-radius:8px;display:none;" onerror="this.style.display='none';" />
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">权重（越小越稀有）</label>
+                            <input type="number" class="form-input" id="add-item-weight" placeholder="100" value="100" />
+                        </div>
+                        <button class="btn btn-primary" id="btn-confirm-add-item" style="width:100%;margin-top:16px;">
+                            <i data-lucide="plus"></i>
+                            <span>添加物品</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
 
-        if (!name) {
-            showToast('请输入物品名称', 'error');
-            return;
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        const modal = document.getElementById('add-item-modal');
+        const closeModal = () => modal.remove();
+        modal.querySelector('.modal-overlay').addEventListener('click', closeModal);
+        modal.querySelector('.modal-close-btn').addEventListener('click', closeModal);
+        createIcons({ icons });
+
+        // 图像预览
+        const imgInput = modal.querySelector('#add-item-image');
+        const imgPreview = modal.querySelector('#add-item-preview');
+        if (imgInput && imgPreview) {
+            imgInput.addEventListener('input', () => {
+                const url = imgInput.value.trim();
+                if (url) {
+                    imgPreview.src = url;
+                    imgPreview.style.display = 'block';
+                } else {
+                    imgPreview.style.display = 'none';
+                }
+            });
         }
 
-        try {
-            await adminAddItemDefinition(name, quality, imageName, description, weight);
-            showToast('添加成功', 'success');
-            nameEl.value = '';
-            descEl.value = '';
-            if (imageEl) imageEl.value = '';
-            await this.loadStats();
-            this.loadItems();
-        } catch (e) {
-            showToast('添加失败', 'error');
-        }
+        // 确认添加
+        modal.querySelector('#btn-confirm-add-item').addEventListener('click', async () => {
+            const name = modal.querySelector('#add-item-name').value.trim();
+            const quality = modal.querySelector('#add-item-quality').value;
+            const description = modal.querySelector('#add-item-desc').value.trim();
+            const weightInput = modal.querySelector('#add-item-weight').value;
+            const imageName = modal.querySelector('#add-item-image').value.trim();
+            const w = parseInt(weightInput);
+            const weight = isNaN(w) ? 100 : w;
+
+            if (!name) {
+                showToast('请输入物品名称', 'error');
+                return;
+            }
+
+            const btn = modal.querySelector('#btn-confirm-add-item');
+            btn.disabled = true;
+            btn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> 添加中...';
+            createIcons({ icons });
+
+            try {
+                await adminAddItemDefinition(name, quality, imageName, description, weight);
+                showToast('添加成功', 'success');
+                closeModal();
+                await this.loadStats();
+                this.loadItems();
+            } catch (e) {
+                showToast('添加失败', 'error');
+                btn.disabled = false;
+                btn.innerHTML = '<i data-lucide="plus"></i><span>添加物品</span>';
+                createIcons({ icons });
+            }
+        });
+    },
+
+    showAddUserModal() {
+        const existing = document.getElementById('add-user-modal');
+        if (existing) existing.remove();
+
+        const modalHtml = `
+            <div id="add-user-modal" class="modal" style="display:flex;">
+                <div class="modal-overlay"></div>
+                <div class="modal-content" style="max-width:480px;max-height:90vh;overflow-y:auto;">
+                    <div class="modal-header">
+                        <h3><i data-lucide="user-plus"></i> 添加新用户</h3>
+                        <button class="modal-close-btn">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <form class="add-user-form" id="add-user-form" autocomplete="off">
+                            <div>
+                                <label class="form-label">邮箱 <span class="required">*</span></label>
+                                <input type="email" class="form-input" id="add-user-email"
+                                    placeholder="user@example.com" required />
+                                <div class="form-hint">用户可使用此邮箱登录</div>
+                            </div>
+                            <div>
+                                <label class="form-label">初始密码 <span class="required">*</span></label>
+                                <input type="text" class="form-input" id="add-user-password"
+                                    placeholder="至少 6 位" required />
+                                <div class="form-hint">管理员可设置一个临时密码，用户登录后可自行修改</div>
+                            </div>
+                            <div>
+                                <label class="form-label">昵称 <span class="required">*</span></label>
+                                <input type="text" class="form-input" id="add-user-nickname"
+                                    placeholder="2-10 字符" required maxlength="10" />
+                                <div class="form-hint">昵称在系统内必须唯一</div>
+                            </div>
+                            <label class="checkbox-row" for="add-user-is-bot">
+                                <input type="checkbox" id="add-user-is-bot" />
+                                <span class="checkbox-label">设为机器人</span>
+                                <span class="checkbox-hint">自动添加到机器人管理</span>
+                            </label>
+                            <button type="submit" class="btn btn-primary" id="btn-confirm-add-user"
+                                style="width:100%;margin-top:8px;">
+                                <i data-lucide="user-plus"></i>
+                                <span>创建用户</span>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        const modal = document.getElementById('add-user-modal');
+        const closeModal = () => modal.remove();
+        modal.querySelector('.modal-overlay').addEventListener('click', closeModal);
+        modal.querySelector('.modal-close-btn').addEventListener('click', closeModal);
+        createIcons({ icons });
+
+        // 提交创建
+        const form = modal.querySelector('#add-user-form');
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = modal.querySelector('#add-user-email').value.trim();
+            const password = modal.querySelector('#add-user-password').value;
+            const nickname = modal.querySelector('#add-user-nickname').value.trim();
+            const isBot = modal.querySelector('#add-user-is-bot').checked;
+
+            // 前端预校验
+            if (!email || !password || !nickname) {
+                showToast('请填写所有必填项', 'error');
+                return;
+            }
+            if (password.length < 6) {
+                showToast('密码至少 6 位', 'error');
+                return;
+            }
+            if (nickname.length < 2 || nickname.length > 10) {
+                showToast('昵称需要 2-10 字符', 'error');
+                return;
+            }
+
+            const btn = modal.querySelector('#btn-confirm-add-user');
+            btn.disabled = true;
+            btn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> 创建中...';
+            createIcons({ icons });
+
+            try {
+                const result = await adminCreateUser(email, password, nickname, isBot);
+                if (result?.success) {
+                    showToast(
+                        isBot
+                            ? `机器人 "${nickname}" 创建成功，已加入机器人管理`
+                            : `用户 "${nickname}" 创建成功`,
+                        'success'
+                    );
+                    closeModal();
+                    // 刷新统计和列表
+                    this.loadStats();
+                    this.loadUsers(1);
+                } else {
+                    showToast(result?.message || '创建失败', 'error');
+                }
+            } catch (e) {
+                showToast('创建失败：' + e.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i data-lucide="user-plus"></i><span>创建用户</span>';
+                createIcons({ icons });
+            }
+        });
+
+        // 自动聚焦第一个输入框
+        setTimeout(() => modal.querySelector('#add-user-email')?.focus(), 50);
     },
 
     async loadSubmissions(page = 1) {
@@ -877,22 +1289,22 @@ export const adminPage = {
 
     _botCardHTML(bot) {
         const cfg = QUALITY_CONFIG;
-        const qualities = ['white','green','blue','purple','orange','red'];
-        const qLabels = { white:'普通', green:'稀有', blue:'珍奇', purple:'史诗', orange:'传说', red:'神圣' };
+        // 使用统一的品质列表
+        const qLabels = Object.fromEntries(QUALITY_OPTIONS.map(q => [q.value, q.label]));
         const pct = bot.max_orders > 0 ? Math.round(bot.active_order_count / bot.max_orders * 100) : 0;
 
-        const qChecks = qualities.map(q =>
+        const qChecks = QUALITY_OPTIONS.map(q =>
             `<label class="quality-check">
-                <input type="checkbox" class="q-check" value="${q}" ${(bot.qualities||[]).includes(q) ? 'checked' : ''} />
-                <span class="quality-badge quality-${q}">${qLabels[q]}</span>
+                <input type="checkbox" class="q-check" value="${q.value}" ${(bot.qualities||[]).includes(q.value) ? 'checked' : ''} />
+                <span class="quality-badge quality-${q.value}">${q.label}</span>
             </label>`
         ).join('');
 
-        const qRows = qualities.map(q => {
-            const priceKey = `price_${q}`;
-            const qtyKey = `qty_${q}`;
+        const qRows = QUALITY_OPTIONS.map(q => {
+            const priceKey = `price_${q.value}`;
+            const qtyKey = `qty_${q.value}`;
             return `<div class="bot-q-row">
-                <span class="quality-badge quality-${q}">${qLabels[q]}</span>
+                <span class="quality-badge quality-${q.value}">${q.label}</span>
                 <div class="bot-q-field">
                     <label>基价</label>
                     <input type="number" class="form-input cfg-${priceKey}" value="${bot[priceKey] || 0}" min="1" />
@@ -1143,17 +1555,14 @@ export const adminPage = {
         if (!sel) return;
         try {
             const items = await adminGetItems(1, 1000);
-            console.log('adminGetItems result:', items);
             if (!items || items.length === 0) {
                 sel.innerHTML = '<option value="">无可用物品</option>';
                 return;
             }
-            sel.innerHTML = '<option value="">-- 选择物品 --</option>' +
-                items.map(i => {
-                    const qc = QUALITY_CONFIG[i.quality] || QUALITY_CONFIG.white;
-                    const itemId = i.item_id !== undefined ? i.item_id : i.id;
-                    return `<option value="${itemId}">${i.name} (${qc.label} / ${i.item_type})</option>`;
-                }).join('');
+            // 先填充占位 option
+            sel.innerHTML = '<option value="">-- 选择物品 --</option>';
+            // 升级为可搜索下拉
+            upgradeSelectsToSearchable(`#manual-item-${botId}`, items, { placeholder: '选择物品' });
         } catch (e) {
             console.error('_loadItemSelect error:', e);
             sel.innerHTML = '<option value="">加载失败</option>';
@@ -1271,9 +1680,11 @@ export const adminPage = {
         const btnClearItems = document.getElementById('btn-clear-items');
         if (btnClearItems) {
             btnClearItems.addEventListener('click', async () => {
-                if (!confirm('确定要清空该用户的所有物品吗？此操作不可撤销！')) {
-                    return;
-                }
+                const ok = await showConfirm(
+                    '确定要清空该用户的所有物品吗？此操作不可撤销！',
+                    { okText: '清空', okClass: 'btn-danger' }
+                );
+                if (!ok) return;
                 btnClearItems.disabled = true;
                 try {
                     const result = await adminClearUserItems(userId);
@@ -1298,9 +1709,11 @@ export const adminPage = {
                 const user = this.users.find(u => u.user_id === userId);
                 const currentAdmin = user?.is_admin;
                 const action = currentAdmin ? '撤销' : '设为';
-                if (!confirm(`确定要${action}该用户的管理员权限吗？`)) {
-                    return;
-                }
+                const ok = await showConfirm(
+                    `确定要${action}该用户的管理员权限吗？`,
+                    { okText: action + '管理员', okClass: currentAdmin ? 'btn-warning' : 'btn-success' }
+                );
+                if (!ok) return;
                 btnToggleAdmin.disabled = true;
                 try {
                     const result = await adminSetUserAdmin(userId, !currentAdmin);
@@ -1319,15 +1732,38 @@ export const adminPage = {
             });
         }
 
+        // 永久删除用户
+        const btnDeleteUserDetail = document.getElementById('btn-delete-user-detail');
+        if (btnDeleteUserDetail) {
+            btnDeleteUserDetail.addEventListener('click', async () => {
+                const user = this.users.find(u => u.user_id === userId);
+                const userName = user?.nickname || '无名';
+                btnDeleteUserDetail.disabled = true;
+                let isVerified = true;
+                try {
+                    isVerified = await getUserEmailVerified(userId);
+                } catch (e) {
+                    isVerified = true;
+                } finally {
+                    btnDeleteUserDetail.disabled = false;
+                }
+                const modal = document.getElementById('user-detail-modal');
+                await this.confirmDeleteUser(userId, userName, user?.is_admin, isVerified);
+                if (modal) modal.remove();
+            });
+        }
+
         // 移除单个物品
         document.querySelectorAll('.btn-remove-item').forEach(btn => {
             btn.addEventListener('click', async () => {
                 const itemId = parseInt(btn.dataset.itemId);
                 const itemName = btn.dataset.itemName;
                 const qty = parseInt(btn.dataset.qty);
-                if (!confirm(`确定要移除该用户的「${itemName}」吗？`)) {
-                    return;
-                }
+                const ok = await showConfirm(
+                    `确定要移除该用户的「${itemName}」吗？`,
+                    { okText: '移除', okClass: 'btn-danger' }
+                );
+                if (!ok) return;
                 btn.disabled = true;
                 try {
                     const result = await adminRemoveUserItem(userId, itemId, qty);

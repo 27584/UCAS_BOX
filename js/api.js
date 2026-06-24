@@ -195,6 +195,33 @@ export async function getItems() {
     return data || [];
 }
 
+// ============================================
+// 农场相关 API
+// ============================================
+export async function getFarmInfo() {
+    return rpc('get_farm_info');
+}
+
+export async function plantSeed(plotId, cropId) {
+    return rpc('plant_seed', { p_plot_id: plotId, p_crop_id: cropId });
+}
+
+export async function harvestCrop(plotId) {
+    return rpc('harvest_crop', { p_plot_id: plotId });
+}
+
+export async function harvestAllReady() {
+    return rpc('harvest_all_ready');
+}
+
+export async function speedUpPlot(plotId, seconds) {
+    return rpc('speed_up_plot', { p_plot_id: plotId, p_seconds: seconds });
+}
+
+export async function grantSeed(seedName, quantity = 1) {
+    return rpc('grant_seed', { p_seed_name: seedName, p_quantity: quantity });
+}
+
 // 管理员 API
 export async function checkAdmin() {
     return rpc('check_admin');
@@ -319,8 +346,18 @@ export async function getSystemStats() {
     return rpc('get_system_stats');
 }
 
-export async function adminGetItems(page = 1, limit = 50) {
-    return rpc('admin_get_items', { p_page: page, p_limit: limit });
+export async function adminGetItems(page = 1, limit = 50, search = '', quality = '', itemType = '') {
+    return rpc('admin_get_items', {
+        p_page: page,
+        p_limit: limit,
+        p_search: search || null,
+        p_quality: quality || null,
+        p_item_type: itemType || null
+    });
+}
+
+export async function adminGetAllItems() {
+    return rpc('admin_get_all_items');
 }
 
 export async function adminAddItem(userId, itemId, quantity = 1) {
@@ -370,6 +407,21 @@ export async function adminSetUserAdmin(userId, isAdmin) {
     });
 }
 
+// 删除物品定义（管理员）
+export async function adminDeleteItem(itemId) {
+    return rpc('admin_delete_item', { p_item_id: itemId });
+}
+
+// 删除用户（管理员）
+export async function adminDeleteUser(userId) {
+    return rpc('admin_delete_user', { p_user_id: userId });
+}
+
+// 查询某用户邮箱是否已激活（按需调用，读取 auth.users.email_confirmed_at 原生字段）
+export async function getUserEmailVerified(userId) {
+    return rpc('check_email_verified', { p_user_id: userId });
+}
+
 // 修改用户昵称（管理员）
 export async function adminChangeUserNickname(userId, newNickname) {
     return rpc('admin_change_user_nickname', {
@@ -378,12 +430,23 @@ export async function adminChangeUserNickname(userId, newNickname) {
     });
 }
 
-// 获取用户列表（管理员，带搜索）
-export async function adminGetUsers(search = '', page = 1, limit = 20) {
+// 管理员创建新用户（可选机器人）
+export async function adminCreateUser(email, password, nickname, isBot = false) {
+    return rpc('admin_create_user', {
+        p_email: email,
+        p_password: password,
+        p_nickname: nickname,
+        p_is_bot: isBot
+    });
+}
+
+// 获取用户列表（管理员，带搜索 + 后端分页 + 机器人筛选）
+export async function adminGetUsers(search = '', page = 1, limit = 20, isBot = null) {
     return rpc('admin_get_users', {
         p_search: search,
         p_page: page,
-        p_limit: limit
+        p_limit: limit,
+        p_is_bot: isBot
     });
 }
 
@@ -407,6 +470,21 @@ export async function adminUpdateItemDefinition(itemId, name, quality, itemType,
         p_description: description,
         p_drop_weight: dropWeight
     });
+}
+
+export async function adminUpdateCropConfig(seedId, cropId, growSeconds, expReward, dropMin, dropMax) {
+    return rpc('admin_update_crop_config', {
+        p_seed_id: seedId,
+        p_crop_id: cropId,
+        p_grow_seconds: growSeconds,
+        p_exp_reward: expReward,
+        p_drop_min: dropMin,
+        p_drop_max: dropMax
+    });
+}
+
+export async function adminGetCropBySeedId(seedId) {
+    return rpc('admin_get_crop_by_seed_id', { p_seed_id: seedId });
 }
 
 // 投稿 API

@@ -4,9 +4,6 @@
 .idle-page {
     position: relative;
     min-height: 60vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
     padding: 24px 0;
 }
 
@@ -16,6 +13,7 @@
     text-align: center;
     max-width: 480px;
     width: 100%;
+    margin: 0 auto;
 }
 
 .idle-header {
@@ -117,6 +115,472 @@
 }
 
 /* ============================================
+   农场分页
+   ============================================ */
+.idle-tabs {
+    display: flex;
+    gap: 0;
+    margin: 0 auto 20px;
+    max-width: 720px;
+    border-bottom: 1.5px solid var(--ink);
+}
+
+.idle-tab {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 16px;
+    background: transparent;
+    border: none;
+    color: var(--ink-soft);
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -1.5px;
+    transition: all 0.15s;
+}
+
+.idle-tab:hover { color: var(--ink); }
+
+.idle-tab.active {
+    color: var(--ink);
+    border-bottom-color: var(--seal-red);
+    font-weight: 700;
+}
+
+.idle-tab svg { width: 16px; height: 16px; }
+
+.farm-content {
+    max-width: 720px;
+    margin: 0 auto;
+}
+
+.farm-header {
+    background: var(--paper-card);
+    border: 1.5px solid var(--ink);
+    border-radius: 0;
+    padding: 16px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow-card);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.farm-level-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    min-width: 200px;
+}
+
+.farm-level-badge {
+    width: 48px;
+    height: 48px;
+    background: var(--ink);
+    color: var(--paper-card);
+    border-radius: 0;
+    border: 2px solid var(--ink);
+    box-shadow: 2px 2px 0 var(--seal-red);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-display);
+    flex-shrink: 0;
+}
+
+.farm-level-badge svg {
+    width: 14px;
+    height: 14px;
+    color: var(--seal-red);
+}
+
+.farm-level-badge span {
+    font-size: 0.95rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-top: 2px;
+}
+
+.farm-level-details {
+    flex: 1;
+    min-width: 0;
+}
+
+.farm-level-title {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    color: var(--ink);
+    font-size: 0.95rem;
+    margin-bottom: 4px;
+}
+
+.farm-exp-bar {
+    height: 8px;
+    background: var(--paper-bg);
+    border: 1.5px solid var(--ink);
+    border-radius: 0;
+    overflow: hidden;
+    margin-bottom: 4px;
+}
+
+.farm-exp-fill {
+    height: 100%;
+    background: var(--seal-red);
+    transition: width 0.4s ease;
+    background-image: repeating-linear-gradient(45deg, var(--seal-red) 0, var(--seal-red) 6px, #c45033 6px, #c45033 8px);
+}
+
+.farm-exp-text {
+    font-size: 0.7rem;
+    color: var(--ink-faded);
+    font-family: var(--font-mono);
+}
+
+.farm-stats {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.farm-stat {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+    font-family: var(--font-mono);
+}
+
+.farm-stat svg {
+    width: 16px;
+    height: 16px;
+    color: var(--ink);
+}
+
+.btn-harvest-all {
+    padding: 8px 14px;
+    font-size: 0.85rem;
+}
+
+/* 土地网格 */
+.farm-plots-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.farm-plot {
+    background: var(--paper-card);
+    border: 1.5px solid var(--ink);
+    border-radius: 0;
+    padding: 8px;
+    aspect-ratio: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    position: relative;
+    box-shadow: 2px 2px 0 var(--ink-faded);
+    transition: all 0.15s;
+}
+
+.farm-plot.plot-ready {
+    background: var(--marker-soft);
+    box-shadow: 2px 2px 0 var(--seal-red);
+    animation: pulse-ready 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-ready {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.03); }
+}
+
+.farm-plot.plot-locked {
+    background: var(--paper-bg);
+    opacity: 0.55;
+    border-style: dashed;
+}
+
+.plot-number {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    font-size: 0.65rem;
+    color: var(--ink-faded);
+    font-family: var(--font-mono);
+    background: var(--paper-card);
+    padding: 1px 4px;
+    border: 1px solid var(--ink-faded);
+}
+
+.plot-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    width: 100%;
+    text-align: center;
+}
+
+.plot-empty-content,
+.plot-locked-content,
+.plot-crop-growing,
+.plot-crop-ready {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    color: var(--ink-soft);
+}
+
+.plot-empty-content svg,
+.plot-locked-content svg,
+.plot-crop-growing svg,
+.plot-crop-ready svg {
+    width: 28px;
+    height: 28px;
+}
+
+.plot-crop-ready svg {
+    color: var(--seal-red);
+}
+
+.plot-crop-growing svg {
+    color: var(--leaf-green);
+}
+
+.plot-crop-name {
+    font-size: 0.75rem;
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-weight: 700;
+}
+
+.plot-crop-info {
+    font-size: 0.65rem;
+    color: var(--seal-red);
+    font-weight: 700;
+}
+
+.plot-crop-timer {
+    font-size: 0.7rem;
+    color: var(--ink-faded);
+    font-family: var(--font-mono);
+    font-weight: 600;
+}
+
+.plot-action {
+    width: 100%;
+}
+
+.plot-action .btn {
+    width: 100%;
+    padding: 4px 6px;
+    font-size: 0.7rem;
+}
+
+/* 种子背包 */
+.farm-seed-inventory {
+    background: var(--paper-card);
+    border: 1.5px solid var(--ink);
+    border-radius: 0;
+    padding: 12px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow-card);
+}
+
+.farm-seed-inventory h3 {
+    font-family: var(--font-mono);
+    font-size: 0.95rem;
+    color: var(--ink);
+    margin: 0 0 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.farm-seed-inventory h3 svg {
+    width: 18px;
+    height: 18px;
+}
+
+.farm-seed-list {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+}
+
+.seed-item {
+    background: var(--paper-bg);
+    border: 1px solid var(--ink-faded);
+    border-radius: 0;
+    padding: 8px 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.15s;
+}
+
+.seed-item.has-seed {
+    border-color: var(--ink);
+    box-shadow: 1px 1px 0 var(--ink);
+}
+
+.seed-item.no-seed {
+    opacity: 0.55;
+}
+
+.seed-name {
+    font-weight: 700;
+    color: var(--ink);
+    font-family: var(--font-display);
+    font-size: 0.85rem;
+    flex: 1;
+}
+
+.seed-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 0.65rem;
+    color: var(--ink-faded);
+    font-family: var(--font-mono);
+}
+
+.seed-exp {
+    color: var(--seal-red);
+    font-weight: 700;
+}
+
+.seed-count {
+    font-size: 0.85rem;
+    color: var(--seal-red);
+    font-weight: 700;
+    font-family: var(--font-mono);
+}
+
+.empty-text {
+    text-align: center;
+    color: var(--ink-faded);
+    font-family: var(--font-hand);
+    padding: 16px;
+    margin: 0;
+}
+
+.farm-tip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--ink-faded);
+    font-size: 0.8rem;
+    font-family: var(--font-hand);
+    padding: 8px 12px;
+    background: var(--paper-bg);
+    border: 1px dashed var(--ink-faded);
+    border-radius: 0;
+}
+
+.farm-tip svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
+/* 播种模态框 */
+.plant-modal-content {
+    max-width: 480px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.plant-modal-content h3 {
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    color: var(--ink);
+    margin: 0 0 16px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-bottom: 1.5px solid var(--ink);
+    padding-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.plant-modal-content h3 svg {
+    width: 20px;
+    height: 20px;
+}
+
+.plant-modal-body {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+}
+
+.plant-seed-card {
+    background: var(--paper-bg);
+    border: 1.5px solid var(--ink);
+    border-radius: 0;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    box-shadow: 1px 1px 0 var(--ink);
+}
+
+.plant-seed-card:hover:not(.disabled) {
+    background: var(--marker-soft);
+    transform: translate(-1px, -1px);
+    box-shadow: 2px 2px 0 var(--ink);
+}
+
+.plant-seed-card.disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    border-style: dashed;
+    box-shadow: none;
+}
+
+.plant-seed-name {
+    font-weight: 700;
+    color: var(--ink);
+    font-family: var(--font-display);
+    font-size: 0.95rem;
+    margin-bottom: 4px;
+}
+
+.plant-seed-meta {
+    font-size: 0.75rem;
+    color: var(--ink-soft);
+    font-family: var(--font-mono);
+    margin-bottom: 4px;
+}
+
+.plant-seed-count {
+    font-size: 0.8rem;
+    color: var(--seal-red);
+    font-weight: 700;
+    font-family: var(--font-mono);
+}
+
+/* ============================================
    移动端响应式
    ============================================ */
 @media (max-width: 768px) {
@@ -135,6 +599,40 @@
     .btn-claim {
         padding: 14px;
         font-size: 1rem;
+    }
+
+    .farm-header {
+        padding: 12px;
+        gap: 10px;
+    }
+    .farm-level-info {
+        gap: 8px;
+    }
+    .farm-level-badge {
+        width: 40px;
+        height: 40px;
+    }
+    .farm-level-title {
+        font-size: 0.85rem;
+    }
+    .farm-stats {
+        width: 100%;
+        justify-content: space-between;
+    }
+    .btn-harvest-all {
+        flex: 1;
+        justify-content: center;
+    }
+    .farm-plots-grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+    }
+    .farm-seed-list {
+        grid-template-columns: 1fr;
+    }
+    .plant-modal-content {
+        width: 95vw;
+        padding: 16px;
     }
 }
 

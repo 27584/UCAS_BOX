@@ -972,7 +972,7 @@
     border: 1.5px solid var(--ink);
     border-radius: 0;
     margin-bottom: 12px;
-    overflow: hidden;
+    /* overflow: hidden 会裁剪内部下拉框，改为子元素各自控制溢出 */
     box-shadow: 2px 2px 0 var(--ink-faded);
 }
 

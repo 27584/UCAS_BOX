@@ -4,19 +4,6 @@
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 ALTER DATABASE postgres SET TIME ZONE 'Asia/Shanghai';
 
 -- 清理旧的机器人相关对象
@@ -206,7 +193,7 @@ CREATE TABLE IF NOT EXISTS public.items (
     image_name TEXT,
     description TEXT,
     drop_weight INT DEFAULT 100,
-    item_type TEXT DEFAULT 'collection' CHECK (item_type IN ('collection', 'consumable', 'equipment', 'material', 'currency')),
+    item_type TEXT DEFAULT 'collection' CHECK (item_type IN ('collection', 'consumable', 'equipment', 'material', 'currency', 'seed')),
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -215,7 +202,11 @@ ALTER TABLE public.items ADD COLUMN IF NOT EXISTS item_type TEXT DEFAULT 'collec
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'items_item_type_check') THEN
-        ALTER TABLE public.items ADD CONSTRAINT items_item_type_check CHECK (item_type IN ('collection', 'consumable', 'equipment', 'material', 'currency'));
+        ALTER TABLE public.items ADD CONSTRAINT items_item_type_check CHECK (item_type IN ('collection', 'consumable', 'equipment', 'material', 'currency', 'seed'));
+    ELSE
+        -- 更新已有约束，添加 seed 类型
+        ALTER TABLE public.items DROP CONSTRAINT IF EXISTS items_item_type_check;
+        ALTER TABLE public.items ADD CONSTRAINT items_item_type_check CHECK (item_type IN ('collection', 'consumable', 'equipment', 'material', 'currency', 'seed'));
     END IF;
 END $$;
 
@@ -624,10 +615,7 @@ BEGIN
     END LOOP;
 
     -- 写入 inventory
-    INSERT INTO public.inventory (user_id, item_id, quantity)
-    VALUES (user_uuid, selected_item.id, 1)
-    ON CONFLICT ON CONSTRAINT inventory_user_id_item_id_key
-    DO UPDATE SET quantity = public.inventory.quantity + 1;
+    PERFORM public.inventory_add_item(user_uuid, selected_item.id, 1);
 
     -- 更新开盒时间
     UPDATE public.profiles
@@ -718,10 +706,7 @@ BEGIN
     END IF;
 
     -- 退回物品
-    INSERT INTO public.inventory (user_id, item_id, quantity)
-    VALUES (user_uuid, order_rec.item_id, order_rec.quantity)
-    ON CONFLICT ON CONSTRAINT inventory_user_id_item_id_key
-    DO UPDATE SET quantity = public.inventory.quantity + EXCLUDED.quantity;
+    PERFORM public.inventory_add_item(user_uuid, order_rec.item_id, order_rec.quantity);
 
     -- 更新订单状态
     UPDATE public.market_orders
@@ -800,10 +785,7 @@ BEGIN
     WHERE id = order_rec.seller_id;
 
     -- 给买家物品
-    INSERT INTO public.inventory (user_id, item_id, quantity)
-    VALUES (buyer_uuid, order_rec.item_id, buy_qty)
-    ON CONFLICT ON CONSTRAINT inventory_user_id_item_id_key
-    DO UPDATE SET quantity = public.inventory.quantity + EXCLUDED.quantity;
+    PERFORM public.inventory_add_item(buyer_uuid, order_rec.item_id, buy_qty);
 
     -- 记录交易历史
     INSERT INTO public.market_trade_history (
@@ -998,6 +980,41 @@ BEGIN
     JOIN public.items i ON inv.item_id = i.id
     WHERE inv.user_id = user_uuid
     ORDER BY inv.acquired_at DESC;
+END;
+$$;
+
+-- ============================================================
+-- 12.1 RPC 函数：添加物品到背包 [v3 - 原子 UPSERT + 列级冲突]
+-- ============================================================
+DROP FUNCTION IF EXISTS public.inventory_add_item(UUID, BIGINT, INT);
+CREATE OR REPLACE FUNCTION public.inventory_add_item(p_user_id UUID, p_item_id BIGINT, p_quantity INT)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_inv_id BIGINT;
+BEGIN
+    -- 验证参数
+    IF p_user_id IS NULL OR p_item_id IS NULL OR p_quantity IS NULL OR p_quantity <= 0 THEN
+        RETURN jsonb_build_object('success', false, 'message', '参数无效',
+            'detail', format('user=%s item=%s qty=%s', p_user_id, p_item_id, p_quantity));
+    END IF;
+
+    -- 检查物品是否存在
+    IF NOT EXISTS (SELECT 1 FROM public.items WHERE id = p_item_id) THEN
+        RETURN jsonb_build_object('success', false, 'message', '物品不存在');
+    END IF;
+
+    -- 原子操作：upsert 处理并发场景
+    -- 避免"先查后改"导致的竞态条件（多个收获同时进行时唯一约束冲突）
+    INSERT INTO public.inventory (user_id, item_id, quantity)
+    VALUES (p_user_id, p_item_id, p_quantity)
+    ON CONFLICT (user_id, item_id) DO UPDATE
+    SET quantity = public.inventory.quantity + EXCLUDED.quantity
+    RETURNING id INTO v_inv_id;
+
+    RETURN jsonb_build_object('success', true, 'message', '物品添加成功', 'inventory_id', v_inv_id);
 END;
 $$;
 
@@ -1423,10 +1440,7 @@ BEGIN
         RAISE EXCEPTION '无权限';
     END IF;
 
-    INSERT INTO public.inventory (user_id, item_id, quantity)
-    VALUES (p_user_id, p_item_id, p_quantity)
-    ON CONFLICT ON CONSTRAINT inventory_user_id_item_id_key
-    DO UPDATE SET quantity = public.inventory.quantity + EXCLUDED.quantity;
+    PERFORM public.inventory_add_item(p_user_id, p_item_id, p_quantity);
 
     -- 发送系统邮件通知
     INSERT INTO public.system_mails (user_id, title, content)
@@ -1443,7 +1457,15 @@ $$;
 -- 21. RPC 函数：获取所有收藏品（管理员）
 -- ============================================================
 DROP FUNCTION IF EXISTS public.admin_get_items();
-CREATE OR REPLACE FUNCTION public.admin_get_items(p_page INT DEFAULT 1, p_limit INT DEFAULT 50)
+-- 管理员获取物品列表（支持搜索与筛选）
+DROP FUNCTION IF EXISTS public.admin_get_items(INT, INT, TEXT, TEXT, TEXT);
+CREATE OR REPLACE FUNCTION public.admin_get_items(
+    p_page INT DEFAULT 1,
+    p_limit INT DEFAULT 50,
+    p_search TEXT DEFAULT NULL,
+    p_quality TEXT DEFAULT NULL,
+    p_item_type TEXT DEFAULT NULL
+)
 RETURNS TABLE(item_id BIGINT, name TEXT, quality TEXT, image_name TEXT, description TEXT, drop_weight INT, item_type TEXT, total_count BIGINT)
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -1451,6 +1473,7 @@ AS $$
 DECLARE
     user_uuid UUID := auth.uid();
     v_offset INT;
+    v_search TEXT;
 BEGIN
     IF user_uuid IS NULL THEN
         RAISE EXCEPTION '未登录';
@@ -1461,14 +1484,46 @@ BEGIN
     END IF;
 
     v_offset := (GREATEST(p_page, 1) - 1) * GREATEST(p_limit, 1);
+    v_search := NULLIF(TRIM(p_search), '');
 
     RETURN QUERY
-    SELECT i.id AS item_id, i.name, i.quality, i.image_name, i.description, i.drop_weight, i.item_type,
-        (SELECT COUNT(*) FROM public.items)::BIGINT AS total_count
-    FROM public.items i
-    ORDER BY i.id
+    WITH filtered AS (
+        SELECT it.* FROM public.items it
+        WHERE (v_search IS NULL OR it.name ILIKE '%' || v_search || '%')
+          AND (p_quality IS NULL OR p_quality = '' OR it.quality = p_quality)
+          AND (p_item_type IS NULL OR p_item_type = '' OR it.item_type = p_item_type)
+    )
+    SELECT f.id AS item_id, f.name, f.quality, f.image_name, f.description, f.drop_weight, f.item_type,
+        (SELECT COUNT(*) FROM filtered)::BIGINT AS total_count
+    FROM filtered f
+    ORDER BY f.id
     LIMIT p_limit
     OFFSET v_offset;
+END;
+$$;
+
+-- 管理员获取所有物品列表（不分页，用于下拉选择）
+DROP FUNCTION IF EXISTS public.admin_get_all_items();
+CREATE OR REPLACE FUNCTION public.admin_get_all_items()
+RETURNS TABLE(id BIGINT, name TEXT, quality TEXT, image_name TEXT, description TEXT, drop_weight INT, item_type TEXT)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+BEGIN
+    IF user_uuid IS NULL THEN
+        RAISE EXCEPTION '未登录';
+    END IF;
+
+    IF NOT public.check_admin() THEN
+        RAISE EXCEPTION '无权限';
+    END IF;
+
+    RETURN QUERY
+    SELECT i.id, i.name, i.quality, i.image_name, i.description, i.drop_weight, i.item_type
+    FROM public.items i
+    ORDER BY i.id;
 END;
 $$;
 
@@ -1704,6 +1759,153 @@ END;
 $$;
 
 -- ============================================================
+-- 21g. RPC 函数：删除物品定义（管理员）
+-- ============================================================
+DROP FUNCTION IF EXISTS public.admin_delete_item(BIGINT);
+CREATE OR REPLACE FUNCTION public.admin_delete_item(p_item_id BIGINT)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+    v_item_name TEXT;
+    v_inv_count INT;
+    v_market_count INT;
+    v_crops_seed_count INT;
+    v_crops_crop_count INT;
+BEGIN
+    IF user_uuid IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '未登录');
+    END IF;
+
+    IF NOT public.check_admin() THEN
+        RETURN jsonb_build_object('success', false, 'message', '无权限');
+    END IF;
+
+    SELECT name INTO v_item_name FROM public.items WHERE id = p_item_id;
+    IF v_item_name IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '物品不存在');
+    END IF;
+
+    -- 统计关联数据
+    SELECT COUNT(*) INTO v_inv_count FROM public.inventory WHERE item_id = p_item_id;
+    SELECT COUNT(*) INTO v_market_count FROM public.market_orders WHERE item_id = p_item_id AND status = 'active';
+    SELECT COUNT(*) INTO v_crops_seed_count FROM public.crops WHERE seed_id = p_item_id;
+    SELECT COUNT(*) INTO v_crops_crop_count FROM public.crops WHERE crop_id = p_item_id;
+
+    -- 如果有用户背包中存在此物品，不允许直接删除
+    IF v_inv_count > 0 THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'message', '无法删除：仍有 ' || v_inv_count || ' 件该物品在用户背包中',
+            'inv_count', v_inv_count,
+            'market_count', v_market_count,
+            'crops_seed_count', v_crops_seed_count,
+            'crops_crop_count', v_crops_crop_count
+        );
+    END IF;
+
+    -- 如果有活跃挂单，不允许删除
+    IF v_market_count > 0 THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'message', '无法删除：仍有 ' || v_market_count || ' 个相关挂单未完成',
+            'inv_count', v_inv_count,
+            'market_count', v_market_count,
+            'crops_seed_count', v_crops_seed_count,
+            'crops_crop_count', v_crops_crop_count
+        );
+    END IF;
+
+    -- 如果是某个作物的种子/产出，先删除 crops 表记录
+    IF v_crops_seed_count > 0 OR v_crops_crop_count > 0 THEN
+        DELETE FROM public.crops WHERE seed_id = p_item_id OR crop_id = p_item_id;
+    END IF;
+
+    -- 删除物品定义
+    DELETE FROM public.items WHERE id = p_item_id;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'message', '物品「' || v_item_name || '」已删除',
+        'name', v_item_name
+    );
+END;
+$$;
+
+-- ============================================================
+-- 21g2. RPC 函数：删除用户（管理员）
+-- ============================================================
+DROP FUNCTION IF EXISTS public.admin_delete_user(UUID);
+CREATE OR REPLACE FUNCTION public.admin_delete_user(p_user_id UUID)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+    v_user_nickname TEXT;
+    v_is_target_admin BOOLEAN;
+    v_email_verified BOOLEAN;
+    v_inv_count INT;
+    v_orders_count INT;
+    v_mails_count INT;
+BEGIN
+    IF user_uuid IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '未登录');
+    END IF;
+
+    IF NOT public.check_admin() THEN
+        RETURN jsonb_build_object('success', false, 'message', '无权限');
+    END IF;
+
+    -- 不能删除自己
+    IF p_user_id = user_uuid THEN
+        RETURN jsonb_build_object('success', false, 'message', '不能删除自己的账号');
+    END IF;
+
+    SELECT p.nickname, p.is_admin, (u.email_confirmed_at IS NOT NULL)
+        INTO v_user_nickname, v_is_target_admin, v_email_verified
+    FROM public.profiles p
+    LEFT JOIN auth.users u ON u.id = p.id
+    WHERE p.id = p_user_id;
+
+    IF v_user_nickname IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '用户不存在');
+    END IF;
+
+    -- 不能删除其他管理员账号（避免误操作）
+    IF v_is_target_admin THEN
+        RETURN jsonb_build_object('success', false, 'message', '不能删除其他管理员账号，请先撤销其管理员权限');
+    END IF;
+
+    -- 统计关联数据
+    SELECT COUNT(*) INTO v_inv_count FROM public.inventory WHERE user_id = p_user_id;
+    SELECT COUNT(*) INTO v_orders_count FROM public.market_orders WHERE seller_id = p_user_id;
+    SELECT COUNT(*) INTO v_mails_count FROM public.system_mails WHERE user_id = p_user_id;
+
+    -- 通过 auth.admin API 删除 auth.users 记录（profiles 通过 CASCADE 自动删除）
+    DELETE FROM auth.users WHERE id = p_user_id;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'message', '用户「' || v_user_nickname || '」已永久删除',
+        'nickname', v_user_nickname,
+        'email_verified', COALESCE(v_email_verified, false),
+        'inv_count', v_inv_count,
+        'orders_count', v_orders_count,
+        'mails_count', v_mails_count
+    );
+EXCEPTION WHEN OTHERS THEN
+    RETURN jsonb_build_object(
+        'success', false,
+        'message', '删除失败：' || SQLERRM
+    );
+END;
+$$;
+
+-- ============================================================
 -- 21h. RPC 函数：修改用户昵称（管理员）
 -- ============================================================
 DROP FUNCTION IF EXISTS public.admin_change_user_nickname(UUID, TEXT);
@@ -1772,17 +1974,26 @@ $$;
 -- 21g. RPC 函数：获取用户列表（管理员，带搜索）
 -- ============================================================
 DROP FUNCTION IF EXISTS public.admin_get_users(TEXT, INT, INT);
-CREATE OR REPLACE FUNCTION public.admin_get_users(p_search TEXT DEFAULT '', p_page INT DEFAULT 1, p_limit INT DEFAULT 20)
+DROP FUNCTION IF EXISTS public.admin_get_users(TEXT, INT, INT, TEXT);
+CREATE OR REPLACE FUNCTION public.admin_get_users(
+    p_search TEXT DEFAULT '',
+    p_page INT DEFAULT 1,
+    p_limit INT DEFAULT 20,
+    p_is_bot TEXT DEFAULT NULL  -- 'true' / 'false' / NULL
+)
 RETURNS TABLE(
     user_id UUID,
     nickname TEXT,
+    email TEXT,
     shells BIGINT,
     is_admin BOOLEAN,
+    is_bot BOOLEAN,
     created_at TIMESTAMPTZ,
     total_count BIGINT
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
+STABLE
 AS $$
 DECLARE
     user_uuid UUID := auth.uid();
@@ -1799,25 +2010,185 @@ BEGIN
     v_offset := (GREATEST(p_page, 1) - 1) * GREATEST(p_limit, 1);
 
     RETURN QUERY
-    SELECT 
-        p.id AS user_id,
-        p.nickname,
-        p.shells,
-        p.is_admin,
-        p.created_at,
-        COUNT(*) OVER()::BIGINT AS total_count
-    FROM public.profiles p
-    WHERE p.nickname ILIKE '%' || COALESCE(p_search, '') || '%'
-       OR p.id::TEXT LIKE '%' || COALESCE(p_search, '') || '%'
-    ORDER BY p.created_at DESC
-    LIMIT p_limit
+    WITH filtered AS (
+        SELECT
+            p.id, p.nickname, p.shells, p.is_admin, p.is_bot, p.created_at,
+            au.email AS user_email
+        FROM public.profiles p
+        LEFT JOIN auth.users au ON au.id = p.id
+        WHERE
+            (p_search IS NULL OR p_search = '' OR
+                p.nickname ILIKE '%' || p_search || '%' OR
+                au.email ILIKE '%' || p_search || '%' OR
+                p.id::TEXT LIKE '%' || p_search || '%')
+            AND (p_is_bot IS NULL OR
+                (p_is_bot = 'true' AND p.is_bot = true) OR
+                (p_is_bot = 'false' AND p.is_bot = false))
+    )
+    SELECT
+        f.id AS user_id,
+        f.nickname,
+        COALESCE(f.user_email, '')::TEXT AS email,
+        f.shells,
+        f.is_admin,
+        f.is_bot,
+        f.created_at,
+        (SELECT COUNT(*) FROM filtered)::BIGINT AS total_count
+    FROM filtered f
+    ORDER BY f.created_at DESC
+    LIMIT GREATEST(p_limit, 1)
     OFFSET v_offset;
+END;
+$$;
+
+-- 检查某用户邮箱是否已激活（通过原生 auth.users.email_confirmed_at 字段）
+DROP FUNCTION IF EXISTS public.check_email_verified(UUID);
+CREATE OR REPLACE FUNCTION public.check_email_verified(p_user_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+AS $$
+    SELECT COALESCE(
+        (SELECT u.email_confirmed_at IS NOT NULL FROM auth.users u WHERE u.id = p_user_id),
+        false
+    );
+$$;
+
+-- ============================================================
+-- 管理员创建用户（同时创建 auth.users 和 profiles，可选机器人）
+-- ============================================================
+DROP FUNCTION IF EXISTS public.admin_create_user(TEXT, TEXT, TEXT, BOOLEAN);
+CREATE OR REPLACE FUNCTION public.admin_create_user(
+    p_email TEXT,
+    p_password TEXT,
+    p_nickname TEXT,
+    p_is_bot BOOLEAN DEFAULT false
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_user_id UUID;
+    v_nickname TEXT;
+BEGIN
+    -- 权限校验
+    IF NOT public.check_admin() THEN
+        RETURN jsonb_build_object('success', false, 'message', '无权限');
+    END IF;
+
+    -- 邮箱校验
+    IF p_email IS NULL OR p_email !~ '^[^@]+@[^@]+\.[^@]+$' THEN
+        RETURN jsonb_build_object('success', false, 'message', '邮箱格式不正确');
+    END IF;
+
+    -- 密码强度
+    IF p_password IS NULL OR LENGTH(p_password) < 6 THEN
+        RETURN jsonb_build_object('success', false, 'message', '密码至少 6 位');
+    END IF;
+
+    -- 昵称校验
+    v_nickname := TRIM(p_nickname);
+    IF v_nickname IS NULL OR LENGTH(v_nickname) < 2 OR LENGTH(v_nickname) > 10 THEN
+        RETURN jsonb_build_object('success', false, 'message', '昵称需要 2-10 字符');
+    END IF;
+
+    -- 邮箱重复检查
+    IF EXISTS (SELECT 1 FROM auth.users WHERE email = p_email) THEN
+        RETURN jsonb_build_object('success', false, 'message', '邮箱已存在');
+    END IF;
+
+    -- 昵称重复检查
+    IF EXISTS (SELECT 1 FROM public.profiles WHERE nickname = v_nickname) THEN
+        RETURN jsonb_build_object('success', false, 'message', '昵称已被占用');
+    END IF;
+
+    -- 创建 auth.users（自动发送验证邮件，但密码已设好可用）
+    -- 注意：此处需要 supabase.auth.admin.createUser 的同等能力
+    -- 通过 auth.users 表直接插入（需要 service_role 权限）
+    INSERT INTO auth.users (
+        instance_id, id, aud, role,
+        email, encrypted_password,
+        email_confirmed_at,  -- 管理员创建的用户默认已验证邮箱
+        raw_app_meta_data, raw_user_meta_data,
+        created_at, updated_at,
+        confirmation_token, email_change, email_change_token_new, recovery_token
+    )
+    VALUES (
+        '00000000-0000-0000-0000-000000000000',
+        gen_random_uuid(),
+        'authenticated',
+        'authenticated',
+        p_email,
+        crypt(p_password, gen_salt('bf')),
+        NOW(),  -- 直接标记为已验证
+        jsonb_build_object('provider', 'email', 'providers', ARRAY['email']),
+        jsonb_build_object('nickname', v_nickname),
+        NOW(),
+        NOW(),
+        '',
+        '',
+        '',
+        ''
+    )
+    RETURNING id INTO v_user_id;
+
+    -- 同时插入 auth.identities（Supabase 要求）
+    INSERT INTO auth.identities (
+        id, user_id, identity_data, provider, provider_id,
+        created_at, updated_at
+    )
+    VALUES (
+        gen_random_uuid(),
+        v_user_id,
+        jsonb_build_object('sub', v_user_id::text, 'email', p_email, 'email_verified', true),
+        'email',
+        v_user_id::text,
+        NOW(),
+        NOW()
+    );
+
+    -- 创建 profile
+    -- 注意：auth.users 上的触发器 (handle_new_user) 会自动创建一个 profile
+    -- 我们用 ON CONFLICT 来更新 is_bot / nickname（如果触发器已创建或没创建都能正确处理）
+    INSERT INTO public.profiles (id, nickname, is_bot, is_admin, shells)
+    VALUES (v_user_id, v_nickname, p_is_bot, false, 0)
+    ON CONFLICT (id) DO UPDATE SET
+        nickname = EXCLUDED.nickname,
+        is_bot = EXCLUDED.is_bot,
+        is_admin = false,
+        shells = COALESCE(public.profiles.shells, 0);
+
+    -- 如果是机器人，创建 bot_config
+    IF p_is_bot THEN
+        INSERT INTO public.bot_configs (bot_id, enabled, min_orders, max_orders)
+        VALUES (v_user_id, true, 2, 6)
+        ON CONFLICT (bot_id) DO NOTHING;
+    END IF;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'message', '用户创建成功',
+        'user_id', v_user_id,
+        'nickname', v_nickname,
+        'is_bot', p_is_bot
+    );
+
+EXCEPTION WHEN OTHERS THEN
+    RETURN jsonb_build_object(
+        'success', false,
+        'message', '创建失败：' || SQLERRM
+    );
 END;
 $$;
 
 -- ============================================================
 -- 22. RPC 函数：添加物品定义（管理员）
+-- 清理所有旧签名（5参/6参/7参）+ 重建唯一签名
+DROP FUNCTION IF EXISTS public.admin_add_item_definition(TEXT, TEXT, TEXT, TEXT, INT);
 DROP FUNCTION IF EXISTS public.admin_add_item_definition(TEXT, TEXT, TEXT, TEXT, INT, TEXT);
+DROP FUNCTION IF EXISTS public.admin_add_item_definition(TEXT, TEXT, TEXT, TEXT, INT, TEXT, TEXT);
 CREATE OR REPLACE FUNCTION public.admin_add_item_definition(
     p_name TEXT,
     p_quality TEXT,
@@ -2249,10 +2620,7 @@ BEGIN
     DELETE FROM public.inventory WHERE id = inv_id AND quantity <= 0;
     
     -- 给用户随机收藏品
-    INSERT INTO public.inventory (user_id, item_id, quantity)
-    VALUES (user_uuid, selected_item.id, 1)
-    ON CONFLICT ON CONSTRAINT inventory_user_id_item_id_key
-    DO UPDATE SET quantity = public.inventory.quantity + 1;
+    PERFORM public.inventory_add_item(user_uuid, selected_item.id, 1);
     
     RETURN jsonb_build_object(
         'success', true, 
@@ -2358,10 +2726,7 @@ BEGIN
     
     -- 检查并领取1分钟奖励
     IF v_online_total >= 60 AND NOT v_claimed_1min THEN
-        INSERT INTO public.inventory (user_id, item_id, quantity)
-        VALUES (user_uuid, bag_item_id, 1)
-        ON CONFLICT ON CONSTRAINT inventory_user_id_item_id_key
-        DO UPDATE SET quantity = public.inventory.quantity + 1;
+        PERFORM public.inventory_add_item(user_uuid, bag_item_id, 1);
         
         UPDATE public.dragon_boat_progress SET claimed_1min = true WHERE user_id = user_uuid;
         claimed_1 := true;
@@ -2369,10 +2734,7 @@ BEGIN
     
     -- 检查并领取10分钟奖励
     IF v_online_total >= 600 AND NOT v_claimed_10min THEN
-        INSERT INTO public.inventory (user_id, item_id, quantity)
-        VALUES (user_uuid, bag_item_id, 2)
-        ON CONFLICT ON CONSTRAINT inventory_user_id_item_id_key
-        DO UPDATE SET quantity = public.inventory.quantity + 2;
+        PERFORM public.inventory_add_item(user_uuid, bag_item_id, 2);
         
         UPDATE public.dragon_boat_progress SET claimed_10min = true WHERE user_id = user_uuid;
         claimed_10 := true;
@@ -2380,10 +2742,7 @@ BEGIN
     
     -- 检查并领取60分钟奖励
     IF v_online_total >= 3600 AND NOT v_claimed_60min THEN
-        INSERT INTO public.inventory (user_id, item_id, quantity)
-        VALUES (user_uuid, bag_item_id, 3)
-        ON CONFLICT ON CONSTRAINT inventory_user_id_item_id_key
-        DO UPDATE SET quantity = public.inventory.quantity + 3;
+        PERFORM public.inventory_add_item(user_uuid, bag_item_id, 3);
         
         UPDATE public.dragon_boat_progress SET claimed_60min = true WHERE user_id = user_uuid;
         claimed_60 := true;
@@ -2978,10 +3337,7 @@ BEGIN
     DELETE FROM public.inventory WHERE user_id = user_uuid AND quantity <= 0;
 
     -- 添加1个目标物品
-    INSERT INTO public.inventory (user_id, item_id, quantity)
-    VALUES (user_uuid, v_target_item.id, 1)
-    ON CONFLICT ON CONSTRAINT inventory_user_id_item_id_key
-    DO UPDATE SET quantity = public.inventory.quantity + 1;
+    PERFORM public.inventory_add_item(user_uuid, v_target_item.id, 1);
 
     RETURN jsonb_build_object(
         'success', true,
@@ -3004,10 +3360,6 @@ BEGIN
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'last_active_at') THEN
         ALTER TABLE public.profiles ADD COLUMN last_active_at TIMESTAMPTZ DEFAULT '1970-01-01'::timestamptz;
-    ELSE
-        ALTER TABLE public.profiles DISABLE TRIGGER trigger_update_last_active_at;
-        UPDATE public.profiles SET last_active_at = '1970-01-01'::timestamptz;
-        ALTER TABLE public.profiles ENABLE TRIGGER trigger_update_last_active_at;
     END IF;
 END $$;
 
@@ -3288,10 +3640,7 @@ BEGIN
     END IF;
 
     -- 给机器人背包加物品
-    INSERT INTO public.inventory (user_id, item_id, quantity)
-    VALUES (p_bot_id, p_item_id, p_quantity)
-    ON CONFLICT ON CONSTRAINT inventory_user_id_item_id_key
-    DO UPDATE SET quantity = public.inventory.quantity + EXCLUDED.quantity;
+    PERFORM public.inventory_add_item(p_bot_id, p_item_id, p_quantity);
 
     -- 上架
     INSERT INTO public.market_orders (seller_id, item_id, quantity, price_per_unit, type, status)
@@ -3338,10 +3687,7 @@ BEGIN
     UPDATE public.market_orders SET status = 'cancelled' WHERE id = p_order_id;
 
     -- 物品退回机器人背包（不退款）
-    INSERT INTO public.inventory (user_id, item_id, quantity)
-    VALUES (rec.seller_id, rec.item_id, rec.quantity)
-    ON CONFLICT ON CONSTRAINT inventory_user_id_item_id_key
-    DO UPDATE SET quantity = public.inventory.quantity + EXCLUDED.quantity;
+    PERFORM public.inventory_add_item(rec.seller_id, rec.item_id, rec.quantity);
 
     RETURN jsonb_build_object('success', true, 'message', '已下架该订单');
 END;
@@ -3500,10 +3846,7 @@ BEGIN
             price := GREATEST(1, FLOOR(base_price * (1 - price_flu / 2 + random() * price_flu))::BIGINT);
 
             -- 给机器人背包加物品（仅上架用，不影响已有库存）
-            INSERT INTO public.inventory (user_id, item_id, quantity)
-            VALUES (cfg.bot_id, item_rec.id, qty)
-            ON CONFLICT ON CONSTRAINT inventory_user_id_item_id_key
-            DO UPDATE SET quantity = public.inventory.quantity + EXCLUDED.quantity;
+            PERFORM public.inventory_add_item(cfg.bot_id, item_rec.id, qty);
 
             -- 上架新订单（不下架、不修改已有订单）
             INSERT INTO public.market_orders
@@ -5222,3 +5565,610 @@ BEGIN
     RETURN v_count;
 END;
 $$;
+
+-- ============================================================
+-- 农场系统 —— 种植玩法
+-- ============================================================
+
+-- 物品类型扩展：新增 seed (种子)
+ALTER TABLE public.items DROP CONSTRAINT IF EXISTS items_item_type_check;
+ALTER TABLE public.items ADD CONSTRAINT items_item_type_check 
+    CHECK (item_type IN ('collection', 'consumable', 'equipment', 'material', 'currency', 'seed'));
+
+-- 农场等级配置表
+CREATE TABLE IF NOT EXISTS public.farm_levels (
+    level INT PRIMARY KEY,
+    exp_required BIGINT NOT NULL,
+    plots_unlocked INT NOT NULL,  -- 该等级解锁的土地数
+    description TEXT
+);
+
+-- 初始化12个等级
+INSERT INTO public.farm_levels (level, exp_required, plots_unlocked) VALUES
+    (1, 0, 1),
+    (2, 100, 2),
+    (3, 300, 3),
+    (4, 1000, 4),
+    (5, 5000, 5),
+    (6, 10000, 6),
+    (7, 20000, 7),
+    (8, 50000, 8),
+    (9, 100000, 9),
+    (10, 200000, 10),
+    (11, 500000,11),
+    (12, 1000000, 12)
+ON CONFLICT (level) DO UPDATE SET 
+    exp_required = EXCLUDED.exp_required,
+    plots_unlocked = EXCLUDED.plots_unlocked;
+
+-- 作物配置表（每个种子对应一条配置）
+CREATE TABLE IF NOT EXISTS public.crops (
+    id BIGSERIAL PRIMARY KEY,
+    seed_id BIGINT NOT NULL UNIQUE REFERENCES public.items(id) ON DELETE CASCADE,   -- 种子物品ID
+    crop_id BIGINT NOT NULL REFERENCES public.items(id) ON DELETE CASCADE,           -- 收获物品ID
+    grow_seconds INT NOT NULL,             -- 生长时间（秒）
+    exp_reward INT NOT NULL,               -- 收获获得经验
+    drop_quantity_min INT DEFAULT 1,
+    drop_quantity_max INT DEFAULT 1
+);
+
+-- 用户农场（每用户一条）
+CREATE TABLE IF NOT EXISTS public.user_farms (
+    user_id UUID PRIMARY KEY REFERENCES public.profiles(id) ON DELETE CASCADE,
+    level INT NOT NULL DEFAULT 1,
+    exp BIGINT NOT NULL DEFAULT 0,
+    total_harvests INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- 农场土地（每用户最多12块）
+CREATE TABLE IF NOT EXISTS public.farm_plots (
+    id BIGSERIAL PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    plot_index INT NOT NULL,                -- 土地序号 0-11
+    crop_id BIGINT REFERENCES public.crops(id) ON DELETE SET NULL,
+    planted_at TIMESTAMPTZ,
+    is_unlocked BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    UNIQUE(user_id, plot_index)
+);
+
+CREATE INDEX IF NOT EXISTS idx_farm_plots_user ON public.farm_plots(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_farms_level ON public.user_farms(level);
+
+-- RLS 策略
+ALTER TABLE public.farm_levels ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.crops ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_farms ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.farm_plots ENABLE ROW LEVEL SECURITY;
+
+-- 等级和作物配置：所有人可读
+DROP POLICY IF EXISTS "farm_levels_read" ON public.farm_levels;
+CREATE POLICY "farm_levels_read" ON public.farm_levels FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "crops_read" ON public.crops;
+CREATE POLICY "crops_read" ON public.crops FOR SELECT USING (true);
+
+-- 农场表：只能看自己的，但 SECURITY DEFINER 函数绕过
+DROP POLICY IF EXISTS "user_farms_all" ON public.user_farms;
+CREATE POLICY "user_farms_all" ON public.user_farms FOR ALL USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "farm_plots_all" ON public.farm_plots;
+CREATE POLICY "farm_plots_all" ON public.farm_plots FOR ALL USING (auth.uid() = user_id);
+
+-- ============================================================
+-- 农场 RPC 函数
+-- ============================================================
+
+-- 获取农场完整信息（等级、经验、土地、作物配置）
+DROP FUNCTION IF EXISTS public.get_farm_info();
+CREATE OR REPLACE FUNCTION public.get_farm_info()
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_user_id UUID := auth.uid();
+    v_level INT;
+    v_exp BIGINT;
+    v_total_harvests INT;
+    v_plots JSONB;
+    v_crops JSONB;
+    v_level_info JSONB;
+    v_next_level_exp BIGINT;
+    v_plots_unlocked INT;
+BEGIN
+    -- 获取或初始化农场
+    INSERT INTO public.user_farms (user_id) VALUES (v_user_id)
+    ON CONFLICT (user_id) DO NOTHING;
+
+    INSERT INTO public.farm_plots (user_id, plot_index, is_unlocked)
+    SELECT v_user_id, i, (i = 0)
+    FROM generate_series(0, 11) AS i
+    ON CONFLICT (user_id, plot_index) DO NOTHING;
+
+    -- 读取农场信息
+    SELECT level, exp, total_harvests INTO v_level, v_exp, v_total_harvests
+    FROM public.user_farms WHERE user_id = v_user_id;
+
+    -- 根据经验重新计算实际等级（防止经验溢出）
+    SELECT level, exp_required INTO v_level, v_next_level_exp
+    FROM public.farm_levels
+    WHERE exp_required <= v_exp
+    ORDER BY level DESC LIMIT 1;
+
+    IF v_level IS NULL THEN
+        v_level := 1;
+    END IF;
+
+    -- 同步 level 字段
+    UPDATE public.user_farms SET level = v_level, updated_at = NOW() WHERE user_id = v_user_id;
+
+    -- 根据等级解锁对应数量的土地
+    SELECT plots_unlocked INTO v_plots_unlocked FROM public.farm_levels WHERE level = v_level;
+    IF v_plots_unlocked IS NULL THEN
+        v_plots_unlocked := 1;
+    END IF;
+    
+    UPDATE public.farm_plots 
+    SET is_unlocked = (plot_index < v_plots_unlocked)
+    WHERE user_id = v_user_id;
+
+    -- 读取土地
+    SELECT jsonb_agg(row_to_json(t)) INTO v_plots
+    FROM (
+        SELECT 
+            fp.id, fp.plot_index, fp.crop_id, fp.planted_at, fp.is_unlocked,
+            c.id AS crop_config_id, c.grow_seconds, c.exp_reward,
+            seed_item.name AS seed_name, seed_item.image_name AS seed_image,
+            crop_item.name AS crop_name, crop_item.image_name AS crop_image, crop_item.quality AS crop_quality,
+            CASE 
+                WHEN fp.planted_at IS NOT NULL AND c.grow_seconds IS NOT NULL THEN
+                    EXTRACT(EPOCH FROM (fp.planted_at + (c.grow_seconds || ' seconds')::INTERVAL - NOW()))::INT
+                ELSE NULL
+            END AS remaining_seconds,
+            CASE 
+                WHEN fp.planted_at IS NOT NULL AND c.grow_seconds IS NOT NULL 
+                     AND fp.planted_at + (c.grow_seconds || ' seconds')::INTERVAL <= NOW()
+                THEN true ELSE false
+            END AS is_ready
+        FROM public.farm_plots fp
+        LEFT JOIN public.crops c ON fp.crop_id = c.id
+        LEFT JOIN public.items seed_item ON c.seed_id = seed_item.id
+        LEFT JOIN public.items crop_item ON c.crop_id = crop_item.id
+        WHERE fp.user_id = v_user_id
+        ORDER BY fp.plot_index
+    ) t;
+
+    -- 读取作物配置（关联种子和收获物品信息）
+    SELECT jsonb_agg(row_to_json(t)) INTO v_crops
+    FROM (
+        SELECT 
+            c.id, c.seed_id, c.crop_id, c.grow_seconds, c.exp_reward,
+            c.drop_quantity_min, c.drop_quantity_max,
+            seed_item.name AS seed_name, seed_item.image_name AS seed_image, seed_item.quality AS seed_quality,
+            crop_item.name AS crop_name, crop_item.image_name AS crop_image, crop_item.quality AS crop_quality,
+            crop_item.description AS crop_description
+        FROM public.crops c
+        JOIN public.items seed_item ON c.seed_id = seed_item.id
+        JOIN public.items crop_item ON c.crop_id = crop_item.id
+        ORDER BY c.grow_seconds
+    ) t;
+
+    -- 当前等级信息
+    SELECT jsonb_build_object(
+        'level', fl.level, 'exp_required', fl.exp_required,
+        'plots_unlocked', fl.plots_unlocked,
+        'current_exp', v_exp,
+        'next_level_exp', COALESCE((SELECT exp_required FROM public.farm_levels WHERE level = v_level + 1), fl.exp_required)
+    ) INTO v_level_info
+    FROM public.farm_levels fl WHERE fl.level = v_level;
+
+    RETURN jsonb_build_object(
+        'farm_level', v_level,
+        'exp', v_exp,
+        'total_harvests', v_total_harvests,
+        'level_info', v_level_info,
+        'plots', COALESCE(v_plots, '[]'::jsonb),
+        'crops', COALESCE(v_crops, '[]'::jsonb)
+    );
+END;
+$$;
+
+-- 播种
+DROP FUNCTION IF EXISTS public.plant_seed(BIGINT, INT);
+CREATE OR REPLACE FUNCTION public.plant_seed(p_plot_id BIGINT, p_crop_id BIGINT)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_user_id UUID := auth.uid();
+    v_plot RECORD;
+    v_crop RECORD;
+    v_seed_item_id BIGINT;
+    v_inv_id BIGINT;
+    v_farm_level INT;
+    v_plots_unlocked INT;
+BEGIN
+    -- 验证土地
+    SELECT * INTO v_plot FROM public.farm_plots 
+    WHERE id = p_plot_id AND user_id = v_user_id;
+    
+    IF v_plot IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '土地不存在');
+    END IF;
+    IF NOT v_plot.is_unlocked THEN
+        RETURN jsonb_build_object('success', false, 'message', '该土地未解锁');
+    END IF;
+    IF v_plot.crop_id IS NOT NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '该土地已有作物');
+    END IF;
+    
+    -- 验证作物配置
+    SELECT * INTO v_crop FROM public.crops WHERE id = p_crop_id;
+    IF v_crop IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '作物配置不存在');
+    END IF;
+    
+    -- 验证农场等级
+    SELECT level INTO v_farm_level FROM public.user_farms WHERE user_id = v_user_id;
+    SELECT plots_unlocked INTO v_plots_unlocked FROM public.farm_levels WHERE level = v_farm_level;
+    
+    IF v_plot.plot_index >= v_plots_unlocked THEN
+        RETURN jsonb_build_object('success', false, 'message', '农场等级不足');
+    END IF;
+    
+    -- 直接使用 seed_id 就是种子物品ID
+    v_seed_item_id := v_crop.seed_id;
+    
+    -- 验证库存
+    SELECT id, quantity INTO v_inv_id FROM public.inventory 
+    WHERE user_id = v_user_id AND item_id = v_seed_item_id;
+    
+    IF v_inv_id IS NULL OR v_inv_id = 0 THEN
+        RETURN jsonb_build_object('success', false, 'message', '种子数量不足');
+    END IF;
+    
+    -- 通过 inventory_add_item 减少种子（负数不允许，所以直接 UPDATE）
+    UPDATE public.inventory 
+    SET quantity = quantity - 1
+    WHERE id = v_inv_id AND quantity > 0;
+    
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('success', false, 'message', '种子数量不足');
+    END IF;
+    
+    -- 清理0数量
+    DELETE FROM public.inventory WHERE id = v_inv_id AND quantity <= 0;
+    
+    -- 种植
+    UPDATE public.farm_plots 
+    SET crop_id = p_crop_id, planted_at = NOW()
+    WHERE id = p_plot_id;
+    
+    RETURN jsonb_build_object('success', true, 'message', '播种成功', 
+        'plot_id', p_plot_id, 'crop_id', p_crop_id, 'planted_at', NOW());
+END;
+$$;
+
+-- 收获
+DROP FUNCTION IF EXISTS public.harvest_crop(BIGINT);
+CREATE OR REPLACE FUNCTION public.harvest_crop(p_plot_id BIGINT)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_user_id UUID := auth.uid();
+    v_plot RECORD;
+    v_crop RECORD;
+    v_ready_at TIMESTAMPTZ;
+    v_crop_item_id BIGINT;
+    v_drop_qty INT;
+    v_exp_gained INT;
+    v_add_result JSONB;
+BEGIN
+    -- 验证土地
+    -- 使用显式别名避免 fp.crop_id (crops.id) 和 c.crop_id (items.id) 冲突
+    SELECT fp.id AS plot_id, fp.crop_id AS planted_crop_id, fp.planted_at,
+           c.grow_seconds, c.crop_id AS crop_item_id, c.exp_reward,
+           c.drop_quantity_min, c.drop_quantity_max,
+           crop_item.name AS crop_item_name
+    INTO v_plot
+    FROM public.farm_plots fp
+    JOIN public.crops c ON fp.crop_id = c.id
+    JOIN public.items crop_item ON c.crop_id = crop_item.id
+    WHERE fp.id = p_plot_id AND fp.user_id = v_user_id;
+    
+    IF v_plot IS NULL OR v_plot.crop_item_id IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '该土地没有作物');
+    END IF;
+    
+    -- 检查是否成熟
+    v_ready_at := v_plot.planted_at + (v_plot.grow_seconds || ' seconds')::INTERVAL;
+    IF NOW() < v_ready_at THEN
+        RETURN jsonb_build_object('success', false, 'message', '作物尚未成熟',
+            'remaining_seconds', EXTRACT(EPOCH FROM (v_ready_at - NOW()))::INT);
+    END IF;
+    
+    -- 直接使用 crop_item_id 作为产出物品ID（即 items.id）
+    v_crop_item_id := v_plot.crop_item_id;
+    
+    -- 计算随机数量
+    v_drop_qty := v_plot.drop_quantity_min + floor(random() * (v_plot.drop_quantity_max - v_plot.drop_quantity_min + 1))::INT;
+    v_exp_gained := v_plot.exp_reward;
+    
+    -- 给予物品（捕获返回值，检查成功状态）
+    v_add_result := public.inventory_add_item(v_user_id, v_crop_item_id, v_drop_qty);
+    IF NOT (v_add_result->>'success')::BOOLEAN THEN
+        RETURN v_add_result;  -- 失败时立即返回，不清空土地
+    END IF;
+    
+    -- 清空土地
+    UPDATE public.farm_plots 
+    SET crop_id = NULL, planted_at = NULL
+    WHERE id = p_plot_id;
+    
+    -- 增加经验
+    UPDATE public.user_farms 
+    SET exp = exp + v_exp_gained,
+        total_harvests = total_harvests + 1,
+        updated_at = NOW()
+    WHERE user_id = v_user_id;
+    
+    RETURN jsonb_build_object(
+        'success', true, 
+        'message', '收获成功',
+        'item_name', v_plot.crop_item_name,
+        'quantity', v_drop_qty,
+        'exp_gained', v_exp_gained
+    );
+END;
+$$;
+
+-- 一键收获所有成熟作物
+DROP FUNCTION IF EXISTS public.harvest_all_ready();
+CREATE OR REPLACE FUNCTION public.harvest_all_ready()
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_user_id UUID := auth.uid();
+    v_plot RECORD;
+    v_total_items JSONB := '[]'::jsonb;
+    v_total_exp INT := 0;
+    v_total_harvests INT := 0;
+    v_crop_item_id BIGINT;
+    v_drop_qty INT;
+    v_add_result JSONB;
+    v_has_error BOOLEAN := false;
+BEGIN
+    FOR v_plot IN
+        SELECT fp.id, fp.crop_id, fp.planted_at, c.grow_seconds, c.crop_id AS crop_item_id, c.exp_reward,
+               c.drop_quantity_min, c.drop_quantity_max, crop_item.name AS crop_item_name
+        FROM public.farm_plots fp
+        JOIN public.crops c ON fp.crop_id = c.id
+        JOIN public.items crop_item ON c.crop_id = crop_item.id
+        WHERE fp.user_id = v_user_id
+          AND fp.planted_at IS NOT NULL
+          AND fp.planted_at + (c.grow_seconds || ' seconds')::INTERVAL <= NOW()
+        FOR UPDATE  -- 锁定行，避免并发问题
+    LOOP
+        v_crop_item_id := v_plot.crop_item_id;
+        
+        IF v_crop_item_id IS NOT NULL THEN
+            v_drop_qty := v_plot.drop_quantity_min + floor(random() * (v_plot.drop_quantity_max - v_plot.drop_quantity_min + 1))::INT;
+            -- 捕获返回值检查成功
+            v_add_result := public.inventory_add_item(v_user_id, v_crop_item_id, v_drop_qty);
+            IF (v_add_result->>'success')::BOOLEAN THEN
+                v_total_exp := v_total_exp + v_plot.exp_reward;
+                v_total_harvests := v_total_harvests + 1;
+                v_total_items := v_total_items || jsonb_build_object(
+                    'name', v_plot.crop_item_name, 'quantity', v_drop_qty
+                );
+            ELSE
+                v_has_error := true;
+                RAISE WARNING 'inventory_add_item failed for plot %: %', v_plot.id, v_add_result->>'message';
+            END IF;
+        END IF;
+        
+        UPDATE public.farm_plots SET crop_id = NULL, planted_at = NULL WHERE id = v_plot.id;
+    END LOOP;
+    
+    IF v_total_harvests > 0 THEN
+        UPDATE public.user_farms 
+        SET exp = exp + v_total_exp,
+            total_harvests = total_harvests + v_total_harvests,
+            updated_at = NOW()
+        WHERE user_id = v_user_id;
+    END IF;
+    
+    RETURN jsonb_build_object(
+        'success', NOT v_has_error OR v_total_harvests > 0,
+        'harvest_count', v_total_harvests,
+        'total_exp', v_total_exp,
+        'items', v_total_items
+    );
+END;
+$$;
+
+-- 加速生长（使用果壳币）
+DROP FUNCTION IF EXISTS public.speed_up_plot(BIGINT, INT);
+CREATE OR REPLACE FUNCTION public.speed_up_plot(p_plot_id BIGINT, p_seconds INT)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_user_id UUID := auth.uid();
+    v_plot RECORD;
+    v_cost INT;
+    v_current_shells INT;
+BEGIN
+    IF p_seconds <= 0 OR p_seconds > 86400 THEN
+        RETURN jsonb_build_object('success', false, 'message', '参数无效');
+    END IF;
+    
+    SELECT fp.*, c.grow_seconds INTO v_plot
+    FROM public.farm_plots fp
+    JOIN public.crops c ON fp.crop_id = c.id
+    WHERE fp.id = p_plot_id AND fp.user_id = v_user_id;
+    
+    IF v_plot IS NULL OR v_plot.crop_id IS NULL OR v_plot.planted_at IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '土地没有作物');
+    END IF;
+    
+    v_cost := GREATEST(1, p_seconds * 2);
+    SELECT shells INTO v_current_shells FROM public.profiles WHERE id = v_user_id;
+    
+    IF v_current_shells < v_cost THEN
+        RETURN jsonb_build_object('success', false, 'message', '果壳币不足');
+    END IF;
+    
+    UPDATE public.profiles SET shells = shells - v_cost WHERE id = v_user_id;
+    UPDATE public.farm_plots 
+    SET planted_at = planted_at - (p_seconds || ' seconds')::INTERVAL
+    WHERE id = p_plot_id;
+    
+    RETURN jsonb_build_object('success', true, 'message', '加速成功', 'cost', v_cost);
+END;
+$$;
+
+-- 管理员更新作物配置
+DROP FUNCTION IF EXISTS public.admin_update_crop_config(BIGINT, BIGINT, INT, INT, INT, INT);
+CREATE OR REPLACE FUNCTION public.admin_update_crop_config(
+    p_seed_id BIGINT,
+    p_crop_id BIGINT,
+    p_grow_seconds INT,
+    p_exp_reward INT,
+    p_drop_min INT,
+    p_drop_max INT
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_is_admin BOOLEAN;
+    v_seed_item RECORD;
+    v_crop_item RECORD;
+    v_crop_id BIGINT;
+BEGIN
+    -- 验证管理员权限
+    SELECT is_admin INTO v_is_admin FROM public.profiles WHERE id = auth.uid();
+    IF NOT v_is_admin THEN
+        RAISE EXCEPTION '无管理员权限';
+    END IF;
+
+    -- 验证种子物品存在且类型为seed
+    SELECT * INTO v_seed_item FROM public.items WHERE id = p_seed_id;
+    IF v_seed_item IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '种子物品不存在');
+    END IF;
+    IF v_seed_item.item_type != 'seed' THEN
+        RETURN jsonb_build_object('success', false, 'message', '该物品不是种子类型');
+    END IF;
+
+    -- 验证收获物品存在
+    SELECT * INTO v_crop_item FROM public.items WHERE id = p_crop_id;
+    IF v_crop_item IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '收获物品不存在');
+    END IF;
+
+    -- 参数验证
+    IF p_grow_seconds <= 0 THEN
+        RETURN jsonb_build_object('success', false, 'message', '生长时间必须大于0');
+    END IF;
+    IF p_exp_reward < 0 THEN
+        RETURN jsonb_build_object('success', false, 'message', '经验奖励不能为负');
+    END IF;
+    IF p_drop_min <= 0 OR p_drop_max < p_drop_min THEN
+        RETURN jsonb_build_object('success', false, 'message', '掉落数量范围无效');
+    END IF;
+
+    -- 插入或更新作物配置
+    INSERT INTO public.crops (seed_id, crop_id, grow_seconds, exp_reward, drop_quantity_min, drop_quantity_max)
+    VALUES (p_seed_id, p_crop_id, p_grow_seconds, p_exp_reward, p_drop_min, p_drop_max)
+    ON CONFLICT (seed_id) DO UPDATE SET
+        crop_id = EXCLUDED.crop_id,
+        grow_seconds = EXCLUDED.grow_seconds,
+        exp_reward = EXCLUDED.exp_reward,
+        drop_quantity_min = EXCLUDED.drop_quantity_min,
+        drop_quantity_max = EXCLUDED.drop_quantity_max
+    RETURNING id INTO v_crop_id;
+
+    RETURN jsonb_build_object('success', true, 'message', '保存成功', 'crop_id', v_crop_id);
+END;
+$$;
+
+-- 管理员获取种子的作物配置
+DROP FUNCTION IF EXISTS public.admin_get_crop_by_seed_id(BIGINT);
+CREATE OR REPLACE FUNCTION public.admin_get_crop_by_seed_id(p_seed_id BIGINT)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_is_admin BOOLEAN;
+    v_crop JSONB;
+BEGIN
+    SELECT is_admin INTO v_is_admin FROM public.profiles WHERE id = auth.uid();
+    IF NOT v_is_admin THEN
+        RAISE EXCEPTION '无管理员权限';
+    END IF;
+
+    SELECT jsonb_build_object(
+        'id', c.id,
+        'seed_id', c.seed_id,
+        'crop_id', c.crop_id,
+        'grow_seconds', c.grow_seconds,
+        'exp_reward', c.exp_reward,
+        'drop_quantity_min', c.drop_quantity_min,
+        'drop_quantity_max', c.drop_quantity_max,
+        'crop_name', ci.name,
+        'crop_quality', ci.quality,
+        'crop_image_name', ci.image_name,
+        'crop_item_type', ci.item_type
+    ) INTO v_crop
+    FROM public.crops c
+    JOIN public.items ci ON c.crop_id = ci.id
+    WHERE c.seed_id = p_seed_id;
+
+    RETURN v_crop;
+END;
+$$;
+
+-- 授予种子物品（用于商店或运营活动）
+DROP FUNCTION IF EXISTS public.grant_seed(TEXT, INT);
+CREATE OR REPLACE FUNCTION public.grant_seed(p_seed_name TEXT, p_quantity INT DEFAULT 1)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_user_id UUID := auth.uid();
+    v_item_id BIGINT;
+    v_actual_name TEXT;
+BEGIN
+    IF p_quantity <= 0 OR p_quantity > 1000 THEN
+        RETURN jsonb_build_object('success', false, 'message', '数量无效');
+    END IF;
+    
+    -- 通过名称查找种子物品
+    SELECT id, name INTO v_item_id, v_actual_name FROM public.items 
+    WHERE name = p_seed_name AND item_type = 'seed';
+    
+    IF v_item_id IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '种子不存在: ' || p_seed_name);
+    END IF;
+    
+    PERFORM public.inventory_add_item(v_user_id, v_item_id, p_quantity);
+
+    RETURN jsonb_build_object('success', true, 'message', '已获得种子',
+        'item_name', v_actual_name, 'quantity', p_quantity);
+END;
+$$;
+
