@@ -419,6 +419,7 @@ BEGIN
     NEW.dragon_boat_claimed_10min := OLD.dragon_boat_claimed_10min;
     NEW.dragon_boat_claimed_60min := OLD.dragon_boat_claimed_60min;
     NEW.dragon_boat_daily_reset := OLD.dragon_boat_daily_reset;
+    NEW.avatar_url := OLD.avatar_url;
     RETURN NEW;
 END;
 $$;
