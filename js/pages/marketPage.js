@@ -1,5 +1,5 @@
-import { getMarketOrders, getInventory, buyMarketOrder, cancelMarketOrder, placeMarketOrder, getProfile, getItemTradeHistory, getItemTradeStats } from '../api.js';
-import { itemImageHTML, formatNumber, showToast, QUALITY_CONFIG, ITEM_TYPE_CONFIG, openItemDetail, initItemImages, userBadgeHTML } from '../utils.js';
+import { getMarketOrders, getInventory, buyMarketOrder, cancelMarketOrder, placeMarketOrder, getProfile, getItemTradeHistory, getItemTradeStats, createBuyRequest, cancelBuyRequest, getMyBuyRequests, getBuyRequests, getItems, sellToBuyRequest } from '../api.js';
+import { itemImageHTML, formatNumber, showToast, QUALITY_CONFIG, ITEM_TYPE_CONFIG, openItemDetail, initItemImages, userBadgeHTML, upgradeSelectsToSearchable } from '../utils.js';
 import { createIcons, icons } from 'lucide';
 import { updateGlobalShells } from '../auth.js';
 import { Chart, registerables } from 'chart.js';
@@ -11,6 +11,7 @@ export const marketPage = {
     orders: [],
     inventory: [],
     inventoryMap: {},
+    allItems: [],
     myId: null,
     tab: 'browse',
     page: 1,
@@ -20,6 +21,15 @@ export const marketPage = {
     filterSearch: '',
     filterType: '',
     isLoading: false,
+    // 求购相关
+    buyRequests: [],
+    myBuyRequests: [],
+    brPage: 1,
+    brTotalCount: 0,
+    brFilterQuality: '',
+    brFilterSort: 'newest',
+    brFilterSearch: '',
+    brFilterType: '',
 
     render(container) {
         this.attachEvents(container);
@@ -31,6 +41,7 @@ export const marketPage = {
             btn.addEventListener('click', () => {
                 this.tab = btn.dataset.tab;
                 this.page = 1;
+                this.brPage = 1;
                 container.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 this.renderContent();
@@ -68,6 +79,40 @@ export const marketPage = {
                 this.filterSearch = e.target.value.trim();
                 this.page = 1;
                 this.loadBrowseData();
+            }, 300);
+        });
+
+        // 求购筛选事件
+        const brFilterQuality = document.getElementById('br-filter-quality');
+        const brFilterSort = document.getElementById('br-filter-sort');
+        const brFilterSearch = document.getElementById('br-filter-search');
+        const brFilterType = document.getElementById('br-filter-type');
+
+        brFilterQuality?.addEventListener('change', (e) => {
+            this.brFilterQuality = e.target.value;
+            this.brPage = 1;
+            this.loadBuyRequestsData();
+        });
+
+        brFilterSort?.addEventListener('change', (e) => {
+            this.brFilterSort = e.target.value;
+            this.brPage = 1;
+            this.loadBuyRequestsData();
+        });
+
+        brFilterType?.addEventListener('change', (e) => {
+            this.brFilterType = e.target.value;
+            this.brPage = 1;
+            this.loadBuyRequestsData();
+        });
+
+        let brSearchTimeout;
+        brFilterSearch?.addEventListener('input', (e) => {
+            clearTimeout(brSearchTimeout);
+            brSearchTimeout = setTimeout(() => {
+                this.brFilterSearch = e.target.value.trim();
+                this.brPage = 1;
+                this.loadBuyRequestsData();
             }, 300);
         });
 
@@ -133,20 +178,31 @@ export const marketPage = {
     renderContent() {
         const content = document.getElementById('market-content');
         const filterBar = document.getElementById('market-filter');
+        const brFilterBar = document.getElementById('buy-request-filter');
         const pagination = document.getElementById('market-pagination');
+        const brPagination = document.getElementById('buy-request-pagination');
+
+        // 首先隐藏所有筛选栏和分页
+        filterBar.style.display = 'none';
+        brFilterBar.style.display = 'none';
+        pagination.style.display = 'none';
+        brPagination.style.display = 'none';
 
         if (this.tab === 'browse') {
             filterBar.style.display = 'flex';
             pagination.style.display = 'flex';
             this.loadBrowseData();
+        } else if (this.tab === 'buy-requests') {
+            brFilterBar.style.display = 'flex';
+            brPagination.style.display = 'flex';
+            this.loadBuyRequestsData();
         } else if (this.tab === 'my') {
-            filterBar.style.display = 'none';
-            pagination.style.display = 'none';
             this.loadMyOrdersData();
         } else if (this.tab === 'sell') {
-            filterBar.style.display = 'none';
-            pagination.style.display = 'none';
             this.loadInventoryForSell();
+            content.innerHTML = '<div class="skeleton" style="height:200px;"></div>';
+        } else if (this.tab === 'buy') {
+            this.loadBuyForm();
             content.innerHTML = '<div class="skeleton" style="height:200px;"></div>';
         }
         createIcons({ icons });
@@ -1025,5 +1081,746 @@ export const marketPage = {
         document.getElementById('sell-stat-qty').textContent = formatNumber(totalQty);
         document.getElementById('sell-stat-price').textContent = formatNumber(totalPrice);
         document.getElementById('sell-stat-count').textContent = tradeCount;
+    },
+
+    async loadBuyItemStats(itemId, itemName, groupBy = 'hour') {
+        try {
+            const stats = await getItemTradeStats(itemId, groupBy);
+            this.renderBuyChart(stats, itemName);
+            this.updateBuyStats(stats);
+        } catch (e) {
+            console.error('加载交易统计失败:', e);
+            this.renderBuyChart([], itemName);
+            this.updateBuyStats([]);
+        }
+    },
+
+    renderBuyChart(stats, itemName = '') {
+        const ctx = document.getElementById('buy-trade-chart');
+        const emptyEl = document.getElementById('buy-chart-empty');
+        const containerEl = document.getElementById('buy-chart-container');
+        
+        if (!ctx) return;
+
+        if (this.buyTradeChart) {
+            this.buyTradeChart.destroy();
+            this.buyTradeChart = null;
+        }
+
+        if (!stats || stats.length === 0) {
+            emptyEl.innerHTML = `
+                <div class="empty-trade-info">
+                    <p><strong>${itemName || '该物品'}</strong></p>
+                    <p>暂无交易记录</p>
+                    <p style="font-size:0.8rem;color:var(--ink-mute);">成为第一个交易此物品的人吧！</p>
+                </div>
+            `;
+            emptyEl.style.display = 'block';
+            containerEl.style.display = 'none';
+            return;
+        }
+
+        emptyEl.style.display = 'none';
+        containerEl.style.display = 'block';
+
+        const labels = stats.map(s => s.period);
+        const prices = stats.map(s => s.avg_price);
+        const quantities = stats.map(s => s.total_quantity);
+
+        this.buyTradeChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: '平均价格',
+                        data: prices,
+                        borderColor: '#e84a3c',
+                        backgroundColor: 'rgba(232, 74, 60, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4,
+                        yAxisID: 'y'
+                    },
+                    {
+                        label: '交易量',
+                        data: quantities,
+                        borderColor: '#2e7d32',
+                        backgroundColor: 'rgba(46, 125, 50, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4,
+                        yAxisID: 'y1'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: {
+                            font: {
+                                family: 'Special Elite, monospace'
+                            }
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: '#2c2c2c',
+                        titleFont: { family: 'Special Elite' },
+                        bodyFont: { family: 'Special Elite' },
+                        padding: 12,
+                        cornerRadius: 4
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: {
+                            color: 'rgba(0,0,0,0.1)'
+                        },
+                        ticks: {
+                            font: {
+                                family: 'Special Elite, monospace'
+                            },
+                            maxRotation: 45,
+                            minRotation: 45
+                        }
+                    },
+                    y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        grid: {
+                            color: 'rgba(0,0,0,0.1)'
+                        },
+                        ticks: {
+                            font: {
+                                family: 'Special Elite, monospace'
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: '价格',
+                            font: {
+                                family: 'Special Elite'
+                            }
+                        }
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        grid: {
+                            drawOnChartArea: false
+                        },
+                        ticks: {
+                            font: {
+                                family: 'Special Elite, monospace'
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: '数量',
+                            font: {
+                                family: 'Special Elite'
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    },
+
+    updateBuyStats(stats) {
+        if (!stats || stats.length === 0) {
+            document.getElementById('buy-stat-qty').textContent = 'N/A';
+            document.getElementById('buy-stat-price').textContent = 'N/A';
+            document.getElementById('buy-stat-count').textContent = 'N/A';
+            return;
+        }
+
+        const totalQty = stats.reduce((sum, s) => sum + s.total_quantity, 0);
+        const totalPrice = stats.reduce((sum, s) => sum + (s.avg_price * s.total_quantity), 0);
+        const tradeCount = stats.reduce((sum, s) => sum + s.trade_count, 0);
+
+        document.getElementById('buy-stat-qty').textContent = formatNumber(totalQty);
+        document.getElementById('buy-stat-price').textContent = formatNumber(totalPrice);
+        document.getElementById('buy-stat-count').textContent = tradeCount;
+    },
+
+    // ============================================================
+    // 求购功能
+    // ============================================================
+
+    async loadBuyRequestsData() {
+        if (this.isLoading) return;
+        this.isLoading = true;
+
+        const content = document.getElementById('market-content');
+        content.innerHTML = '<div class="skeleton" style="height:200px;"></div>';
+
+        try {
+            const [data, inventory] = await Promise.all([
+                getBuyRequests(
+                    this.brPage,
+                    PAGE_SIZE,
+                    this.brFilterQuality || null,
+                    this.brFilterSort,
+                    this.brFilterSearch || null,
+                    this.brFilterType || null
+                ),
+                getInventory()
+            ]);
+            
+            this.buyRequests = data || [];
+            this.brTotalCount = data?.[0]?.total_count || 0;
+            this.inventory = inventory || [];
+            this.renderBuyRequests(content);
+        } catch (e) {
+            console.error(e);
+            content.innerHTML = '<div class="empty-state"><p>加载失败</p></div>';
+        } finally {
+            this.isLoading = false;
+        }
+    },
+
+    renderBuyRequests(container) {
+        if (this.buyRequests.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i data-lucide="shopping-bag"></i>
+                    <p>暂无求购订单</p>
+                </div>
+            `;
+            this.renderBrPagination(0);
+            return;
+        }
+
+        container.innerHTML = `
+            <div class="market-list">
+                ${this.buyRequests.map(req => this.buyRequestCard(req)).join('')}
+            </div>
+        `;
+        initItemImages();
+
+        const totalPages = Math.ceil(this.brTotalCount / PAGE_SIZE);
+        this.renderBrPagination(totalPages);
+
+        container.querySelectorAll('.btn-cancel-br').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const id = parseInt(btn.dataset.id);
+                btn.disabled = true;
+                try {
+                    const result = await cancelBuyRequest(id);
+                    showToast(`已取消，返还 ${result.refunded_shells} 果壳币`, 'info');
+                    await updateGlobalShells();
+                    this.loadBuyRequestsData();
+                } catch (e) {
+                    btn.disabled = false;
+                }
+            });
+        });
+
+        container.querySelectorAll('.btn-quick-sell').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const id = parseInt(btn.dataset.id);
+                const itemId = parseInt(btn.dataset.itemId);
+                const name = btn.dataset.name;
+                const price = parseInt(btn.dataset.price);
+                const maxQty = parseInt(btn.dataset.max);
+                this.openQuickSellModal(id, itemId, name, price, maxQty);
+            });
+        });
+
+        container.querySelectorAll('.market-card-item').forEach(card => {
+            card.addEventListener('click', () => {
+                const itemId = parseInt(card.dataset.itemId);
+                const req = this.buyRequests.find(r => r.item_id === itemId);
+                if (req) {
+                    openItemDetail({
+                        id: req.item_id,
+                        name: req.item_name,
+                        quality: req.item_quality,
+                        image_name: req.item_image,
+                        item_type: req.item_type
+                    });
+                }
+            });
+        });
+
+        createIcons({ icons });
+    },
+
+    buyRequestCard(req) {
+        const cfg = QUALITY_CONFIG[req.item_quality];
+        const isOwner = req.buyer_id === this.myId;
+        return `
+            <div class="market-card">
+                <div class="market-card-item" data-item-id="${req.item_id}">
+                    ${itemImageHTML(req.item_name, req.item_quality, req.item_image)}
+                    <div class="market-card-info">
+                        <div class="market-card-name">${req.item_name}</div>
+                        <span class="quality-badge quality-${req.item_quality}">${cfg.label}</span>
+                    </div>
+                </div>
+                <div class="market-card-meta">
+                    <div class="market-card-price-row">
+                        <span class="market-card-unit-price">
+                            <i data-lucide="coins" class="market-coin-icon"></i>
+                            ${formatNumber(req.price_per_unit)} 果壳币
+                        </span>
+                        <span class="market-card-qty">求购 ${req.remaining_quantity}/${req.quantity}</span>
+                    </div>
+                    ${!isOwner ? `<div class="market-card-seller">买家: ${req.buyer_nickname || '未知'}${userBadgeHTML({is_admin: req.buyer_is_admin, is_bot: req.buyer_is_bot})}</div>` : ''}
+                </div>
+                <div class="market-card-actions">
+                    ${isOwner 
+                        ? `<button class="btn btn-danger btn-cancel-br" data-id="${req.request_id}">取消求购</button>`
+                        : `<button class="btn btn-success btn-quick-sell" data-id="${req.request_id}" data-item-id="${req.item_id}" data-name="${req.item_name}" data-price="${req.price_per_unit}" data-max="${req.remaining_quantity}">快速出售</button>`
+                    }
+                </div>
+            </div>
+        `;
+    },
+
+    openQuickSellModal(requestId, itemId, itemName, price, maxQty) {
+        const myItem = this.inventory.find(i => i.item_id === itemId);
+        const myQty = myItem ? myItem.quantity : 0;
+        const sellableQty = Math.min(maxQty, myQty);
+
+        if (myQty <= 0) {
+            showToast('你没有这个物品', 'warn');
+            return;
+        }
+
+        const modal = document.createElement('div');
+        modal.className = 'quick-sell-modal-overlay';
+        modal.innerHTML = `
+            <div class="quick-sell-modal">
+                <div class="quick-sell-header">
+                    <h3>快速出售</h3>
+                    <button class="quick-sell-close">&times;</button>
+                </div>
+                <div class="quick-sell-body">
+                    <p class="qs-item-name">${itemName}</p>
+                    <div class="qs-info-row">
+                        <span>求购单价</span>
+                        <span class="qs-price">${formatNumber(price)} 果壳币</span>
+                    </div>
+                    <div class="qs-info-row">
+                        <span>你拥有</span>
+                        <span>${myQty} 件</span>
+                    </div>
+                    <div class="qs-info-row">
+                        <span>可出售</span>
+                        <span>${sellableQty} 件</span>
+                    </div>
+                    <div class="qs-qty-section">
+                        <label>出售数量</label>
+                        <div class="qs-qty-controls">
+                            <button class="qs-qty-btn qs-minus">−</button>
+                            <input type="number" class="qs-qty-input" value="1" min="1" max="${sellableQty}">
+                            <button class="qs-qty-btn qs-plus">+</button>
+                        </div>
+                        <button class="qs-max-btn">最大</button>
+                    </div>
+                    <div class="qs-summary">
+                        <div class="qs-info-row">
+                            <span>出售总价</span>
+                            <span class="qs-total-price">${formatNumber(price)} 果壳币</span>
+                        </div>
+                        <div class="qs-info-row">
+                            <span>实际获得 (扣5%税)</span>
+                            <span class="qs-received">${formatNumber(Math.floor(price * 0.95))} 果壳币</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="quick-sell-footer">
+                    <button class="btn btn-secondary qs-cancel">取消</button>
+                    <button class="btn btn-success qs-confirm">确认出售</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+
+        const qtyInput = modal.querySelector('.qs-qty-input');
+        const minusBtn = modal.querySelector('.qs-minus');
+        const plusBtn = modal.querySelector('.qs-plus');
+        const maxBtn = modal.querySelector('.qs-max-btn');
+        const totalPriceEl = modal.querySelector('.qs-total-price');
+        const receivedEl = modal.querySelector('.qs-received');
+        const closeBtn = modal.querySelector('.quick-sell-close');
+        const cancelBtn = modal.querySelector('.qs-cancel');
+        const confirmBtn = modal.querySelector('.qs-confirm');
+
+        const updateSummary = () => {
+            let qty = parseInt(qtyInput.value) || 1;
+            qty = Math.max(1, Math.min(qty, sellableQty));
+            qtyInput.value = qty;
+            const total = qty * price;
+            totalPriceEl.textContent = formatNumber(total) + ' 果壳币';
+            receivedEl.textContent = formatNumber(Math.floor(total * 0.95)) + ' 果壳币';
+        };
+
+        minusBtn.addEventListener('click', () => {
+            let v = parseInt(qtyInput.value) || 1;
+            qtyInput.value = Math.max(1, v - 1);
+            updateSummary();
+        });
+
+        plusBtn.addEventListener('click', () => {
+            let v = parseInt(qtyInput.value) || 1;
+            qtyInput.value = Math.min(sellableQty, v + 1);
+            updateSummary();
+        });
+
+        maxBtn.addEventListener('click', () => {
+            qtyInput.value = sellableQty;
+            updateSummary();
+        });
+
+        qtyInput.addEventListener('input', updateSummary);
+
+        const close = () => modal.remove();
+
+        closeBtn.addEventListener('click', close);
+        cancelBtn.addEventListener('click', close);
+        modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+
+        confirmBtn.addEventListener('click', async () => {
+            const qty = parseInt(qtyInput.value) || 1;
+            confirmBtn.disabled = true;
+            confirmBtn.textContent = '出售中...';
+            try {
+                const result = await sellToBuyRequest(requestId, qty);
+                showToast(`成功出售 ${result.quantity} 件，获得 ${formatNumber(result.received_shells)} 果壳币`, 'success');
+                await updateGlobalShells();
+                this.loadInventory();
+                this.loadBuyRequestsData();
+                close();
+            } catch (e) {
+                confirmBtn.disabled = false;
+                confirmBtn.textContent = '确认出售';
+            }
+        });
+
+        createIcons({ icons });
+    },
+
+    renderBrPagination(totalPages) {
+        const pagination = document.getElementById('buy-request-pagination');
+        if (!pagination || totalPages <= 1) {
+            if (pagination) pagination.style.display = totalPages <= 1 ? 'none' : 'flex';
+            return;
+        }
+
+        pagination.style.display = 'flex';
+        
+        const maxVisiblePages = 5;
+        let startPage = Math.max(1, this.brPage - Math.floor(maxVisiblePages / 2));
+        let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+        if (endPage - startPage < maxVisiblePages - 1) {
+            startPage = Math.max(1, endPage - maxVisiblePages + 1);
+        }
+
+        pagination.innerHTML = `
+            <button class="page-btn" data-page="${this.brPage - 1}" ${this.brPage === 1 ? 'disabled' : ''}>
+                <i data-lucide="chevron-left"></i>
+            </button>
+            ${startPage > 1 ? '<button class="page-btn" data-page="1">1</button>' : ''}
+            ${startPage > 2 ? '<span class="page-ellipsis">...</span>' : ''}
+            ${Array.from({ length: endPage - startPage + 1 }, (_, i) => startPage + i).map(p => `
+                <button class="page-btn ${p === this.brPage ? 'active' : ''}" data-page="${p}">${p}</button>
+            `).join('')}
+            ${endPage < totalPages - 1 ? '<span class="page-ellipsis">...</span>' : ''}
+            ${endPage < totalPages ? `<button class="page-btn" data-page="${totalPages}">${totalPages}</button>` : ''}
+            <button class="page-btn" data-page="${this.brPage + 1}" ${this.brPage === totalPages ? 'disabled' : ''}>
+                <i data-lucide="chevron-right"></i>
+            </button>
+        `;
+
+        pagination.querySelectorAll('.page-btn:not([disabled])').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const p = parseInt(btn.dataset.page);
+                if (p >= 1 && p <= totalPages && p !== this.brPage) {
+                    this.brPage = p;
+                    this.loadBuyRequestsData();
+                }
+            });
+        });
+
+        createIcons({ icons });
+    },
+
+    async loadBuyForm() {
+        try {
+            const [items, myRequests] = await Promise.all([
+                getItems(),
+                getMyBuyRequests(1, 100)
+            ]);
+            this.allItems = items || [];
+            this.myBuyRequests = myRequests || [];
+            this.renderBuyForm();
+        } catch (e) {
+            showToast('加载失败', 'error');
+        }
+    },
+
+    renderBuyForm() {
+        const container = document.getElementById('market-content');
+        
+        const availableItems = this.allItems.filter(item => item.item_type !== 'currency');
+
+        container.innerHTML = `
+            <div class="sell-layout">
+                <div class="sell-form card">
+                    <div class="form-group">
+                        <label class="form-label">选择物品</label>
+                        <select class="form-input" id="buy-item-select">
+                            <option value="">-- 选择物品 --</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">求购单价（果壳币）</label>
+                        <input type="number" class="form-input" id="buy-price" placeholder="输入价格" min="1" />
+                        <small class="form-hint">上架价格 ≤ 此价格时会自动购买</small>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">数量</label>
+                        <input type="number" class="form-input" id="buy-qty" value="1" min="1" />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">锁定金额</label>
+                        <div id="buy-lock-info" class="buy-lock-info">0 果壳币</div>
+                    </div>
+                    <button class="btn btn-primary" id="btn-create-buy">
+                        <i data-lucide="shopping-bag"></i>
+                        <span>发布求购</span>
+                    </button>
+                </div>
+                <div class="sell-chart-panel card">
+                    <h3><i data-lucide="trending-up"></i> 物品行情</h3>
+                    <div class="sell-chart-empty" id="buy-chart-empty">
+                        <p>请选择一个物品查看行情</p>
+                    </div>
+                    <div class="sell-chart-container" id="buy-chart-container" style="display:none;">
+                        <div class="chart-tabs">
+                            <button class="chart-tab active" data-group="hour">小时</button>
+                            <button class="chart-tab" data-group="day">日</button>
+                        </div>
+                        <div class="chart-container" style="height:200px;">
+                            <canvas id="buy-trade-chart"></canvas>
+                        </div>
+                        <div class="trade-stats">
+                            <div class="trade-stat">
+                                <span class="stat-label">总交易量</span>
+                                <span class="stat-value" id="buy-stat-qty">-</span>
+                            </div>
+                            <div class="trade-stat">
+                                <span class="stat-label">总交易额</span>
+                                <span class="stat-value" id="buy-stat-price">-</span>
+                            </div>
+                            <div class="trade-stat">
+                                <span class="stat-label">交易次数</span>
+                                <span class="stat-value" id="buy-stat-count">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        upgradeSelectsToSearchable('#buy-item-select', availableItems, { placeholder: '选择物品' });
+
+        const priceInput = container.querySelector('#buy-price');
+        const qtyInput = container.querySelector('#buy-qty');
+        const lockInfo = container.querySelector('#buy-lock-info');
+        const itemSelect = container.querySelector('#buy-item-select');
+
+        function updateLockInfo() {
+            const price = parseInt(priceInput.value) || 0;
+            const qty = parseInt(qtyInput.value) || 1;
+            const total = price * qty;
+            lockInfo.textContent = `${formatNumber(total)} 果壳币`;
+            lockInfo.style.color = total > 0 ? 'var(--seal-red)' : 'var(--ink-soft)';
+        }
+
+        priceInput.addEventListener('input', updateLockInfo);
+        qtyInput.addEventListener('input', updateLockInfo);
+
+        const self = this;
+        itemSelect.addEventListener('change', function() {
+            const itemId = parseInt(this.value);
+            const item = availableItems.find(i => i.id === itemId);
+            if (itemId && item) {
+                self.loadBuyItemStats(itemId, item.name);
+            } else {
+                self.renderBuyChart([], '');
+                self.updateBuyStats([]);
+            }
+        });
+
+        container.querySelectorAll('.chart-tab').forEach(tab => {
+            tab.addEventListener('click', function() {
+                container.querySelectorAll('.chart-tab').forEach(t => t.classList.remove('active'));
+                this.classList.add('active');
+                const itemId = parseInt(itemSelect.value);
+                const item = availableItems.find(i => i.id === itemId);
+                if (itemId && item) {
+                    self.loadBuyItemStats(itemId, item.name, this.dataset.group);
+                }
+            });
+        });
+
+        container.querySelector('#btn-create-buy').addEventListener('click', async () => {
+            const itemId = parseInt(itemSelect.value);
+            const price = parseInt(priceInput.value);
+            const qty = parseInt(qtyInput.value) || 1;
+            if (!itemId) { showToast('请选择物品', 'error'); return; }
+            if (!price || price <= 0) { showToast('请输入有效价格', 'error'); return; }
+
+            const btn = container.querySelector('#btn-create-buy');
+            btn.disabled = true;
+            btn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> 发布中...';
+            createIcons({ icons });
+
+            try {
+                const result = await createBuyRequest(itemId, price, qty);
+                showToast(`求购成功，锁定 ${result.locked_shells} 果壳币`, 'success');
+                await updateGlobalShells();
+                this.loadBuyForm();
+            } catch (e) {
+                btn.disabled = false;
+                btn.innerHTML = '<i data-lucide="shopping-bag"></i> 发布求购';
+                createIcons({ icons });
+            }
+        });
+
+        createIcons({ icons });
+    },
+
+    async loadMyOrdersData() {
+        const content = document.getElementById('market-content');
+        content.innerHTML = '<div class="skeleton" style="height:200px;"></div>';
+        
+        try {
+            // 同时加载出售订单和求购订单
+            const [allOrders, myRequests] = await Promise.all([
+                getMarketOrders(1, 1000),
+                getMyBuyRequests(1, 100)
+            ]);
+            const mySellOrders = (allOrders || []).filter(o => o.seller_id === this.myId);
+            this.myBuyRequests = myRequests || [];
+            this.renderMyOrders(content, mySellOrders);
+        } catch (e) {
+            content.innerHTML = '<div class="empty-state"><p>加载失败</p></div>';
+        }
+    },
+
+    renderMyOrders(container, mySellOrders) {
+        const hasSellOrders = mySellOrders.length > 0;
+        const hasBuyRequests = this.myBuyRequests.length > 0;
+
+        if (!hasSellOrders && !hasBuyRequests) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i data-lucide="clipboard-list"></i>
+                    <p>你没有正在进行的订单</p>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = `
+            <div class="my-orders-section">
+                ${hasSellOrders ? `
+                    <h3 class="section-title"><i data-lucide="store"></i> 出售订单</h3>
+                    <div class="market-list">
+                        ${mySellOrders.map(order => this.orderCard(order, true)).join('')}
+                    </div>
+                ` : ''}
+                ${hasBuyRequests ? `
+                    <h3 class="section-title"><i data-lucide="shopping-bag"></i> 求购订单</h3>
+                    <div class="my-buy-requests-full">
+                        ${this.myBuyRequests.map(req => `
+                            <div class="my-buy-request-card ${req.status}">
+                                <div class="request-card-item">
+                                    ${itemImageHTML(req.item_name, req.item_quality, req.item_image)}
+                                    <div class="request-card-info">
+                                        <div class="request-card-name">${req.item_name}</div>
+                                        <span class="quality-badge quality-${req.item_quality}">${QUALITY_CONFIG[req.item_quality]?.label || req.item_quality}</span>
+                                    </div>
+                                </div>
+                                <div class="request-card-meta">
+                                    <div class="request-card-price-row">
+                                        <span class="request-card-unit-price">
+                                            <i data-lucide="coins" class="market-coin-icon"></i>
+                                            ${formatNumber(req.price_per_unit)} 果壳币
+                                        </span>
+                                        <span class="request-card-qty">剩余 ${req.remaining_quantity}/${req.quantity}</span>
+                                    </div>
+                                    <div class="request-card-status">
+                                        <span class="status-badge status-${req.status}">${req.status === 'active' ? '进行中' : req.status === 'completed' ? '已完成' : '已取消'}</span>
+                                        ${req.status === 'active' ? `<span class="locked-shells">锁定 ${formatNumber(req.locked_shells)} 币</span>` : ''}
+                                    </div>
+                                </div>
+                                <div class="request-card-actions">
+                                    ${req.status === 'active' ? `<button class="btn btn-danger btn-cancel-my-order-br" data-id="${req.request_id}">取消求购</button>` : ''}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : ''}
+            </div>
+        `;
+        initItemImages();
+
+        // 出售订单取消按钮
+        container.querySelectorAll('.btn-cancel').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const id = parseInt(btn.dataset.id);
+                btn.disabled = true;
+                try {
+                    await cancelMarketOrder(id);
+                    showToast('已下架', 'info');
+                    this.loadMyOrdersData();
+                } catch (e) {
+                    btn.disabled = false;
+                }
+            });
+        });
+
+        // 求购订单取消按钮
+        container.querySelectorAll('.btn-cancel-my-order-br').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const id = parseInt(btn.dataset.id);
+                btn.disabled = true;
+                try {
+                    const result = await cancelBuyRequest(id);
+                    showToast(`已取消，返还 ${result.refunded_shells} 果壳币`, 'info');
+                    await updateGlobalShells();
+                    this.loadMyOrdersData();
+                } catch (e) {
+                    btn.disabled = false;
+                }
+            });
+        });
+
+        // 行情按钮
+        container.querySelectorAll('.btn-trade-history').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const itemId = parseInt(btn.dataset.itemId);
+                const itemName = btn.dataset.itemName;
+                this.openTradeHistoryModal(itemId, itemName);
+            });
+        });
+
+        createIcons({ icons });
     }
 };

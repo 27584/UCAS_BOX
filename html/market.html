@@ -4,8 +4,10 @@
     </div>
     <div class="tabs">
         <button class="tab-btn active" data-tab="browse">浏览市场</button>
+        <button class="tab-btn" data-tab="buy-requests">求购大厅</button>
         <button class="tab-btn" data-tab="my">我的订单</button>
         <button class="tab-btn" data-tab="sell">我要出售</button>
+        <button class="tab-btn" data-tab="buy">我要求购</button>
     </div>
     <div id="market-filter" class="market-filter" style="display:none;">
         <div class="filter-row">
@@ -36,8 +38,38 @@
             <input type="text" class="form-input" id="filter-search" placeholder="搜索物品或卖家..." style="width:200px;" />
         </div>
     </div>
+    <div id="buy-request-filter" class="market-filter" style="display:none;">
+        <div class="filter-row">
+            <select class="form-input" id="br-filter-type" style="width:auto;">
+                <option value="">全部类型</option>
+                <option value="collection">收藏品</option>
+                <option value="consumable">消耗品</option>
+                <option value="equipment">装备</option>
+                <option value="material">材料</option>
+                <option value="currency">货币</option>
+                <option value="seed">种子</option>
+            </select>
+            <select class="form-input" id="br-filter-quality" style="width:auto;">
+                <option value="">全部品质</option>
+                <option value="white">普通</option>
+                <option value="green">稀有</option>
+                <option value="blue">珍奇</option>
+                <option value="purple">史诗</option>
+                <option value="orange">传说</option>
+                <option value="red">神圣</option>
+            </select>
+            <select class="form-input" id="br-filter-sort" style="width:auto;">
+                <option value="newest">最新求购</option>
+                <option value="price-high">价格从高到低</option>
+                <option value="price-low">价格从低到高</option>
+                <option value="quality">按稀有度</option>
+            </select>
+            <input type="text" class="form-input" id="br-filter-search" placeholder="搜索物品或买家..." style="width:200px;" />
+        </div>
+    </div>
     <div id="market-content">
         <div class="skeleton" style="height:200px;"></div>
     </div>
     <div id="market-pagination" class="pagination" style="display:none;"></div>
+    <div id="buy-request-pagination" class="pagination" style="display:none;"></div>
 </div>

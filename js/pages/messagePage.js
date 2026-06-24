@@ -1,4 +1,4 @@
-import { getMails, markMailRead, getDmConversations, getDmHistory, sendPrivateMessage, markDmRead, getUnreadDmCount, getReplyNotifications, markNotificationRead, markAllNotificationsRead, getUnreadNotificationCount } from '../api.js';
+import { getMails, markMailRead, markAllMailsRead, getDmConversations, getDmHistory, sendPrivateMessage, markDmRead, getUnreadDmCount, getReplyNotifications, markNotificationRead, markAllNotificationsRead, getUnreadNotificationCount } from '../api.js';
 import { createIcons, icons } from 'lucide';
 import { showToast, renderPagination, bindPagination, timeAgo } from '../utils.js';
 import { currentUser } from '../supabaseClient.js';
@@ -176,6 +176,17 @@ export const messagePage = {
                 this.totalCount = parseInt(data[0].total_count) || 0;
             }
             this.renderMailList();
+
+            const hasUnread = this.mails.some(m => !m.is_read);
+            if (hasUnread) {
+                try {
+                    await markAllMailsRead();
+                    this.mails.forEach(m => { m.is_read = true; });
+                    this.renderMailList();
+                    this.loadBadges();
+                    updateMailBadge();
+                } catch (e) {}
+            }
         } catch (e) {
             if (list) {
                 list.innerHTML = `

@@ -1,4 +1,4 @@
-import { getMails, markMailRead } from '../api.js';
+import { getMails, markMailRead, markAllMailsRead } from '../api.js';
 import { createIcons, icons } from 'lucide';
 import { showToast, renderPagination, bindPagination } from '../utils.js';
 
@@ -22,6 +22,15 @@ export const mailPage = {
                 this.totalCount = parseInt(data[0].total_count) || 0;
             }
             this.renderList();
+
+            const hasUnread = this.mails.some(m => !m.is_read);
+            if (hasUnread) {
+                try {
+                    await markAllMailsRead();
+                    this.mails.forEach(m => { m.is_read = true; });
+                    this.renderList();
+                } catch (e) {}
+            }
         } catch (e) {
             if (list) {
                 list.innerHTML = `

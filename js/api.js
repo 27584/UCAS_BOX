@@ -117,6 +117,10 @@ export async function markMailRead(mailId) {
     return rpc('mark_mail_read', { p_mail_id: mailId });
 }
 
+export async function markAllMailsRead() {
+    return rpc('mark_all_mails_read');
+}
+
 export async function getLotteryRound() {
     return rpc('get_lottery_round');
 }
@@ -149,6 +153,10 @@ export async function getProfile() {
         .single();
     if (error) throw error;
     return data;
+}
+
+export async function updateAvatar(avatarUrl) {
+    return rpc('update_avatar', { p_avatar_url: avatarUrl });
 }
 
 // 获取用户设置
@@ -187,12 +195,7 @@ export async function getItemTradeStats(itemId, groupBy = 'hour') {
 }
 
 export async function getItems() {
-    const { data, error } = await supabase
-        .from('items')
-        .select('*')
-        .order('id');
-    if (error) throw error;
-    return data || [];
+    return rpc('get_all_items');
 }
 
 // ============================================
@@ -650,4 +653,54 @@ export async function markDmRead(otherUserId) {
 
 export async function getUnreadDmCount() {
     return rpc('get_unread_dm_count');
+}
+
+// ============================================
+// 求购功能
+// ============================================
+
+export async function createBuyRequest(itemId, price, quantity = 1) {
+    return rpc('create_buy_request', {
+        p_item_id: itemId,
+        p_price: price,
+        p_quantity: quantity
+    });
+}
+
+export async function cancelBuyRequest(requestId) {
+    return rpc('cancel_buy_request', { p_request_id: requestId });
+}
+
+export async function getMyBuyRequests(page = 1, limit = 20) {
+    return rpc('get_my_buy_requests', { p_page: page, p_limit: limit });
+}
+
+export async function getBuyRequests(page = 1, limit = 10, quality = null, sort = 'newest', search = null, type = null) {
+    return rpc('get_buy_requests', {
+        p_page: page,
+        p_limit: limit,
+        p_quality: quality,
+        p_sort: sort,
+        p_search: search,
+        p_type: type
+    });
+}
+
+export async function sellToBuyRequest(requestId, quantity) {
+    return rpc('sell_to_buy_request', {
+        p_request_id: requestId,
+        p_quantity: quantity
+    });
+}
+
+export async function getMyMarketOrders(page = 1, limit = 20) {
+    return rpc('get_my_market_orders', { p_page: page, p_limit: limit });
+}
+
+export async function getUserMarketOrders(userId, page = 1, limit = 20) {
+    return rpc('get_user_market_orders', { p_user_id: userId, p_page: page, p_limit: limit });
+}
+
+export async function getUserBuyRequests(userId, page = 1, limit = 20) {
+    return rpc('get_user_buy_requests', { p_user_id: userId, p_page: page, p_limit: limit });
 }

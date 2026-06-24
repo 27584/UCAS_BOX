@@ -571,6 +571,39 @@ export const adminPage = {
         let html = items.map(item => {
             const cfg = QUALITY_CONFIG[item.quality] || QUALITY_CONFIG.white;
             const qClass = 'quality-' + (item.quality || 'white');
+
+            // 种子物品显示作物信息
+            let cropInfoHtml = '';
+            if (item.item_type === 'seed' && item.crop_info) {
+                const ci = item.crop_info;
+                const growTime = this.formatGrowTime(ci.grow_seconds);
+                const cropQuality = QUALITY_CONFIG[ci.crop_quality] || QUALITY_CONFIG.white;
+                const dropRange = ci.drop_quantity_min === ci.drop_quantity_max
+                    ? ci.drop_quantity_min
+                    : `${ci.drop_quantity_min}~${ci.drop_quantity_max}`;
+                cropInfoHtml = `
+                    <div class="crop-info">
+                        <div class="crop-info-title">🌱 作物信息</div>
+                        <div class="crop-info-row">
+                            <span class="crop-label">产出：</span>
+                            <span class="crop-value" style="color:${cropQuality.color}">${ci.crop_name || '未知'}</span>
+                        </div>
+                        <div class="crop-info-row">
+                            <span class="crop-label">生长：</span>
+                            <span class="crop-value">${growTime}</span>
+                        </div>
+                        <div class="crop-info-row">
+                            <span class="crop-label">产量：</span>
+                            <span class="crop-value">${dropRange} 个</span>
+                        </div>
+                        <div class="crop-info-row">
+                            <span class="crop-label">经验：</span>
+                            <span class="crop-value">+${ci.exp_reward}</span>
+                        </div>
+                    </div>
+                `;
+            }
+
             return `
                 <div class="item-admin-card ${qClass}">
                     <div class="item-quality-bar ${qClass}"></div>
@@ -585,6 +618,7 @@ export const adminPage = {
                         <span>权重: ${item.drop_weight}</span>
                         <span>ID: ${item.item_id}</span>
                     </div>
+                    ${cropInfoHtml}
                     <div class="item-actions">
                         <button class="btn btn-secondary btn-sm btn-edit-item" data-item-id="${item.item_id}">
                             <i data-lucide="edit-3"></i> 编辑
@@ -618,6 +652,15 @@ export const adminPage = {
                 this.confirmDeleteItem(itemId, itemName, itemType);
             });
         });
+    },
+
+    formatGrowTime(seconds) {
+        if (!seconds) return '未知';
+        if (seconds < 60) return `${seconds}秒`;
+        if (seconds < 3600) return `${Math.floor(seconds / 60)}分钟`;
+        const hours = Math.floor(seconds / 3600);
+        const mins = Math.floor((seconds % 3600) / 60);
+        return mins > 0 ? `${hours}小时${mins}分` : `${hours}小时`;
     },
 
     async confirmDeleteItem(itemId, itemName, itemType) {

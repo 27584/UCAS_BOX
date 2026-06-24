@@ -10,9 +10,15 @@
             <span class="stamp-date">ID CARD</span>
             <span class="profile-num handwritten">№ <span id="profile-uid">--</span></span>
         </div>
-        <div class="profile-avatar">
-            <span id="profile-initial">?</span>
+        <div class="profile-avatar-wrapper" id="profile-avatar-wrapper" title="点击更换头像">
+            <div class="profile-avatar" id="profile-avatar">
+                <span id="profile-initial">?</span>
+            </div>
+            <div class="profile-avatar-edit">
+                <i data-lucide="camera" style="width:16px;height:16px;"></i>
+            </div>
         </div>
+        <input type="file" id="avatar-file-input" accept="image/*" style="display:none;">
         <h2 id="profile-nickname">加载中...</h2>
         <p class="profile-email" id="profile-email"></p>
         <div class="profile-stats">
@@ -49,6 +55,28 @@
             <span id="app-version"></span>
             <span class="ink-red" style="margin-left:8px;">·</span>
             <span style="margin-left:8px;">handcrafted</span>
+        </div>
+    </div>
+</div>
+
+<!-- 头像裁剪弹窗 -->
+<div id="avatar-crop-modal" class="modal" style="display:none;">
+    <div class="modal-overlay" id="avatar-crop-overlay"></div>
+    <div class="modal-content" style="max-width:480px;">
+        <button class="btn-close" id="avatar-crop-close"><i data-lucide="x"></i></button>
+        <h3 style="margin:0 0 16px 0;font-family:'ZCOOL KuaiLe', sans-serif;">裁剪头像</h3>
+        <div class="avatar-crop-container">
+            <canvas id="avatar-crop-canvas"></canvas>
+            <div class="avatar-crop-controls">
+                <div class="crop-control-row">
+                    <label>缩放</label>
+                    <input type="range" id="avatar-zoom-slider" min="0.5" max="3" step="0.01" value="1">
+                </div>
+            </div>
+        </div>
+        <div style="display:flex;gap:12px;margin-top:16px;">
+            <button class="btn btn-secondary" id="avatar-crop-cancel" style="flex:1;">取消</button>
+            <button class="btn btn-success" id="avatar-crop-confirm" style="flex:1;">确认上传</button>
         </div>
     </div>
 </div>

@@ -297,3 +297,70 @@
     }
 }
 
+.user-orders-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.user-order-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: var(--paper-card);
+    border: 1.5px solid var(--ink);
+    transition: transform 0.1s;
+}
+
+.user-order-item:hover {
+    transform: translateX(2px);
+}
+
+.user-order-item-img {
+    flex-shrink: 0;
+}
+
+.user-order-item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.user-order-item-name {
+    font-weight: bold;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.95rem;
+}
+
+.user-order-item-price {
+    font-size: 0.85rem;
+    color: var(--ink-muted);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.user-order-item-price .market-coin-icon {
+    width: 14px;
+    height: 14px;
+    color: #d4a017;
+}
+
+.user-order-item-locked {
+    font-size: 0.75rem;
+    color: #d4a017;
+    margin-top: 4px;
+}
+
+.user-order-action {
+    flex-shrink: 0;
+}
+
+.btn-sm {
+    padding: 6px 14px;
+    font-size: 0.8rem;
+}
+

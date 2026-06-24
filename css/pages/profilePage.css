@@ -61,7 +61,6 @@
 .profile-avatar {
     width: 88px;
     height: 88px;
-    margin: 16px auto 14px;
     border-radius: 0;
     background:
         url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.7'/%3E%3CfeColorMatrix values='0 0 0 0 0.16 0 0 0 0 0.13 0 0 0 0 0.08 0 0 0 0.4 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
@@ -237,6 +236,67 @@
     .setting-info {
         font-size: 0.85rem;
     }
+}
+
+.profile-avatar-wrapper {
+    position: relative;
+    cursor: pointer;
+    display: block;
+    width: 88px;
+    margin: 16px auto 14px;
+}
+
+.profile-avatar-wrapper:hover .profile-avatar-edit {
+    opacity: 1;
+}
+
+.profile-avatar-edit {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 28px;
+    height: 28px;
+    background: var(--accent);
+    border: 2px solid var(--ink);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+}
+
+.avatar-crop-container {
+    text-align: center;
+}
+
+#avatar-crop-canvas {
+    border: 2px solid var(--ink);
+    max-width: 100%;
+    cursor: move;
+    background: var(--paper-bg);
+}
+
+.avatar-crop-controls {
+    margin-top: 16px;
+    padding: 0 8px;
+}
+
+.crop-control-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.crop-control-row label {
+    font-size: 0.85rem;
+    width: 40px;
+    flex-shrink: 0;
+}
+
+.crop-control-row input[type="range"] {
+    flex: 1;
+    cursor: pointer;
 }
 
 

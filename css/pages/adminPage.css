@@ -834,6 +834,40 @@
     font-size: 0.75rem;
 }
 
+/* 种子物品作物信息展示 */
+.item-admin-card .crop-info {
+    background: var(--paper-bg);
+    border: 1px solid var(--ink-faded);
+    border-radius: 0;
+    padding: 8px 12px;
+    margin: 4px 0 4px 8px;
+    font-size: 0.75rem;
+    font-family: var(--font-mono);
+}
+
+.item-admin-card .crop-info-title {
+    font-weight: 600;
+    color: var(--ink);
+    margin-bottom: 6px;
+    font-family: var(--font-display);
+}
+
+.item-admin-card .crop-info-row {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 2px;
+}
+
+.item-admin-card .crop-label {
+    color: var(--ink-faded);
+    min-width: 40px;
+}
+
+.item-admin-card .crop-value {
+    color: var(--ink);
+    font-weight: 500;
+}
+
 .item-search-bar {
     display: flex;
     align-items: center;

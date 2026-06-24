@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     dragon_boat_claimed_10min BOOLEAN DEFAULT false,
     dragon_boat_claimed_60min BOOLEAN DEFAULT false,
     dragon_boat_daily_reset TIMESTAMPTZ DEFAULT NULL, -- 每日重置时间
+    avatar_url TEXT DEFAULT NULL,
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -53,6 +54,9 @@ BEGIN
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'dragon_boat_daily_reset') THEN
         ALTER TABLE public.profiles ADD COLUMN dragon_boat_daily_reset TIMESTAMPTZ DEFAULT NULL;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'avatar_url') THEN
+        ALTER TABLE public.profiles ADD COLUMN avatar_url TEXT DEFAULT NULL;
     END IF;
 END $$;
 
@@ -635,7 +639,7 @@ $$;
 -- ============================================================
 DROP FUNCTION IF EXISTS public.place_market_order(BIGINT, BIGINT, INT);
 CREATE OR REPLACE FUNCTION public.place_market_order(p_item_id BIGINT, p_price BIGINT, p_quantity INT DEFAULT 1)
-RETURNS BIGINT
+RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
@@ -643,13 +647,22 @@ DECLARE
     user_uuid UUID := auth.uid();
     inv_quantity INT;
     new_order_id BIGINT;
+    matched_qty INT;
+    remaining_qty INT;
+    item_name TEXT;
 BEGIN
     IF user_uuid IS NULL THEN
         RAISE EXCEPTION '未登录';
     END IF;
 
-    IF p_price <= 0 OR p_quantity <= 0 THEN
-        RAISE EXCEPTION '价格和数量必须大于0';
+    IF p_price < 20 OR p_quantity <= 0 THEN
+        RAISE EXCEPTION '价格最低20果壳币，数量必须大于0';
+    END IF;
+
+    -- 获取物品名称
+    SELECT name INTO item_name FROM public.items WHERE id = p_item_id;
+    IF item_name IS NULL THEN
+        RAISE EXCEPTION '物品不存在';
     END IF;
 
     -- 检查库存并锁定
@@ -670,12 +683,25 @@ BEGIN
     DELETE FROM public.inventory
     WHERE user_id = user_uuid AND item_id = p_item_id AND quantity <= 0;
 
-    -- 创建订单
-    INSERT INTO public.market_orders (seller_id, item_id, quantity, price_per_unit, type, status)
-    VALUES (user_uuid, p_item_id, p_quantity, p_price, 'sell', 'active')
-    RETURNING id INTO new_order_id;
+    -- 先尝试匹配求购订单
+    matched_qty := public.process_buy_request_match(user_uuid, p_item_id, p_quantity, p_price);
+    remaining_qty := p_quantity - matched_qty;
 
-    RETURN new_order_id;
+    -- 如果还有剩余物品，上架到市场
+    IF remaining_qty > 0 THEN
+        INSERT INTO public.market_orders (seller_id, item_id, quantity, price_per_unit, type, status)
+        VALUES (user_uuid, p_item_id, remaining_qty, p_price, 'sell', 'active')
+        RETURNING id INTO new_order_id;
+    END IF;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'message', '上架成功',
+        'order_id', new_order_id,
+        'matched_quantity', matched_qty,
+        'listed_quantity', remaining_qty,
+        'item_name', item_name
+    );
 END;
 $$;
 
@@ -779,9 +805,9 @@ BEGIN
     SET shells = shells - total_price
     WHERE id = buyer_uuid;
 
-    -- 给卖家钱
+    -- 给卖家钱（扣除5%交易税）
     UPDATE public.profiles
-    SET shells = shells + total_price
+    SET shells = shells + (total_price * 95 / 100)
     WHERE id = order_rec.seller_id;
 
     -- 给买家物品
@@ -818,7 +844,7 @@ BEGIN
         VALUES (
             order_rec.seller_id,
             '订单出售成功',
-            '你上架的「' || public.sanitize_text(item_name) || '」已被「' || public.sanitize_text(buyer_nickname) || '」全部购买，获得 ' || total_price || ' 果壳币。'
+            '你上架的「' || public.sanitize_text(item_name) || '」已被「' || public.sanitize_text(buyer_nickname) || '」全部购买，获得 ' || (total_price * 95 / 100) || ' 果壳币（已扣除5%交易税）。'
         );
     ELSE
         -- 部分购买，减少订单数量
@@ -831,7 +857,7 @@ BEGIN
         VALUES (
             order_rec.seller_id,
             '订单部分出售',
-            '你上架的「' || public.sanitize_text(item_name) || '」被「' || public.sanitize_text(buyer_nickname) || '」购买 ' || buy_qty || ' 件，获得 ' || total_price || ' 果壳币，剩余 ' || (order_rec.quantity - buy_qty) || ' 件。'
+            '你上架的「' || public.sanitize_text(item_name) || '」被「' || public.sanitize_text(buyer_nickname) || '」购买 ' || buy_qty || ' 件，获得 ' || (total_price * 95 / 100) || ' 果壳币（已扣除5%交易税），剩余 ' || (order_rec.quantity - buy_qty) || ' 件。'
         );
     END IF;
 END;
@@ -1354,6 +1380,25 @@ BEGIN
 END;
 $$;
 
+DROP FUNCTION IF EXISTS public.mark_all_mails_read();
+CREATE OR REPLACE FUNCTION public.mark_all_mails_read()
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+BEGIN
+    IF user_uuid IS NULL THEN
+        RAISE EXCEPTION '未登录';
+    END IF;
+
+    UPDATE public.system_mails
+    SET is_read = true
+    WHERE user_id = user_uuid AND is_read = false;
+END;
+$$;
+
 -- ============================================================
 -- 18. RPC 函数：检查是否为管理员
 -- ============================================================
@@ -1457,7 +1502,7 @@ $$;
 -- 21. RPC 函数：获取所有收藏品（管理员）
 -- ============================================================
 DROP FUNCTION IF EXISTS public.admin_get_items();
--- 管理员获取物品列表（支持搜索与筛选）
+-- 管理员获取物品列表（支持搜索与筛选，种子物品附带作物信息）
 DROP FUNCTION IF EXISTS public.admin_get_items(INT, INT, TEXT, TEXT, TEXT);
 CREATE OR REPLACE FUNCTION public.admin_get_items(
     p_page INT DEFAULT 1,
@@ -1466,7 +1511,7 @@ CREATE OR REPLACE FUNCTION public.admin_get_items(
     p_quality TEXT DEFAULT NULL,
     p_item_type TEXT DEFAULT NULL
 )
-RETURNS TABLE(item_id BIGINT, name TEXT, quality TEXT, image_name TEXT, description TEXT, drop_weight INT, item_type TEXT, total_count BIGINT)
+RETURNS TABLE(item_id BIGINT, name TEXT, quality TEXT, image_name TEXT, description TEXT, drop_weight INT, item_type TEXT, total_count BIGINT, crop_info JSONB)
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
@@ -1494,7 +1539,21 @@ BEGIN
           AND (p_item_type IS NULL OR p_item_type = '' OR it.item_type = p_item_type)
     )
     SELECT f.id AS item_id, f.name, f.quality, f.image_name, f.description, f.drop_weight, f.item_type,
-        (SELECT COUNT(*) FROM filtered)::BIGINT AS total_count
+        (SELECT COUNT(*) FROM filtered)::BIGINT AS total_count,
+        CASE WHEN f.item_type = 'seed' THEN
+            (SELECT jsonb_build_object(
+                'grow_seconds', c.grow_seconds,
+                'exp_reward', c.exp_reward,
+                'drop_quantity_min', c.drop_quantity_min,
+                'drop_quantity_max', c.drop_quantity_max,
+                'crop_name', ci.name,
+                'crop_quality', ci.quality,
+                'crop_image_name', ci.image_name
+            )
+            FROM public.crops c
+            LEFT JOIN public.items ci ON c.crop_id = ci.id
+            WHERE c.seed_id = f.id)
+        ELSE NULL END AS crop_info
     FROM filtered f
     ORDER BY f.id
     LIMIT p_limit
@@ -3423,45 +3482,6 @@ DROP POLICY IF EXISTS "Bot configs admin write" ON public.bot_configs;
 CREATE POLICY "Bot configs admin read" ON public.bot_configs FOR SELECT USING (true);
 CREATE POLICY "Bot configs admin write" ON public.bot_configs FOR ALL USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND is_admin = true));
 
--- 将机器人写入 auth.users（和普通用户完全一样）
-DO $$
-BEGIN
-    INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_user_meta_data, created_at, updated_at) VALUES
-        ('66666666-6666-6666-6666-666666666666', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', '66666666-6666-6666-6666-666666666666@ucasbox.local', '__bot_no_login__', now(), '{"nickname":"黑心小贩","is_bot":true}'::jsonb, now(), now())
-    ON CONFLICT (id) DO NOTHING;
-    INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_user_meta_data, created_at, updated_at) VALUES
-        ('77777777-7777-7777-7777-777777777777', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', '77777777-7777-7777-7777-777777777777@ucasbox.local', '__bot_no_login__', now(), '{"nickname":"小卖部","is_bot":true}'::jsonb, now(), now())
-    ON CONFLICT (id) DO NOTHING;
-    INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_user_meta_data, created_at, updated_at) VALUES
-        ('88888888-8888-8888-8888-888888888888', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', '88888888-8888-8888-8888-888888888888@ucasbox.local', '__bot_no_login__', now(), '{"nickname":"小盒子喵喵喵","is_bot":true}'::jsonb, now(), now())
-    ON CONFLICT (id) DO NOTHING;
-EXCEPTION WHEN OTHERS THEN
-    RAISE NOTICE 'auth.users insert skipped (RLS or permission): %', SQLERRM;
-END $$;
-
--- 插入机器人到 profiles，同时插入默认配置
-DO $$
-BEGIN
-    -- 黑心小贩
-    INSERT INTO public.profiles (id, nickname, shells, is_admin, is_bot)
-    VALUES ('66666666-6666-6666-6666-666666666666', '黑心小贩', 999999999, false, true)
-    ON CONFLICT (id) DO UPDATE SET nickname = EXCLUDED.nickname, is_bot = true;
-    INSERT INTO public.bot_configs (bot_id) VALUES ('66666666-6666-6666-6666-666666666666')
-    ON CONFLICT DO NOTHING;
-    -- 小卖部
-    INSERT INTO public.profiles (id, nickname, shells, is_admin, is_bot)
-    VALUES ('77777777-7777-7777-7777-777777777777', '小卖部', 999999999, false, true)
-    ON CONFLICT (id) DO UPDATE SET nickname = EXCLUDED.nickname, is_bot = true;
-    INSERT INTO public.bot_configs (bot_id) VALUES ('77777777-7777-7777-7777-777777777777')
-    ON CONFLICT DO NOTHING;
-    -- 小盒子喵喵喵
-    INSERT INTO public.profiles (id, nickname, shells, is_admin, is_bot)
-    VALUES ('88888888-8888-8888-8888-888888888888', '小盒子喵喵喵', 999999999, false, true)
-    ON CONFLICT (id) DO UPDATE SET nickname = EXCLUDED.nickname, is_bot = true;
-    INSERT INTO public.bot_configs (bot_id) VALUES ('88888888-8888-8888-8888-888888888888')
-    ON CONFLICT DO NOTHING;
-END $$;
-
 -- ============================================================
 -- 管理员：获取所有机器人（含配置与当前挂单）
 -- ============================================================
@@ -4083,7 +4103,7 @@ BEGIN
         p.id AS post_id,
         p.user_id,
         pr.nickname AS user_nickname,
-        NULL::TEXT AS user_avatar,
+        pr.avatar_url AS user_avatar,
         COALESCE(pr.is_admin, false) AS user_is_admin,
         COALESCE(pr.is_bot, false) AS user_is_bot,
         p.content,
@@ -4137,7 +4157,7 @@ BEGIN
         p.id AS post_id,
         p.user_id,
         pr.nickname AS user_nickname,
-        NULL::TEXT AS user_avatar,
+        pr.avatar_url AS user_avatar,
         COALESCE(pr.is_admin, false) AS user_is_admin,
         COALESCE(pr.is_bot, false) AS user_is_bot,
         p.content,
@@ -4300,7 +4320,7 @@ BEGIN
             c.content AS ccontent,
             c.created_at AS ccreated_at,
             pr.nickname AS user_nickname,
-            NULL::TEXT AS user_avatar,
+            pr.avatar_url AS user_avatar,
             COALESCE(pr.is_admin, false) AS user_is_admin,
             COALESCE(pr.is_bot, false) AS user_is_bot,
             (SELECT COUNT(*) FROM public.likes l WHERE l.target_type = 'comment' AND l.target_id = c.id) AS likes_count,
@@ -4322,7 +4342,7 @@ BEGIN
             c.content AS ccontent,
             c.created_at AS ccreated_at,
             pr.nickname AS user_nickname,
-            NULL::TEXT AS user_avatar,
+            pr.avatar_url AS user_avatar,
             COALESCE(pr.is_admin, false) AS user_is_admin,
             COALESCE(pr.is_bot, false) AS user_is_bot,
             (SELECT COUNT(*) FROM public.likes l WHERE l.target_type = 'comment' AND l.target_id = c.id) AS likes_count,
@@ -4697,6 +4717,7 @@ CREATE OR REPLACE FUNCTION public.get_user_profile(p_user_id UUID)
 RETURNS TABLE(
     id UUID,
     nickname TEXT,
+    avatar_url TEXT,
     shells BIGINT,
     created_at TIMESTAMPTZ,
     post_count BIGINT,
@@ -4715,6 +4736,7 @@ BEGIN
     SELECT 
         p.id,
         p.nickname,
+        p.avatar_url,
         p.shells,
         p.created_at,
         (SELECT COUNT(*) FROM public.posts WHERE user_id = p_user_id)::BIGINT AS post_count,
@@ -4789,7 +4811,7 @@ BEGIN
         po.id,
         po.user_id,
         p.nickname AS user_nickname,
-        NULL::TEXT AS user_avatar,
+        p.avatar_url AS user_avatar,
         COALESCE(p.is_admin, false) AS user_is_admin,
         COALESCE(p.is_bot, false) AS user_is_bot,
         po.content,
@@ -6169,6 +6191,637 @@ BEGIN
 
     RETURN jsonb_build_object('success', true, 'message', '已获得种子',
         'item_name', v_actual_name, 'quantity', p_quantity);
+END;
+$$;
+
+-- ============================================================
+-- 求购系统
+-- ============================================================
+
+-- 求购订单表
+CREATE TABLE IF NOT EXISTS public.buy_requests (
+    id BIGSERIAL PRIMARY KEY,
+    buyer_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+    item_id BIGINT REFERENCES public.items(id) ON DELETE CASCADE,
+    price_per_unit BIGINT NOT NULL CHECK (price_per_unit > 0),
+    quantity INT NOT NULL CHECK (quantity > 0),
+    remaining_quantity INT NOT NULL CHECK (remaining_quantity >= 0),
+    locked_shells BIGINT NOT NULL CHECK (locked_shells >= 0),
+    status TEXT DEFAULT 'active' CHECK (status IN ('active','completed','cancelled')),
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_buy_requests_buyer_id ON public.buy_requests(buyer_id);
+CREATE INDEX IF NOT EXISTS idx_buy_requests_item_id ON public.buy_requests(item_id);
+CREATE INDEX IF NOT EXISTS idx_buy_requests_status ON public.buy_requests(status);
+CREATE INDEX IF NOT EXISTS idx_buy_requests_price ON public.buy_requests(item_id, price_per_unit) WHERE status = 'active';
+
+ALTER TABLE public.buy_requests ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Buy requests public read" ON public.buy_requests;
+CREATE POLICY "Buy requests public read"
+    ON public.buy_requests FOR SELECT
+    USING (true);
+
+DROP POLICY IF EXISTS "Users can view own buy requests" ON public.buy_requests;
+CREATE POLICY "Users can view own buy requests"
+    ON public.buy_requests FOR SELECT
+    USING (auth.uid() = buyer_id);
+
+-- ============================================================
+-- RPC 函数：创建求购订单
+-- ============================================================
+DROP FUNCTION IF EXISTS public.create_buy_request(BIGINT, BIGINT, INT);
+CREATE OR REPLACE FUNCTION public.create_buy_request(p_item_id BIGINT, p_price BIGINT, p_quantity INT DEFAULT 1)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_buyer_id UUID := auth.uid();
+    v_total_price BIGINT;
+    v_buyer_shells BIGINT;
+    v_request_id BIGINT;
+    v_item_name TEXT;
+BEGIN
+    IF v_buyer_id IS NULL THEN
+        RAISE EXCEPTION '未登录';
+    END IF;
+
+    IF p_price <= 0 OR p_quantity <= 0 THEN
+        RAISE EXCEPTION '价格和数量必须大于0';
+    END IF;
+
+    -- 获取物品名称
+    SELECT name INTO v_item_name FROM public.items WHERE id = p_item_id;
+    IF v_item_name IS NULL THEN
+        RAISE EXCEPTION '物品不存在';
+    END IF;
+
+    v_total_price := p_price * p_quantity;
+
+    -- 检查并锁定买家余额
+    SELECT shells INTO v_buyer_shells
+    FROM public.profiles
+    WHERE id = v_buyer_id
+    FOR UPDATE;
+
+    IF v_buyer_shells < v_total_price THEN
+        RAISE EXCEPTION '果壳币不足，需要 % 果壳币', v_total_price;
+    END IF;
+
+    -- 扣除果壳币（锁定）
+    UPDATE public.profiles
+    SET shells = shells - v_total_price
+    WHERE id = v_buyer_id;
+
+    -- 创建求购订单
+    INSERT INTO public.buy_requests (
+        buyer_id, item_id, price_per_unit, quantity, 
+        remaining_quantity, locked_shells, status
+    ) VALUES (
+        v_buyer_id, p_item_id, p_price, p_quantity,
+        p_quantity, v_total_price, 'active'
+    ) RETURNING id INTO v_request_id;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'message', '求购订单创建成功',
+        'request_id', v_request_id,
+        'item_name', v_item_name,
+        'locked_shells', v_total_price
+    );
+END;
+$$;
+
+-- ============================================================
+-- RPC 函数：取消求购订单
+-- ============================================================
+DROP FUNCTION IF EXISTS public.cancel_buy_request(BIGINT);
+CREATE OR REPLACE FUNCTION public.cancel_buy_request(p_request_id BIGINT)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_buyer_id UUID := auth.uid();
+    v_request RECORD;
+    v_refund_amount BIGINT;
+BEGIN
+    IF v_buyer_id IS NULL THEN
+        RAISE EXCEPTION '未登录';
+    END IF;
+
+    SELECT * INTO v_request
+    FROM public.buy_requests
+    WHERE id = p_request_id AND buyer_id = v_buyer_id AND status = 'active'
+    FOR UPDATE;
+
+    IF v_request IS NULL THEN
+        RAISE EXCEPTION '求购订单不存在或无法取消';
+    END IF;
+
+    -- 返还剩余的全部锁定金额
+    v_refund_amount := v_request.locked_shells;
+
+    UPDATE public.profiles
+    SET shells = shells + v_refund_amount
+    WHERE id = v_buyer_id;
+
+    UPDATE public.buy_requests
+    SET status = 'cancelled', 
+        remaining_quantity = 0,
+        locked_shells = 0,
+        updated_at = now()
+    WHERE id = p_request_id;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'message', '求购订单已取消',
+        'refunded_shells', v_refund_amount
+    );
+END;
+$$;
+
+-- ============================================================
+-- RPC 函数：获取求购订单列表（用户自己的）
+-- ============================================================
+DROP FUNCTION IF EXISTS public.get_my_buy_requests(INT, INT);
+CREATE OR REPLACE FUNCTION public.get_my_buy_requests(p_page INT DEFAULT 1, p_limit INT DEFAULT 20)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_buyer_id UUID := auth.uid();
+    v_offset INT;
+BEGIN
+    IF v_buyer_id IS NULL THEN
+        RAISE EXCEPTION '未登录';
+    END IF;
+
+    v_offset := (p_page - 1) * p_limit;
+
+    RETURN (
+        SELECT jsonb_agg(t) FROM (
+            SELECT
+                br.id AS request_id,
+                br.item_id,
+                i.name AS item_name,
+                i.quality AS item_quality,
+                i.image_name AS item_image,
+                i.item_type,
+                br.price_per_unit,
+                br.quantity,
+                br.remaining_quantity,
+                br.locked_shells,
+                br.status,
+                br.created_at,
+                br.updated_at,
+                (SELECT COUNT(*) FROM public.buy_requests br2 WHERE br2.buyer_id = v_buyer_id)::BIGINT AS total_count
+            FROM public.buy_requests br
+            JOIN public.items i ON br.item_id = i.id
+            WHERE br.buyer_id = v_buyer_id
+            ORDER BY br.created_at DESC
+            LIMIT p_limit OFFSET v_offset
+        ) t
+    );
+END;
+$$;
+
+-- ============================================================
+-- RPC 函数：获取所有活跃求购订单（公开浏览）
+-- ============================================================
+DROP FUNCTION IF EXISTS public.get_buy_requests(INT, INT, TEXT, TEXT, TEXT, TEXT);
+CREATE OR REPLACE FUNCTION public.get_buy_requests(
+    p_page INT DEFAULT 1,
+    p_limit INT DEFAULT 10,
+    p_quality TEXT DEFAULT NULL,
+    p_sort TEXT DEFAULT 'newest',
+    p_search TEXT DEFAULT NULL,
+    p_type TEXT DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_offset INT;
+    v_quality_order INT;
+BEGIN
+    v_offset := (p_page - 1) * p_limit;
+
+    RETURN (
+        SELECT jsonb_agg(t) FROM (
+            SELECT
+                br.id AS request_id,
+                br.item_id,
+                i.name AS item_name,
+                i.quality AS item_quality,
+                i.image_name AS item_image,
+                i.item_type,
+                br.price_per_unit,
+                br.quantity,
+                br.remaining_quantity,
+                br.buyer_id,
+                p.nickname AS buyer_nickname,
+                p.is_admin AS buyer_is_admin,
+                p.is_bot AS buyer_is_bot,
+                br.created_at,
+                (SELECT COUNT(*) FROM public.buy_requests br2 WHERE br2.status = 'active')::BIGINT AS total_count
+            FROM public.buy_requests br
+            JOIN public.items i ON br.item_id = i.id
+            LEFT JOIN public.profiles p ON br.buyer_id = p.id
+            WHERE br.status = 'active'
+            AND (p_quality IS NULL OR i.quality = p_quality)
+            AND (p_type IS NULL OR i.item_type = p_type)
+            AND (p_search IS NULL OR i.name ILIKE '%' || p_search || '%' OR p.nickname ILIKE '%' || p_search || '%')
+            ORDER BY
+                CASE WHEN p_sort = 'price-high' THEN br.price_per_unit END DESC,
+                CASE WHEN p_sort = 'price-low' THEN br.price_per_unit END ASC,
+                CASE WHEN p_sort = 'quality' THEN
+                    CASE i.quality
+                        WHEN 'red' THEN 7
+                        WHEN 'orange' THEN 6
+                        WHEN 'purple' THEN 5
+                        WHEN 'blue' THEN 4
+                        WHEN 'green' THEN 3
+                        WHEN 'white' THEN 2
+                        ELSE 1
+                    END
+                END DESC,
+                br.created_at DESC
+            LIMIT p_limit OFFSET v_offset
+        ) t
+    );
+END;
+$$;
+
+-- ============================================================
+-- 内部函数：处理上架物品与求购订单的匹配
+-- ============================================================
+DROP FUNCTION IF EXISTS public.process_buy_request_match(UUID, BIGINT, INT, BIGINT);
+CREATE OR REPLACE FUNCTION public.process_buy_request_match(
+    p_seller_id UUID,
+    p_item_id BIGINT,
+    p_quantity INT,
+    p_price BIGINT
+)
+RETURNS INT
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_matched_quantity INT := 0;
+    v_remaining_to_sell INT := p_quantity;
+    v_request RECORD;
+    v_buy_qty INT;
+    v_total_price BIGINT;
+    v_item_name TEXT;
+    v_seller_nickname TEXT;
+    v_buyer_nickname TEXT;
+BEGIN
+    -- 获取物品名称
+    SELECT name INTO v_item_name FROM public.items WHERE id = p_item_id;
+    
+    -- 获取卖家昵称
+    SELECT nickname INTO v_seller_nickname FROM public.profiles WHERE id = p_seller_id;
+
+    -- 查找匹配的求购订单（价格 >= 上架价格，按价格从高到低排序）
+    FOR v_request IN
+        SELECT * FROM public.buy_requests
+        WHERE item_id = p_item_id
+        AND status = 'active'
+        AND remaining_quantity > 0
+        AND price_per_unit >= p_price
+        ORDER BY price_per_unit DESC, created_at ASC
+        FOR UPDATE OF buy_requests
+    LOOP
+        IF v_remaining_to_sell <= 0 THEN
+            EXIT;
+        END IF;
+
+        -- 计算本次可购买数量
+        v_buy_qty := LEAST(v_remaining_to_sell, v_request.remaining_quantity);
+        v_total_price := v_buy_qty * p_price;
+
+        -- 获取买家昵称
+        SELECT nickname INTO v_buyer_nickname FROM public.profiles WHERE id = v_request.buyer_id;
+
+        -- 从求购订单的锁定金额中扣除实际支付金额（上架价格），差额保留在锁定中
+        UPDATE public.buy_requests
+        SET remaining_quantity = remaining_quantity - v_buy_qty,
+            locked_shells = locked_shells - v_total_price,
+            updated_at = now()
+        WHERE id = v_request.id;
+
+        -- 给卖家支付上架价格对应的金额（扣除5%交易税）
+        UPDATE public.profiles
+        SET shells = shells + (v_total_price * 95 / 100)
+        WHERE id = p_seller_id;
+
+        -- 给买家添加物品
+        PERFORM public.inventory_add_item(v_request.buyer_id, p_item_id, v_buy_qty);
+
+        -- 记录交易历史（使用上架价格作为实际交易价格）
+        INSERT INTO public.market_trade_history (
+            item_id, seller_id, buyer_id,
+            price_per_unit, quantity, total_price
+        ) VALUES (
+            p_item_id, p_seller_id, v_request.buyer_id,
+            p_price, v_buy_qty, v_total_price
+        );
+
+        -- 给买家发送邮件
+        INSERT INTO public.system_mails (user_id, title, content)
+        VALUES (
+            v_request.buyer_id,
+            '求购订单成交',
+            '你的求购订单「' || public.sanitize_text(v_item_name) || '」已成交 ' || v_buy_qty || ' 件，单价 ' || p_price || ' 果壳币（你设置的求购价格为 ' || v_request.price_per_unit || ' 果壳币）。卖家：' || public.sanitize_text(v_seller_nickname) || '。差额将在订单完成或取消时返还。'
+        );
+
+        -- 给卖家发送邮件
+        INSERT INTO public.system_mails (user_id, title, content)
+        VALUES (
+            p_seller_id,
+            '物品被求购购买',
+            '你上架的「' || public.sanitize_text(v_item_name) || '」已被求购订单购买 ' || v_buy_qty || ' 件，单价 ' || p_price || ' 果壳币。已获得 ' || (v_total_price * 95 / 100) || ' 果壳币（已扣除5%交易税）。买家：' || public.sanitize_text(v_buyer_nickname) || '。'
+        );
+
+        -- 如果求购订单已完全成交，更新状态并返还剩余锁定金额
+        IF v_request.remaining_quantity - v_buy_qty <= 0 THEN
+            UPDATE public.buy_requests
+            SET status = 'completed', updated_at = now()
+            WHERE id = v_request.id;
+
+            -- 返还剩余锁定金额（差额）给买家
+            UPDATE public.profiles
+            SET shells = shells + (SELECT locked_shells FROM public.buy_requests WHERE id = v_request.id)
+            WHERE id = v_request.buyer_id;
+
+            -- 更新锁定金额为0
+            UPDATE public.buy_requests
+            SET locked_shells = 0
+            WHERE id = v_request.id;
+        END IF;
+
+        v_matched_quantity := v_matched_quantity + v_buy_qty;
+        v_remaining_to_sell := v_remaining_to_sell - v_buy_qty;
+    END LOOP;
+
+    RETURN v_matched_quantity;
+END;
+$$;
+
+DROP FUNCTION IF EXISTS public.get_all_items();
+CREATE OR REPLACE FUNCTION public.get_all_items()
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    RETURN (
+        SELECT jsonb_agg(t) FROM (
+            SELECT id, name, quality, image_name, description, drop_weight, item_type
+            FROM public.items
+            ORDER BY id
+        ) t
+    );
+END;
+$$;
+
+DROP FUNCTION IF EXISTS public.sell_to_buy_request(BIGINT, INT);
+CREATE OR REPLACE FUNCTION public.sell_to_buy_request(p_request_id BIGINT, p_quantity INT)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_seller_id UUID := auth.uid();
+    v_request RECORD;
+    v_sell_qty INT;
+    v_total_price BIGINT;
+    v_item_name TEXT;
+    v_seller_nickname TEXT;
+    v_buyer_nickname TEXT;
+    v_inv_qty INT;
+BEGIN
+    IF v_seller_id IS NULL THEN
+        RAISE EXCEPTION '未登录';
+    END IF;
+
+    IF p_quantity <= 0 THEN
+        RAISE EXCEPTION '数量必须大于0';
+    END IF;
+
+    SELECT br.*, i.name AS item_name INTO v_request
+    FROM public.buy_requests br
+    JOIN public.items i ON br.item_id = i.id
+    WHERE br.id = p_request_id AND br.status = 'active' AND br.remaining_quantity > 0
+    FOR UPDATE OF br;
+
+    IF v_request IS NULL THEN
+        RAISE EXCEPTION '求购订单不存在或已完成';
+    END IF;
+
+    IF v_request.buyer_id = v_seller_id THEN
+        RAISE EXCEPTION '不能出售给自己的求购订单';
+    END IF;
+
+    v_item_name := v_request.item_name;
+
+    SELECT nickname INTO v_seller_nickname FROM public.profiles WHERE id = v_seller_id;
+    SELECT nickname INTO v_buyer_nickname FROM public.profiles WHERE id = v_request.buyer_id;
+
+    SELECT quantity INTO v_inv_qty
+    FROM public.inventory
+    WHERE user_id = v_seller_id AND item_id = v_request.item_id
+    FOR UPDATE;
+
+    IF v_inv_qty IS NULL OR v_inv_qty <= 0 THEN
+        RAISE EXCEPTION '你没有这个物品';
+    END IF;
+
+    v_sell_qty := LEAST(p_quantity, v_inv_qty, v_request.remaining_quantity);
+    v_total_price := v_sell_qty * v_request.price_per_unit;
+
+    UPDATE public.inventory
+    SET quantity = quantity - v_sell_qty
+    WHERE user_id = v_seller_id AND item_id = v_request.item_id;
+
+    DELETE FROM public.inventory
+    WHERE user_id = v_seller_id AND item_id = v_request.item_id AND quantity <= 0;
+
+    UPDATE public.buy_requests
+    SET remaining_quantity = remaining_quantity - v_sell_qty,
+        locked_shells = locked_shells - v_total_price,
+        updated_at = now()
+    WHERE id = p_request_id;
+
+    UPDATE public.profiles
+    SET shells = shells + (v_total_price * 95 / 100)
+    WHERE id = v_seller_id;
+
+    PERFORM public.inventory_add_item(v_request.buyer_id, v_request.item_id, v_sell_qty);
+
+    INSERT INTO public.market_trade_history (
+        item_id, seller_id, buyer_id,
+        price_per_unit, quantity, total_price
+    ) VALUES (
+        v_request.item_id, v_seller_id, v_request.buyer_id,
+        v_request.price_per_unit, v_sell_qty, v_total_price
+    );
+
+    INSERT INTO public.system_mails (user_id, title, content)
+    VALUES (
+        v_request.buyer_id,
+        '求购订单成交',
+        '你的求购订单「' || public.sanitize_text(v_item_name) || '」已成交 ' || v_sell_qty || ' 件，单价 ' || v_request.price_per_unit || ' 果壳币。卖家：' || public.sanitize_text(v_seller_nickname) || '。差额将在订单完成或取消时返还。'
+    );
+
+    INSERT INTO public.system_mails (user_id, title, content)
+    VALUES (
+        v_seller_id,
+        '快速出售成功',
+        '你出售的「' || public.sanitize_text(v_item_name) || '」已成交 ' || v_sell_qty || ' 件，单价 ' || v_request.price_per_unit || ' 果壳币。已获得 ' || (v_total_price * 95 / 100) || ' 果壳币（已扣除5%交易税）。买家：' || public.sanitize_text(v_buyer_nickname) || '。'
+    );
+
+    IF v_request.remaining_quantity - v_sell_qty <= 0 THEN
+        UPDATE public.buy_requests
+        SET status = 'completed', updated_at = now()
+        WHERE id = p_request_id;
+
+        UPDATE public.profiles
+        SET shells = shells + (SELECT locked_shells FROM public.buy_requests WHERE id = p_request_id)
+        WHERE id = v_request.buyer_id;
+
+        UPDATE public.buy_requests
+        SET locked_shells = 0
+        WHERE id = p_request_id;
+    END IF;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'message', '出售成功',
+        'quantity', v_sell_qty,
+        'total_price', v_total_price,
+        'received_shells', v_total_price * 95 / 100
+    );
+END;
+$$;
+
+DROP FUNCTION IF EXISTS public.update_avatar(TEXT);
+CREATE OR REPLACE FUNCTION public.update_avatar(p_avatar_url TEXT)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_user_id UUID := auth.uid();
+BEGIN
+    IF v_user_id IS NULL THEN
+        RAISE EXCEPTION '未登录';
+    END IF;
+
+    IF p_avatar_url IS NOT NULL AND length(p_avatar_url) > 500000 THEN
+        RAISE EXCEPTION '头像文件过大';
+    END IF;
+
+    UPDATE public.profiles
+    SET avatar_url = p_avatar_url
+    WHERE id = v_user_id;
+END;
+$$;
+
+DROP FUNCTION IF EXISTS public.get_my_market_orders(INT, INT);
+CREATE OR REPLACE FUNCTION public.get_my_market_orders(p_page INT DEFAULT 1, p_limit INT DEFAULT 20)
+RETURNS SETOF JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_user_id UUID := auth.uid();
+    v_offset INT := (p_page - 1) * p_limit;
+BEGIN
+    IF v_user_id IS NULL THEN
+        RAISE EXCEPTION '未登录';
+    END IF;
+
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'id', mo.id,
+        'item_id', mo.item_id,
+        'item_name', i.name,
+        'item_quality', i.quality,
+        'item_image', i.image_name,
+        'price', mo.price,
+        'quantity', mo.quantity,
+        'created_at', mo.created_at
+    )
+    FROM public.market_orders mo
+    JOIN public.items i ON mo.item_id = i.id
+    WHERE mo.seller_id = v_user_id AND mo.status = 'active'
+    ORDER BY mo.created_at DESC
+    LIMIT p_limit OFFSET v_offset;
+END;
+$$;
+
+DROP FUNCTION IF EXISTS public.get_user_market_orders(UUID, INT, INT);
+CREATE OR REPLACE FUNCTION public.get_user_market_orders(p_user_id UUID, p_page INT DEFAULT 1, p_limit INT DEFAULT 20)
+RETURNS SETOF JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_offset INT := (p_page - 1) * p_limit;
+BEGIN
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'order_id', mo.id,
+        'item_id', mo.item_id,
+        'item_name', i.name,
+        'item_quality', i.quality,
+        'item_image', i.image_name,
+        'price_per_unit', mo.price_per_unit,
+        'quantity', mo.quantity,
+        'created_at', mo.created_at
+    )
+    FROM public.market_orders mo
+    JOIN public.items i ON mo.item_id = i.id
+    WHERE mo.seller_id = p_user_id AND mo.status = 'active'
+    ORDER BY mo.created_at DESC
+    LIMIT p_limit OFFSET v_offset;
+END;
+$$;
+
+DROP FUNCTION IF EXISTS public.get_user_buy_requests(UUID, INT, INT);
+CREATE OR REPLACE FUNCTION public.get_user_buy_requests(p_user_id UUID, p_page INT DEFAULT 1, p_limit INT DEFAULT 20)
+RETURNS SETOF JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_offset INT := (p_page - 1) * p_limit;
+BEGIN
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'request_id', br.id,
+        'item_id', br.item_id,
+        'item_name', i.name,
+        'item_quality', i.quality,
+        'item_image', i.image_name,
+        'price_per_unit', br.price_per_unit,
+        'quantity', br.quantity,
+        'remaining_quantity', br.remaining_quantity,
+        'locked_shells', br.locked_shells,
+        'created_at', br.created_at
+    )
+    FROM public.buy_requests br
+    JOIN public.items i ON br.item_id = i.id
+    WHERE br.buyer_id = p_user_id AND br.status = 'active'
+    ORDER BY br.created_at DESC
+    LIMIT p_limit OFFSET v_offset;
 END;
 $$;
 
