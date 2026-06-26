@@ -1,0 +1,97 @@
+<div class="explore-page">
+    <div class="explore-header">
+        <h2><i data-lucide="map"></i> 真实世界探索</h2>
+        <div class="explore-status">
+            <span class="location-indicator" id="location-status">
+                <i data-lucide="loader-2" class="spin"></i> 定位中...
+            </span>
+        </div>
+    </div>
+
+    <div class="explore-content">
+        <div class="map-container" id="map-container">
+            <div class="map-loading" id="map-loading">
+                <i data-lucide="loader-2" class="spin"></i>
+                <span>加载地图中...</span>
+            </div>
+            <div class="map-error" id="map-error" style="display:none;">
+                <i data-lucide="alert-circle"></i>
+                <span>无法加载地图，请检查网络</span>
+            </div>
+        </div>
+
+        <div class="explore-sidebar">
+            <div class="explore-sidebar-header">
+                <h3><i data-lucide="compass"></i> 探索点</h3>
+                <span class="point-count" id="point-count">0</span>
+            </div>
+            <div class="explore-point-list" id="explore-point-list">
+                <div class="explore-loading"><i data-lucide="loader-2" class="spin"></i> 加载中...</div>
+            </div>
+            <div class="explore-tips">
+                <i data-lucide="info"></i>
+                <span>靠近探索点可触发探索，每日限3次</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="explore-modal" id="explore-modal" style="display:none;">
+        <div class="modal-overlay" onclick="closeExploreModal()"></div>
+        <div class="modal-content explore-modal-content">
+            <button class="btn-close" onclick="closeExploreModal()"><i data-lucide="x"></i></button>
+            <div class="explore-modal-header">
+                <i data-lucide="map-pin" class="explore-modal-icon"></i>
+                <h3 id="explore-modal-title">探索点名称</h3>
+            </div>
+            <div class="explore-modal-body">
+                <p id="explore-modal-desc">探索点描述</p>
+                <div class="explore-modal-info">
+                    <div class="info-item">
+                        <i data-lucide="coins"></i>
+                        <span>奖励：<strong id="explore-modal-reward">100</strong> 果壳币</span>
+                    </div>
+                    <div class="info-item">
+                        <i data-lucide="gift"></i>
+                        <span>物品概率：<strong id="explore-modal-chance">30%</strong></span>
+                    </div>
+                    <div class="info-item">
+                        <i data-lucide="clock"></i>
+                        <span>今日剩余：<strong id="explore-modal-remaining">3</strong> 次</span>
+                    </div>
+                </div>
+                <div class="distance-info" id="distance-info">
+                    <i data-lucide="navigation"></i>
+                    <span>距离：<strong id="explore-distance">--</strong></span>
+                </div>
+            </div>
+            <div class="explore-modal-footer">
+                <button class="btn btn-secondary" onclick="closeExploreModal()">取消</button>
+                <button class="btn btn-primary" id="btn-explore" onclick="doExplore()">
+                    <i data-lucide="search"></i>
+                    <span>开始探索</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="explore-result-modal" id="explore-result-modal" style="display:none;">
+        <div class="modal-overlay" onclick="closeResultModal()"></div>
+        <div class="modal-content explore-result-content">
+            <div class="result-icon" id="result-icon">
+                <i data-lucide="check-circle"></i>
+            </div>
+            <h3 id="result-title">探索成功</h3>
+            <div class="result-details">
+                <div class="result-item" id="result-shells">
+                    <i data-lucide="coins"></i>
+                    <span>获得 <strong>100</strong> 果壳币</span>
+                </div>
+                <div class="result-item" id="result-item" style="display:none;">
+                    <i data-lucide="gift"></i>
+                    <span>获得物品：<strong id="result-item-name">--</strong></span>
+                </div>
+            </div>
+            <button class="btn btn-primary" onclick="closeResultModal()">确定</button>
+        </div>
+    </div>
+</div>

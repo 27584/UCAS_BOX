@@ -2,10 +2,17 @@
 // 版本信息与更新日志
 // ============================================
 
-export const VERSION = 'v0.7.1_beta';
+export const VERSION = 'v0.8.0_beta';
 export const VERSION_CODE = 7; // 绝对版本号
 
 export const CHANGELOG = [{
+        version: 'v0.8.0_beta',
+        date: '2026-06-26',
+        type: 'feature',
+        features: [
+            "新增世界探索",
+        ]
+    },{
         version: 'v0.7.1_beta',
         date: '2026-06-24',
         type: 'feature',

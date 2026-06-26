@@ -734,10 +734,10 @@ export function openItemDetail(item) {
                 '<i data-lucide="edit-3"></i>' +
                 '<span>使用改名卡</span>' +
                 '</button>';
-        } else if (item.name === '端午节福袋') {
-            actionHtml = '<button class="btn btn-primary" id="use-dragon-boat-btn" style="width:100%;margin-top:16px;">' +
+        } else if (item.reward_pool_id) {
+            actionHtml = '<button class="btn btn-primary" id="use-consumable-pool-btn" style="width:100%;margin-top:16px;">' +
                 '<i data-lucide="gift"></i>' +
-                '<span>打开福袋</span>' +
+                '<span>打开</span>' +
                 '</button>';
         }
     }
@@ -761,12 +761,10 @@ export function openItemDetail(item) {
                     closeItemDetail();
                     setTimeout(() => window.openRenameModal && window.openRenameModal(), 100);
                 });
-            } else if (item.name === '端午节福袋') {
-                document.getElementById('use-dragon-boat-btn').addEventListener('click', async () => {
-                    if (window.useDragonBoatBag) {
-                        closeItemDetail();
-                        setTimeout(() => window.useDragonBoatBag(), 100);
-                    }
+            } else if (item.reward_pool_id) {
+                document.getElementById('use-consumable-pool-btn').addEventListener('click', async () => {
+                    closeItemDetail();
+                    setTimeout(() => window.useConsumablePoolItem(item.item_id), 100);
                 });
             }
         }

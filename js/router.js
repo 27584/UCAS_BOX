@@ -14,6 +14,7 @@ import { submitPage } from './pages/submitPage.js';
 import { activityPage } from './pages/activityPage.js';
 import { feedPage } from './pages/feedPage.js';
 import { followPage } from './pages/followPage.js';
+import { explorePage } from './pages/explorePage.js';
 import { requireAuth, updateNavVisibility, updateGlobalShells, updateMailBadge } from './auth.js';
 import { currentUser } from './supabaseClient.js';
 
@@ -34,6 +35,7 @@ const routes = {
     activity: activityPage,
     feed: feedPage,
     follow: followPage,
+    explore: explorePage,
 };
 
 async function loadTemplate(name) {

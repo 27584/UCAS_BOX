@@ -2,7 +2,7 @@ import { initAuth, resendVerificationEmail, updateMailBadge } from './auth.js';
 import { router } from './router.js';
 import { createIcons, icons } from 'lucide';
 import { showToast, itemImageHTML, openItemDetail, QUALITY_CONFIG, initItemImages } from './utils.js';
-import { useRenameCard, useDragonBoatBag, getMinVersion, getReplyNotifications, markAllNotificationsRead, getUnreadNotificationCount } from './api.js';
+import { useRenameCard, useDragonBoatBag, useConsumablePool, getMinVersion, getReplyNotifications, markAllNotificationsRead, getUnreadNotificationCount } from './api.js';
 import { formatNumber, timeAgo, userAvatarHTML, userBadgeHTML } from './utils.js';
 import { VERSION, VERSION_CODE } from './version.js';
 import { currentUser } from './supabaseClient.js';
@@ -15,6 +15,7 @@ import { currentUser } from './supabaseClient.js';
 window.resendVerificationEmail = resendVerificationEmail;
 window.openRenameModal = openRenameModal;
 window.useDragonBoatBag = useDragonBoatBagMain;
+window.useConsumablePoolItem = useConsumablePoolItem;
 
 // 禁止移动端双指缩放/双击缩放
 function preventZoom() {
@@ -300,7 +301,8 @@ window.showDropModal = showDropModal;
 console.log('[main.js] showDropModal registered, typeof =', typeof window.showDropModal);
 
 // ============================================
-// 端午节福袋
+// ============================================
+// 端午节福袋（已迁移到奖池系统，保留为兼容）
 // ============================================
 async function useDragonBoatBagMain() {
     const result = await useDragonBoatBag();
@@ -329,6 +331,52 @@ async function useDragonBoatBagMain() {
         }, 500);
     } else {
         showToast(result?.message || '打开失败', 'error');
+    }
+}
+
+// ============================================
+// 消耗品奖池
+// ============================================
+async function useConsumablePoolItem(itemId) {
+    try {
+        const result = await useConsumablePool(itemId);
+
+        if (result && result.success) {
+            showToast(result.message, 'success');
+            
+            if (result.reward_type === 'item' && result.item_name) {
+                showDropModal({
+                    item_id: result.item_id,
+                    item_name: result.item_name,
+                    item_quality: result.item_quality || 'white',
+                    item_image: result.item_image,
+                    item_quantity: result.item_quantity || 1
+                });
+            } else if (result.reward_type === 'shells') {
+                showDropModal({
+                    item_name: `${result.shells_amount} 果壳币`,
+                    item_quality: 'orange'
+                });
+            } else if (result.reward_type === 'exp') {
+                showDropModal({
+                    item_name: `${result.exp_amount} 经验值`,
+                    item_quality: 'blue'
+                });
+            }
+            
+            setTimeout(() => {
+                if (window.refreshInventory) {
+                    window.refreshInventory();
+                }
+                if (window.updateGlobalShells) {
+                    window.updateGlobalShells();
+                }
+            }, 500);
+        } else {
+            showToast(result?.message || '使用失败', 'error');
+        }
+    } catch (e) {
+        showToast('使用失败：' + e.message, 'error');
     }
 }
 

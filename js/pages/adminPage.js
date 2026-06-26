@@ -1,4 +1,4 @@
-import { checkAdmin, getUserDetail, getUserInventory, getSystemStats, adminGetItems, adminGetAllItems, adminAddItem, adminAddItemDefinition, adminUpdateItemDefinition, getItems, getPendingSubmissions, approveSubmission, rejectSubmission, getLotteryRound, drawLotteryRound, getLotteryHistory, adminBotReplenish, getAllBotsWithConfig, updateBotConfig, adminBotListItem, adminBotCancelOrder, getBotOrders, adminUpdateUserShells, adminAdjustUserShells, adminRemoveUserItem, adminClearUserItems, adminSetUserAdmin, adminGetUsers, adminChangeUserNickname, adminUpdateCropConfig, adminGetCropBySeedId, adminDeleteItem, adminDeleteUser, getUserEmailVerified, adminCreateUser, adminBanUser, adminUnbanUser } from '../api.js';
+import { checkAdmin, getUserDetail, getUserInventory, getSystemStats, adminGetItems, adminGetAllItems, adminAddItem, adminAddItemDefinition, adminUpdateItemDefinition, getItems, getPendingSubmissions, approveSubmission, rejectSubmission, getLotteryRound, drawLotteryRound, getLotteryHistory, adminBotReplenish, getAllBotsWithConfig, updateBotConfig, adminBotListItem, adminBotCancelOrder, getBotOrders, adminUpdateUserShells, adminAdjustUserShells, adminRemoveUserItem, adminClearUserItems, adminSetUserAdmin, adminGetUsers, adminChangeUserNickname, adminUpdateCropConfig, adminGetCropBySeedId, adminDeleteItem, adminDeleteUser, getUserEmailVerified, adminCreateUser, adminBanUser, adminUnbanUser, adminGetExplorationPoints, adminAddExplorationPoint, adminUpdateExplorationPoint, adminDeleteExplorationPoint, adminGetExplorationHistory, adminGetRewardPools, adminGetRewardPoolDetail, adminCreateRewardPool, adminUpdateRewardPool, adminDeleteRewardPool, adminAddRewardPoolItem, adminUpdateRewardPoolItem, adminDeleteRewardPoolItem, adminGetRewardPoolDraws } from '../api.js';
 import { supabase } from '../supabaseClient.js';
 import { router } from '../router.js';
 import { createIcons, icons } from 'lucide';
@@ -8,12 +8,20 @@ export const adminPage = {
     users: [],
     items: [],
     submissions: [],
+    explorePoints: [],
+    rewardPools: [],
+    adminMap: null,
+    adminMapMarkers: [],
+    adminMapCircles: [],
+    adminMapVisible: true,
+    poolPage: 1, poolLimit: 20, poolTotal: 0, poolTypeFilter: '',
     // 分页状态
     userPage: 1, userLimit: 20, userTotal: 0, userSearch: '',
     itemPage: 1, itemLimit: 50, itemTotal: 0, itemSearch: '',
     subPage: 1, subLimit: 20, subTotal: 0,
     invPage: 1, invLimit: 20, invTotal: 0,
     lottoPage: 1, lottoLimit: 10, lottoTotal: 0,
+    explorePage: 1, exploreLimit: 20, exploreTotal: 0,
 
     async render(container) {
         // 先校验权限，成功再渲染DOM、绑定事件
@@ -29,6 +37,8 @@ export const adminPage = {
         // DOM渲染完成后再绑定事件
         this.attachEvents(container);
         createIcons({ icons });
+
+        setTimeout(() => this.initAdminMap(), 500);
     },
 
     async checkPermission() {
@@ -70,6 +80,8 @@ export const adminPage = {
                 if (tab === 'submissions') this.loadSubmissions();
                 if (tab === 'lottery') this.loadLotteryInfo();
                 if (tab === 'bots') this.loadBots();
+                if (tab === 'explore') this.loadExplorePoints();
+                if (tab === 'reward-pools') this.loadRewardPools();
             });
         }); // 修复：原代码缺失这个闭合括号
 
@@ -165,6 +177,27 @@ export const adminPage = {
                     })();
                     return;
                 }
+            });
+        }
+
+        // 探索点管理按钮
+        const addExplorePointBtn = container.querySelector('#btn-open-add-explore-point');
+        if (addExplorePointBtn) addExplorePointBtn.addEventListener('click', () => this.showAddExplorePointModal());
+
+        const viewHistoryBtn = container.querySelector('#btn-view-explore-history');
+        if (viewHistoryBtn) viewHistoryBtn.addEventListener('click', () => this.showExploreHistoryModal());
+
+        const locateBtn = container.querySelector('#btn-map-locate');
+        if (locateBtn) locateBtn.addEventListener('click', () => this.locateOnMap());
+
+        const addPoolBtn = container.querySelector('#btn-open-add-pool');
+        if (addPoolBtn) addPoolBtn.addEventListener('click', () => this.showAddPoolModal());
+
+        const poolTypeFilter = container.querySelector('#pool-type-filter');
+        if (poolTypeFilter) {
+            poolTypeFilter.addEventListener('change', () => {
+                this.poolTypeFilterValue = poolTypeFilter.value || '';
+                this.loadRewardPools(1);
             });
         }
     },
@@ -863,6 +896,16 @@ export const adminPage = {
                             <input type="number" class="form-input" id="edit-item-weight" value="${item.drop_weight}" />
                         </div>
 
+                        <div id="consumable-pool-section" style="margin-top:16px;padding-top:16px;border-top:1.5px dashed var(--ink-faded);">
+                            <h4 style="margin:0 0 12px;font-family:var(--font-mono);font-size:0.95rem;"><i data-lucide="gift" style="width:16px;height:16px;vertical-align:middle;"></i> 消耗品奖池（仅消耗品类型有效）</h4>
+                            <div class="form-group">
+                                <label class="form-label">关联奖池</label>
+                                <select class="form-input" id="edit-item-reward-pool">
+                                    <option value="">无（普通消耗品）</option>
+                                </select>
+                            </div>
+                        </div>
+
                         <div id="crop-config-section" style="display:none;margin-top:16px;padding-top:16px;border-top:1.5px dashed var(--ink-faded);">
                             <h4 style="margin:0 0 12px;font-family:var(--font-mono);font-size:0.95rem;"><i data-lucide="sprout" style="width:16px;height:16px;vertical-align:middle;"></i> 作物配置</h4>
                             <div class="form-group">
@@ -923,6 +966,8 @@ export const adminPage = {
         typeSelect.addEventListener('change', toggleCropSection);
         toggleCropSection();
 
+        await this._loadPoolSelect('#edit-item-reward-pool', item.reward_pool_id, ['consumable', 'general']);
+
         if (item.item_type === 'seed') {
             const cropConfig = await adminGetCropBySeedId(itemId);
             if (cropConfig) {
@@ -961,11 +1006,13 @@ export const adminPage = {
             const description = document.getElementById('edit-item-desc').value.trim();
             const weight = parseInt(document.getElementById('edit-item-weight').value);
             const weightVal = isNaN(weight) ? 100 : weight;
+            const rewardPoolId = document.getElementById('edit-item-reward-pool').value;
+            const poolIdVal = rewardPoolId ? parseInt(rewardPoolId) : null;
 
             if (!name) { showToast('名称不能为空', 'error'); return; }
 
             try {
-                await adminUpdateItemDefinition(itemId, name, quality, itemType, imageName, description, weightVal);
+                await adminUpdateItemDefinition(itemId, name, quality, itemType, imageName, description, weightVal, poolIdVal);
 
                 if (itemType === 'seed') {
                     const cropId = parseInt(document.getElementById('edit-crop-id').value);
@@ -1023,7 +1070,7 @@ export const adminPage = {
         }
     },
 
-    showAddItemModal() {
+    async showAddItemModal() {
         const existing = document.getElementById('add-item-modal');
         if (existing) existing.remove();
 
@@ -1063,6 +1110,26 @@ export const adminPage = {
                             <label class="form-label">权重（越小越稀有）</label>
                             <input type="number" class="form-input" id="add-item-weight" placeholder="100" value="100" />
                         </div>
+                        <div class="form-group">
+                            <label class="form-label">类型</label>
+                            <select class="form-input" id="add-item-type">
+                                <option value="collection">收藏品</option>
+                                <option value="consumable">消耗品</option>
+                                <option value="equipment">装备</option>
+                                <option value="material">材料</option>
+                                <option value="currency">货币</option>
+                                <option value="seed">种子</option>
+                            </select>
+                        </div>
+                        <div id="add-consumable-pool-section" style="margin-top:16px;padding-top:16px;border-top:1.5px dashed var(--ink-faded);">
+                            <h4 style="margin:0 0 12px;font-family:var(--font-mono);font-size:0.95rem;"><i data-lucide="gift" style="width:16px;height:16px;vertical-align:middle;"></i> 消耗品奖池</h4>
+                            <div class="form-group">
+                                <label class="form-label">关联奖池</label>
+                                <select class="form-input" id="add-item-reward-pool">
+                                    <option value="">无（普通消耗品）</option>
+                                </select>
+                            </div>
+                        </div>
                         <button class="btn btn-primary" id="btn-confirm-add-item" style="width:100%;margin-top:16px;">
                             <i data-lucide="plus"></i>
                             <span>添加物品</span>
@@ -1078,6 +1145,8 @@ export const adminPage = {
         modal.querySelector('.modal-overlay').addEventListener('click', closeModal);
         modal.querySelector('.modal-close-btn').addEventListener('click', closeModal);
         createIcons({ icons });
+
+        await this._loadPoolSelect('#add-item-reward-pool', null, ['consumable', 'general']);
 
         // 图像预览
         const imgInput = modal.querySelector('#add-item-image');
@@ -1101,8 +1170,11 @@ export const adminPage = {
             const description = modal.querySelector('#add-item-desc').value.trim();
             const weightInput = modal.querySelector('#add-item-weight').value;
             const imageName = modal.querySelector('#add-item-image').value.trim();
+            const itemType = modal.querySelector('#add-item-type').value;
+            const rewardPoolId = modal.querySelector('#add-item-reward-pool').value;
             const w = parseInt(weightInput);
             const weight = isNaN(w) ? 100 : w;
+            const poolIdVal = rewardPoolId ? parseInt(rewardPoolId) : null;
 
             if (!name) {
                 showToast('请输入物品名称', 'error');
@@ -1115,7 +1187,7 @@ export const adminPage = {
             createIcons({ icons });
 
             try {
-                await adminAddItemDefinition(name, quality, imageName, description, weight);
+                await adminAddItemDefinition(name, quality, imageName, description, weight, itemType, poolIdVal);
                 showToast('添加成功', 'success');
                 closeModal();
                 await this.loadStats();
@@ -2020,6 +2092,1464 @@ export const adminPage = {
                 }
                 btn.disabled = false;
             });
+        });
+    },
+
+    // ============================================
+    // 探索点管理
+    // ============================================
+
+    async loadExplorePoints(page = 1) {
+        this.explorePage = page;
+        const list = document.getElementById('explore-point-list-admin');
+        if (!list) return;
+
+        try {
+            const data = await adminGetExplorationPoints(page, this.exploreLimit);
+            this.explorePoints = data || [];
+            if (data && data.length > 0) {
+                this.exploreTotal = parseInt(data[0].total_count) || 0;
+            } else {
+                this.exploreTotal = 0;
+            }
+            this.renderExplorePoints();
+        } catch (e) {
+            console.error('loadExplorePoints error:', e);
+            list.innerHTML = '<div class="empty-state"><p>加载失败</p></div>';
+        }
+    },
+
+    renderExplorePoints() {
+        const list = document.getElementById('explore-point-list-admin');
+        if (!list) return;
+
+        if (this.explorePoints.length === 0) {
+            list.innerHTML = '<div class="empty-state"><p>暂无探索点</p></div>';
+            return;
+        }
+
+        let html = this.explorePoints.map(point => {
+            let rewardInfo = '';
+            if (point.reward_pool_id) {
+                rewardInfo = `<span class="pool-badge">奖池 #${point.reward_pool_id}</span>`;
+            } else if (point.reward_shells || point.reward_item_name) {
+                const shells = point.reward_shells ? `${point.reward_shells} 果壳币` : '';
+                const item = point.reward_item_name ? `${this.escHtml(point.reward_item_name)}` : '';
+                rewardInfo = `${shells}${item ? ' + ' + item : ''}`;
+            } else {
+                rewardInfo = '无奖励';
+            }
+
+            return `
+                <div class="explore-point-card-admin" data-point-id="${point.id}">
+                    <div class="point-icon-admin">
+                        <i data-lucide="map-pin"></i>
+                    </div>
+                    <div class="point-info-admin">
+                        <span class="point-name-admin">${this.escHtml(point.name)}</span>
+                        <span class="point-coords-admin">
+                            ${point.latitude.toFixed(4)}, ${point.longitude.toFixed(4)}
+                            | 半径: ${point.radius_meters}m
+                            | 每日限制: ${point.daily_limit}次
+                        </span>
+                    </div>
+                    <div class="point-reward-admin">
+                        <i data-lucide="gift"></i>
+                        <span>${rewardInfo}</span>
+                    </div>
+                    <div class="point-actions-admin">
+                        <button class="btn btn-secondary btn-sm btn-edit-explore-point" data-point-id="${point.id}">
+                            <i data-lucide="edit-3"></i> 编辑
+                        </button>
+                        <button class="btn btn-danger btn-sm btn-delete-explore-point" data-point-id="${point.id}" data-point-name="${this.escHtml(point.name)}">
+                            <i data-lucide="trash-2"></i> 删除
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        html += renderPagination(this.explorePage, this.exploreTotal, this.exploreLimit);
+
+        list.innerHTML = html;
+        createIcons({ icons });
+        bindPagination(list, (p) => this.loadExplorePoints(p));
+
+        // 绑定编辑和删除按钮
+        list.querySelectorAll('.btn-edit-explore-point').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const pointId = parseInt(btn.dataset.pointId);
+                this.showEditExplorePointModal(pointId);
+            });
+        });
+
+        list.querySelectorAll('.btn-delete-explore-point').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const pointId = parseInt(btn.dataset.pointId);
+                const pointName = btn.dataset.pointName;
+                await this.deleteExplorePoint(pointId, pointName);
+            });
+        });
+    },
+
+    async showAddExplorePointModal(prefillLat, prefillLng) {
+        const existing = document.getElementById('add-explore-point-modal');
+        if (existing) existing.remove();
+
+        const latVal = prefillLat ? prefillLat.toFixed(6) : '';
+        const lngVal = prefillLng ? prefillLng.toFixed(6) : '';
+
+        const modalHtml = `
+            <div id="add-explore-point-modal" class="modal" style="display:flex;">
+                <div class="modal-overlay"></div>
+                <div class="modal-content" style="max-width:560px;max-height:90vh;overflow-y:auto;">
+                    <div class="modal-header">
+                        <h3><i data-lucide="map-pin"></i> 添加探索点</h3>
+                        <button class="modal-close-btn">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label class="form-label">名称 <span class="required">*</span></label>
+                            <input type="text" class="form-input" id="add-point-name" placeholder="探索点名称" maxlength="50" />
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">描述</label>
+                            <input type="text" class="form-input" id="add-point-desc" placeholder="探索点描述（可选）" />
+                        </div>
+                        <div class="explore-point-form-row">
+                            <div class="form-group coords">
+                                <label class="form-label">纬度 <span class="required">*</span></label>
+                                <input type="number" class="form-input" id="add-point-lat" placeholder="如 39.9042" step="0.000001" value="${latVal}" />
+                            </div>
+                            <div class="form-group coords">
+                                <label class="form-label">经度 <span class="required">*</span></label>
+                                <input type="number" class="form-input" id="add-point-lng" placeholder="如 116.4074" step="0.000001" value="${lngVal}" />
+                            </div>
+                        </div>
+                        <div class="explore-point-form-row">
+                            <div class="form-group">
+                                <label class="form-label">触发半径（米）</label>
+                                <input type="number" class="form-input" id="add-point-radius" value="50" min="10" max="500" />
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">每日探索限制</label>
+                                <input type="number" class="form-input" id="add-point-daily-limit" value="3" min="1" max="10" />
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">奖励奖池（可选）</label>
+                            <select class="form-input" id="add-point-pool" data-pool-select>
+                                <option value="">无奖池奖励</option>
+                            </select>
+                            <div class="form-hint">关联奖池后，探索时将从奖池抽取奖励</div>
+                            <button class="btn btn-secondary btn-sm" id="btn-quick-create-pool" style="margin-top:8px;">
+                                <i data-lucide="plus"></i> 快速创建专属奖池
+                            </button>
+                        </div>
+
+                        <div class="form-group" id="add-point-pool-preview" style="display:none;">
+                            <label class="form-label">奖池奖励预览</label>
+                            <div class="pool-preview-list" id="add-pool-preview-list"></div>
+                        </div>
+
+                        <button class="btn btn-primary" id="btn-confirm-add-point" style="width:100%;margin-top:16px;">
+                            <i data-lucide="plus"></i>
+                            <span>添加探索点</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        const modal = document.getElementById('add-explore-point-modal');
+        const closeModal = () => modal.remove();
+        modal.querySelector('.modal-overlay').addEventListener('click', closeModal);
+        modal.querySelector('.modal-close-btn').addEventListener('click', closeModal);
+        createIcons({ icons });
+
+        // 加载奖池选择
+        this._loadPoolSelect('#add-point-pool', null, ['general', 'explore']);
+
+        const poolSelect = modal.querySelector('#add-point-pool');
+        const poolPreview = modal.querySelector('#add-point-pool-preview');
+        const previewList = modal.querySelector('#add-pool-preview-list');
+
+        poolSelect.addEventListener('change', async () => {
+            const poolId = parseInt(poolSelect.value);
+            if (poolId) {
+                const detail = await adminGetRewardPoolDetail(poolId);
+                if (detail?.items && detail.items.length > 0) {
+                    poolPreview.style.display = 'block';
+                    const totalWeight = detail.items.reduce((sum, item) => sum + (item.weight || 0), 0);
+                    previewList.innerHTML = detail.items.map(item => {
+                        const pct = totalWeight > 0 ? ((item.weight / totalWeight) * 100).toFixed(1) : '0';
+                        let desc = '';
+                        if (item.reward_type === 'item') {
+                            desc = `${item.item_name || '物品'} x${item.item_quantity}`;
+                        } else if (item.reward_type === 'shells') {
+                            desc = `${item.shells_amount} 果壳币`;
+                        } else if (item.reward_type === 'exp') {
+                            desc = `${item.exp_amount} 经验`;
+                        } else {
+                            desc = '空奖励';
+                        }
+                        return `<div class="preview-item"><span>${desc}</span><span class="preview-weight">${item.weight} (${pct}%)</span></div>`;
+                    }).join('');
+                } else {
+                    poolPreview.style.display = 'block';
+                    previewList.innerHTML = '<div class="empty-state"><p>该奖池暂无奖励</p></div>';
+                }
+            } else {
+                poolPreview.style.display = 'none';
+            }
+        });
+
+        modal.querySelector('#btn-quick-create-pool').addEventListener('click', async () => {
+            const name = modal.querySelector('#add-point-name').value.trim() || '新奖池';
+            try {
+                const result = await adminCreateRewardPool(name + '专属奖池', '探索点奖励奖池', 'explore');
+                if (result?.success) {
+                    showToast('奖池创建成功', 'success');
+                    await this._loadPoolSelect('#add-point-pool', result.id, ['general', 'explore']);
+                }
+            } catch (e) {
+                showToast('创建奖池失败', 'error');
+            }
+        });
+
+        // 确认添加
+        modal.querySelector('#btn-confirm-add-point').addEventListener('click', async () => {
+            const name = modal.querySelector('#add-point-name').value.trim();
+            const description = modal.querySelector('#add-point-desc').value.trim();
+            const latitude = parseFloat(modal.querySelector('#add-point-lat').value);
+            const longitude = parseFloat(modal.querySelector('#add-point-lng').value);
+            const radiusMeters = parseInt(modal.querySelector('#add-point-radius').value) || 50;
+            const dailyLimit = parseInt(modal.querySelector('#add-point-daily-limit').value) || 3;
+            const rewardPoolId = parseInt(modal.querySelector('#add-point-pool').value) || null;
+
+            if (!name) {
+                showToast('请输入探索点名称', 'error');
+                return;
+            }
+            if (!latitude || !longitude || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+                showToast('请输入有效的经纬度', 'error');
+                return;
+            }
+
+            const btn = modal.querySelector('#btn-confirm-add-point');
+            btn.disabled = true;
+            btn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> 添加中...';
+            createIcons({ icons });
+
+            try {
+                const result = await adminAddExplorationPoint(
+                    name, latitude, longitude, description,
+                    radiusMeters, 0, null, 0, dailyLimit, rewardPoolId
+                );
+                if (result?.success) {
+                    showToast(result.message || '添加成功', 'success');
+                    closeModal();
+                    await this.loadExplorePoints(1);
+                    this.updateAdminMapMarkers();
+                } else {
+                    showToast(result?.message || '添加失败', 'error');
+                }
+            } catch (e) {
+                showToast('添加失败：' + e.message, 'error');
+            }
+
+            btn.disabled = false;
+            btn.innerHTML = '<i data-lucide="plus"></i><span>添加探索点</span>';
+            createIcons({ icons });
+        });
+    },
+
+    async _loadPoolSelect(selector, selectId = null, poolType = null) {
+        const sel = document.querySelector(selector);
+        if (!sel) return;
+
+        try {
+            const pools = await adminGetRewardPools(1, 100, poolType);
+            sel.innerHTML = '<option value="">无奖池奖励</option>';
+            if (pools && pools.length > 0) {
+                pools.forEach(pool => {
+                    const opt = document.createElement('option');
+                    opt.value = pool.id;
+                    opt.textContent = `${pool.name} (${pool.item_count}个奖励)`;
+                    sel.appendChild(opt);
+                });
+            }
+            if (selectId) {
+                sel.value = selectId;
+            }
+        } catch (e) {
+            console.error('加载奖池失败:', e);
+        }
+    },
+
+    async showEditExplorePointModal(pointId) {
+        const point = this.explorePoints.find(p => p.id === pointId);
+        if (!point) return;
+
+        const existing = document.getElementById('edit-explore-point-modal');
+        if (existing) existing.remove();
+
+        const modalHtml = `
+            <div id="edit-explore-point-modal" class="modal" style="display:flex;">
+                <div class="modal-overlay"></div>
+                <div class="modal-content" style="max-width:560px;max-height:90vh;overflow-y:auto;">
+                    <div class="modal-header">
+                        <h3><i data-lucide="edit-3"></i> 编辑探索点 #${pointId}</h3>
+                        <button class="modal-close-btn">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label class="form-label">名称 <span class="required">*</span></label>
+                            <input type="text" class="form-input" id="edit-point-name" value="${this.escHtml(point.name)}" maxlength="50" />
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">描述</label>
+                            <input type="text" class="form-input" id="edit-point-desc" value="${this.escHtml(point.description || '')}" />
+                        </div>
+                        <div class="explore-point-form-row">
+                            <div class="form-group coords">
+                                <label class="form-label">纬度 <span class="required">*</span></label>
+                                <input type="number" class="form-input" id="edit-point-lat" value="${point.latitude}" step="0.000001" />
+                            </div>
+                            <div class="form-group coords">
+                                <label class="form-label">经度 <span class="required">*</span></label>
+                                <input type="number" class="form-input" id="edit-point-lng" value="${point.longitude}" step="0.000001" />
+                            </div>
+                        </div>
+                        <div class="explore-point-form-row">
+                            <div class="form-group">
+                                <label class="form-label">触发半径（米）</label>
+                                <input type="number" class="form-input" id="edit-point-radius" value="${point.radius_meters}" min="10" max="500" />
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">每日探索限制</label>
+                                <input type="number" class="form-input" id="edit-point-daily-limit" value="${point.daily_limit}" min="1" max="10" />
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">奖励奖池</label>
+                            <select class="form-input" id="edit-point-pool" data-pool-select>
+                                <option value="">无奖池奖励</option>
+                            </select>
+                            <div class="form-hint">关联奖池后，探索时将从奖池抽取奖励</div>
+                            <button class="btn btn-secondary btn-sm" id="btn-edit-create-pool" style="margin-top:8px;">
+                                <i data-lucide="plus"></i> 创建专属奖池
+                            </button>
+                        </div>
+
+                        <div class="form-group" id="edit-point-pool-preview" style="display:none;">
+                            <label class="form-label">奖池奖励预览</label>
+                            <div class="pool-preview-list" id="edit-pool-preview-list"></div>
+                        </div>
+
+                        <button class="btn btn-primary" id="btn-save-point" style="width:100%;margin-top:16px;">保存</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        const modal = document.getElementById('edit-explore-point-modal');
+        const closeModal = () => modal.remove();
+        modal.querySelector('.modal-overlay').addEventListener('click', closeModal);
+        modal.querySelector('.modal-close-btn').addEventListener('click', closeModal);
+        createIcons({ icons });
+
+        // 加载奖池选择并设置当前值
+        await this._loadPoolSelect('#edit-point-pool', point.reward_pool_id, ['general', 'explore']);
+
+        const poolSelect = modal.querySelector('#edit-point-pool');
+        const poolPreview = modal.querySelector('#edit-point-pool-preview');
+        const previewList = modal.querySelector('#edit-pool-preview-list');
+
+        const loadPoolPreview = async () => {
+            const poolId = parseInt(poolSelect.value);
+            if (poolId) {
+                const detail = await adminGetRewardPoolDetail(poolId);
+                if (detail?.items && detail.items.length > 0) {
+                    poolPreview.style.display = 'block';
+                    const totalWeight = detail.items.reduce((sum, item) => sum + (item.weight || 0), 0);
+                    previewList.innerHTML = detail.items.map(item => {
+                        const pct = totalWeight > 0 ? ((item.weight / totalWeight) * 100).toFixed(1) : '0';
+                        let desc = '';
+                        if (item.reward_type === 'item') {
+                            desc = `${item.item_name || '物品'} x${item.item_quantity}`;
+                        } else if (item.reward_type === 'shells') {
+                            desc = `${item.shells_amount} 果壳币`;
+                        } else if (item.reward_type === 'exp') {
+                            desc = `${item.exp_amount} 经验`;
+                        } else {
+                            desc = '空奖励';
+                        }
+                        return `<div class="preview-item"><span>${desc}</span><span class="preview-weight">${item.weight} (${pct}%)</span></div>`;
+                    }).join('');
+                } else {
+                    poolPreview.style.display = 'block';
+                    previewList.innerHTML = '<div class="empty-state"><p>该奖池暂无奖励</p></div>';
+                }
+            } else {
+                poolPreview.style.display = 'none';
+            }
+        };
+
+        poolSelect.addEventListener('change', loadPoolPreview);
+        if (point.reward_pool_id) {
+            await loadPoolPreview();
+        }
+
+        modal.querySelector('#btn-edit-create-pool').addEventListener('click', async () => {
+            const name = modal.querySelector('#edit-point-name').value.trim() || '新奖池';
+            try {
+                const result = await adminCreateRewardPool(name + '专属奖池', '探索点奖励奖池', 'explore');
+                if (result?.success) {
+                    showToast('奖池创建成功', 'success');
+                    await this._loadPoolSelect('#edit-point-pool', result.id, ['general', 'explore']);
+                    await loadPoolPreview();
+                }
+            } catch (e) {
+                showToast('创建奖池失败', 'error');
+            }
+        });
+
+        // 保存
+        modal.querySelector('#btn-save-point').addEventListener('click', async () => {
+            const name = modal.querySelector('#edit-point-name').value.trim();
+            const description = modal.querySelector('#edit-point-desc').value.trim();
+            const latitude = parseFloat(modal.querySelector('#edit-point-lat').value);
+            const longitude = parseFloat(modal.querySelector('#edit-point-lng').value);
+            const radiusMeters = parseInt(modal.querySelector('#edit-point-radius').value) || 50;
+            const dailyLimit = parseInt(modal.querySelector('#edit-point-daily-limit').value) || 3;
+            const rewardPoolId = parseInt(poolSelect.value) || null;
+
+            if (!name) {
+                showToast('请输入探索点名称', 'error');
+                return;
+            }
+            if (!latitude || !longitude) {
+                showToast('请输入有效的经纬度', 'error');
+                return;
+            }
+
+            const btn = modal.querySelector('#btn-save-point');
+            btn.disabled = true;
+            btn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> 保存中...';
+            createIcons({ icons });
+
+            try {
+                const result = await adminUpdateExplorationPoint(
+                    pointId, name, description, latitude, longitude,
+                    radiusMeters, 0, null, 0, dailyLimit, rewardPoolId
+                );
+                if (result?.success) {
+                    showToast(result.message || '保存成功', 'success');
+                    closeModal();
+                    this.loadExplorePoints(this.explorePage);
+                } else {
+                    showToast(result?.message || '保存失败', 'error');
+                }
+            } catch (e) {
+                showToast('保存失败：' + e.message, 'error');
+            }
+
+            btn.disabled = false;
+            btn.innerHTML = '保存';
+        });
+    },
+
+    async _loadExplorePointItemSelect(selector) {
+        const sel = document.querySelector(selector);
+        if (!sel) return;
+        try {
+            const items = await adminGetItems(1, 1000);
+            if (!items || items.length === 0) {
+                sel.innerHTML = '<option value="">无可用物品</option>';
+                return;
+            }
+            sel.innerHTML = '<option value="">无物品奖励</option>';
+            upgradeSelectsToSearchable(selector, items, { placeholder: '选择奖励物品' });
+        } catch (e) {
+            sel.innerHTML = '<option value="">加载失败</option>';
+        }
+    },
+
+    async deleteExplorePoint(pointId, pointName) {
+        const ok = await showConfirm(
+            `确定要删除探索点「${pointName}」吗？\n\n此操作不可撤销！`,
+            { okText: '删除', okClass: 'btn-danger', danger: true }
+        );
+        if (!ok) return;
+
+        try {
+            const result = await adminDeleteExplorationPoint(pointId);
+            if (result?.success) {
+                showToast(result.message || '删除成功', 'success');
+                await this.loadExplorePoints(this.explorePage);
+                this.updateAdminMapMarkers();
+            } else {
+                showToast(result?.message || '删除失败', 'error');
+            }
+        } catch (e) {
+            showToast('删除失败：' + e.message, 'error');
+        }
+    },
+
+    async showExploreHistoryModal() {
+        const existing = document.getElementById('explore-history-modal');
+        if (existing) existing.remove();
+
+        const modalHtml = `
+            <div id="explore-history-modal" class="modal" style="display:flex;">
+                <div class="modal-overlay"></div>
+                <div class="modal-content explore-history-modal-content">
+                    <div class="modal-header">
+                        <h3><i data-lucide="history"></i> 探索历史记录</h3>
+                        <button class="modal-close-btn">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="explore-history-list" id="explore-history-list-content">
+                            <div class="skeleton" style="height:40px;"></div>
+                            <div class="skeleton" style="height:40px;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        const modal = document.getElementById('explore-history-modal');
+        const closeModal = () => modal.remove();
+        modal.querySelector('.modal-overlay').addEventListener('click', closeModal);
+        modal.querySelector('.modal-close-btn').addEventListener('click', closeModal);
+        createIcons({ icons });
+
+        const listEl = modal.querySelector('#explore-history-list-content');
+
+        try {
+            const history = await adminGetExplorationHistory(1, 50);
+            if (!history || history.length === 0) {
+                listEl.innerHTML = '<div class="empty-state"><p>暂无探索记录</p></div>';
+                return;
+            }
+
+            listEl.innerHTML = history.map(h => {
+                const time = new Date(h.explored_at).toLocaleString();
+                const reward = h.reward_shells
+                    ? `${h.reward_shells} 果壳币`
+                    : '';
+                const itemReward = h.reward_item_name
+                    ? ` + ${this.escHtml(h.reward_item_name)}`
+                    : '';
+
+                return `
+                    <div class="explore-history-item">
+                        <span class="history-user">${this.escHtml(h.user_nickname || '匿名')}</span>
+                        <span class="history-point">探索「${this.escHtml(h.point_name)}」</span>
+                        <span class="history-reward">${reward}${itemReward}</span>
+                        <span class="history-time">${time}</span>
+                    </div>
+                `;
+            }).join('');
+        } catch (e) {
+            listEl.innerHTML = '<div class="empty-state"><p>加载失败</p></div>';
+        }
+    },
+
+    // ============================================
+    // 探索管理地图
+    // ============================================
+
+    initAdminMap() {
+        if (this.adminMap) {
+            this.adminMap.invalidateSize();
+            this.updateAdminMapMarkers();
+            return;
+        }
+
+        const mapEl = document.getElementById('explore-admin-map');
+        if (!mapEl) return;
+
+        if (!window.L) {
+            const script = document.createElement('script');
+            script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+            script.onload = () => {
+                const link = document.createElement('link');
+                link.rel = 'stylesheet';
+                link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+                document.head.appendChild(link);
+                this._initAdminMapAfterLoad();
+            };
+            script.onerror = () => {
+                document.getElementById('admin-map-loading').style.display = 'none';
+                document.getElementById('admin-map-error').style.display = 'flex';
+            };
+            document.head.appendChild(script);
+        } else {
+            this._initAdminMapAfterLoad();
+        }
+    },
+
+    _initAdminMapAfterLoad() {
+        const loadingEl = document.getElementById('admin-map-loading');
+        if (loadingEl) loadingEl.style.display = 'none';
+
+        this.adminMap = L.map('explore-admin-map', {
+            zoomControl: true,
+            attributionControl: false
+        }).setView([39.9042, 116.4074], 14);
+
+        L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
+            subdomains: '1234',
+            attribution: '© 高德地图'
+        }).addTo(this.adminMap);
+
+        this.adminMap.on('click', (e) => {
+            if (this._isLocating) return;
+            this.showAddExplorePointModal(e.latlng.lat, e.latlng.lng);
+        });
+
+        this.updateAdminMapMarkers();
+    },
+
+    _removeUserMarker() {
+        if (this._adminUserMarker) {
+            this.adminMap.removeLayer(this._adminUserMarker);
+            this._adminUserMarker = null;
+        }
+    },
+
+    updateAdminMapMarkers() {
+        if (!this.adminMap) return;
+
+        this.adminMapMarkers.forEach(m => this.adminMap.removeLayer(m));
+        this.adminMapMarkers = [];
+        this.adminMapCircles.forEach(c => this.adminMap.removeLayer(c));
+        this.adminMapCircles = [];
+
+        const points = this.explorePoints || [];
+
+        if (points.length === 0) return;
+
+        const bounds = [];
+
+        points.forEach(point => {
+            const icon = L.divIcon({
+                className: 'admin-point-marker',
+                html: `<div class="admin-point-marker-inner">
+                    <i data-lucide="map-pin"></i>
+                </div>`,
+                iconSize: [36, 36],
+                iconAnchor: [18, 36]
+            });
+
+            const marker = L.marker([point.latitude, point.longitude], {
+                icon,
+                draggable: true
+            }).addTo(this.adminMap);
+
+            marker.bindPopup(`
+                <div class="admin-map-popup">
+                    <b>${this.escHtml(point.name)}</b>
+                    <br><small>${this.escHtml(point.description || '')}</small>
+                    <br><small>半径: ${point.radius_meters}m</small>
+                    <br>
+                    <button class="btn btn-primary btn-xs btn-edit-map-point" data-point-id="${point.id}" style="margin-top:6px;padding:4px 8px;font-size:0.7rem;">
+                        编辑
+                    </button>
+                </div>
+            `);
+
+            marker.on('dragend', async (e) => {
+                const newLat = e.target.getLatLng().lat;
+                const newLng = e.target.getLatLng().lng;
+
+                try {
+                    const result = await adminUpdateExplorationPoint(
+                        point.id, null, null, newLat, newLng, null, null, null, null, null
+                    );
+                    if (result?.success) {
+                        showToast('位置已更新', 'success');
+                        point.latitude = newLat;
+                        point.longitude = newLng;
+                        this.renderExplorePoints();
+                        this.updateAdminMapCircles();
+                    }
+                } catch (err) {
+                    showToast('更新失败', 'error');
+                    marker.setLatLng([point.latitude, point.longitude]);
+                }
+            });
+
+            marker.on('popupopen', () => {
+                createIcons({ icons });
+                const editBtn = document.querySelector('.btn-edit-map-point');
+                if (editBtn) {
+                    editBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const pointId = parseInt(editBtn.dataset.pointId);
+                        this.showEditExplorePointModal(pointId);
+                        marker.closePopup();
+                    });
+                }
+            });
+
+            this.adminMapMarkers.push(marker);
+            bounds.push([point.latitude, point.longitude]);
+
+            const circle = L.circle([point.latitude, point.longitude], {
+                radius: point.radius_meters,
+                color: '#FF5722',
+                fillColor: 'rgba(255, 87, 34, 0.1)',
+                fillOpacity: 0.1,
+                weight: 2,
+                dashArray: '5, 5'
+            }).addTo(this.adminMap);
+
+            this.adminMapCircles.push(circle);
+        });
+
+        if (bounds.length > 0) {
+            this.adminMap.fitBounds(bounds, { padding: [50, 50] });
+        }
+
+        createIcons({ icons });
+    },
+
+    updateAdminMapCircles() {
+        if (!this.adminMap) return;
+
+        this.adminMapCircles.forEach(c => this.adminMap.removeLayer(c));
+        this.adminMapCircles = [];
+
+        const points = this.explorePoints || [];
+        points.forEach(point => {
+            const circle = L.circle([point.latitude, point.longitude], {
+                radius: point.radius_meters,
+                color: '#FF5722',
+                fillColor: 'rgba(255, 87, 34, 0.1)',
+                fillOpacity: 0.1,
+                weight: 2,
+                dashArray: '5, 5'
+            }).addTo(this.adminMap);
+            this.adminMapCircles.push(circle);
+        });
+    },
+
+    locateOnMap() {
+        if (!this.adminMap) {
+            showToast('请先打开地图', 'info');
+            return;
+        }
+
+        if (!navigator.geolocation) {
+            showToast('您的浏览器不支持地理定位', 'error');
+            return;
+        }
+
+        const locateBtn = document.getElementById('btn-map-locate');
+        if (locateBtn) {
+            locateBtn.innerHTML = '<i data-lucide="loader-2" class="spin"></i>';
+            createIcons({ icons });
+        }
+
+        this._isLocating = true;
+
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+                
+                this.adminMap.setView([lat, lng], 16);
+
+                this._removeUserMarker();
+                const userIcon = L.divIcon({
+                    className: 'admin-user-marker',
+                    html: `<div class="admin-user-marker-inner"><i data-lucide="user"></i></div>`,
+                    iconSize: [40, 40],
+                    iconAnchor: [20, 20]
+                });
+                this._adminUserMarker = L.marker([lat, lng], { icon: userIcon })
+                    .addTo(this.adminMap)
+                    .bindPopup('您的位置');
+                
+                createIcons({ icons });
+                
+                if (locateBtn) {
+                    locateBtn.innerHTML = '<i data-lucide="crosshair"></i>';
+                    createIcons({ icons });
+                }
+                
+                showToast('已定位到您的位置', 'success');
+
+                setTimeout(() => {
+                    this._isLocating = false;
+                }, 1000);
+            },
+            (error) => {
+                if (locateBtn) {
+                    locateBtn.innerHTML = '<i data-lucide="crosshair"></i>';
+                    createIcons({ icons });
+                }
+                
+                let msg = '定位失败';
+                if (error.code === 1) msg = '请允许定位权限';
+                else if (error.code === 2) msg = '无法获取位置';
+                else if (error.code === 3) msg = '定位超时';
+                
+                showToast(msg, 'error');
+            },
+            {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 60000
+            }
+        );
+    },
+
+    // ============================================
+    // 奖池管理
+    // ============================================
+
+    async loadRewardPools(page = 1) {
+        this.poolPage = page;
+        const list = document.getElementById('reward-pool-list');
+        if (!list) return;
+
+        try {
+            const typeFilter = this.poolTypeFilterValue || null;
+            const data = await adminGetRewardPools(page, this.poolLimit, typeFilter ? [typeFilter] : null);
+            let pools = data || [];
+
+            this.rewardPools = pools;
+            if (data && data.length > 0) {
+                this.poolTotal = parseInt(data[0].total_count) || 0;
+            } else {
+                this.poolTotal = 0;
+            }
+            this.renderRewardPools();
+        } catch (e) {
+            console.error('loadRewardPools error:', e);
+            list.innerHTML = '<div class="empty-state"><p>加载失败</p></div>';
+        }
+    },
+
+    renderRewardPools() {
+        const list = document.getElementById('reward-pool-list');
+        if (!list) return;
+
+        if (this.rewardPools.length === 0) {
+            list.innerHTML = '<div class="empty-state"><p>暂无奖池</p></div>';
+            return;
+        }
+
+        const poolTypeLabels = {
+            general: '通用',
+            explore: '探索',
+            consumable: '消耗品',
+            activity: '活动',
+            lottery: '彩票'
+        };
+
+        let html = this.rewardPools.map(pool => {
+            const totalWeight = 0;
+            return `
+                <div class="reward-pool-card" data-pool-id="${pool.id}">
+                    <div class="pool-header">
+                        <div class="pool-icon">
+                            <i data-lucide="gift"></i>
+                        </div>
+                        <div class="pool-info">
+                            <span class="pool-name">${this.escHtml(pool.name)}</span>
+                            <span class="pool-meta">
+                                <span class="pool-type-tag">${poolTypeLabels[pool.pool_type] || pool.pool_type}</span>
+                                ${pool.is_active ? '<span class="status-tag active">启用中</span>' : '<span class="status-tag">已停用</span>'}
+                                <span class="pool-item-count">${pool.item_count} 个奖励</span>
+                            </span>
+                        </div>
+                    </div>
+                    ${pool.description ? `<div class="pool-desc">${this.escHtml(pool.description)}</div>` : ''}
+                    <div class="pool-actions">
+                        <button class="btn btn-primary btn-sm btn-manage-pool" data-pool-id="${pool.id}">
+                            <i data-lucide="settings"></i> 管理奖励
+                        </button>
+                        <button class="btn btn-secondary btn-sm btn-edit-pool" data-pool-id="${pool.id}">
+                            <i data-lucide="edit-3"></i> 编辑
+                        </button>
+                        <button class="btn btn-secondary btn-sm btn-toggle-pool" data-pool-id="${pool.id}" data-active="${pool.is_active}">
+                            <i data-lucide="${pool.is_active ? 'pause' : 'play'}"></i> ${pool.is_active ? '停用' : '启用'}
+                        </button>
+                        <button class="btn btn-danger btn-sm btn-delete-pool" data-pool-id="${pool.id}" data-pool-name="${this.escHtml(pool.name)}">
+                            <i data-lucide="trash-2"></i> 删除
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        html += renderPagination(this.poolPage, this.poolTotal, this.poolLimit);
+
+        list.innerHTML = html;
+        createIcons({ icons });
+        bindPagination(list, (p) => this.loadRewardPools(p));
+
+        list.querySelectorAll('.btn-manage-pool').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const poolId = parseInt(btn.dataset.poolId);
+                this.showPoolItemsModal(poolId);
+            });
+        });
+
+        list.querySelectorAll('.btn-edit-pool').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const poolId = parseInt(btn.dataset.poolId);
+                this.showEditPoolModal(poolId);
+            });
+        });
+
+        list.querySelectorAll('.btn-toggle-pool').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const poolId = parseInt(btn.dataset.poolId);
+                const isActive = btn.dataset.active === 'true';
+                this.togglePool(poolId, !isActive);
+            });
+        });
+
+        list.querySelectorAll('.btn-delete-pool').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const poolId = parseInt(btn.dataset.poolId);
+                const poolName = btn.dataset.poolName;
+                this.deleteRewardPool(poolId, poolName);
+            });
+        });
+    },
+
+    showAddPoolModal() {
+        const existing = document.getElementById('add-pool-modal');
+        if (existing) existing.remove();
+
+        const modalHtml = `
+            <div id="add-pool-modal" class="modal" style="display:flex;">
+                <div class="modal-overlay"></div>
+                <div class="modal-content" style="max-width:480px;">
+                    <div class="modal-header">
+                        <h3><i data-lucide="plus"></i> 创建奖池</h3>
+                        <button class="modal-close-btn">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label class="form-label">奖池名称 <span class="required">*</span></label>
+                            <input type="text" class="form-input" id="add-pool-name" placeholder="如：普通探索奖池" maxlength="50" />
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">奖池类型</label>
+                            <select class="form-input" id="add-pool-type">
+                                <option value="general">通用</option>
+                                <option value="explore">探索</option>
+                                <option value="consumable">消耗品</option>
+                                <option value="activity">活动</option>
+                                <option value="lottery">彩票</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">描述</label>
+                            <input type="text" class="form-input" id="add-pool-desc" placeholder="奖池描述（可选）" />
+                        </div>
+                        <button class="btn btn-primary" id="btn-confirm-add-pool" style="width:100%;margin-top:16px;">
+                            <i data-lucide="plus"></i> 创建奖池
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        const modal = document.getElementById('add-pool-modal');
+        const closeModal = () => modal.remove();
+        modal.querySelector('.modal-overlay').addEventListener('click', closeModal);
+        modal.querySelector('.modal-close-btn').addEventListener('click', closeModal);
+        createIcons({ icons });
+
+        modal.querySelector('#btn-confirm-add-pool').addEventListener('click', async () => {
+            const name = modal.querySelector('#add-pool-name').value.trim();
+            const description = modal.querySelector('#add-pool-desc').value.trim();
+            const poolType = modal.querySelector('#add-pool-type').value;
+
+            if (!name) {
+                showToast('请输入奖池名称', 'error');
+                return;
+            }
+
+            const btn = modal.querySelector('#btn-confirm-add-pool');
+            btn.disabled = true;
+            btn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> 创建中...';
+            createIcons({ icons });
+
+            try {
+                const result = await adminCreateRewardPool(name, description, poolType);
+                if (result?.success) {
+                    showToast('创建成功', 'success');
+                    closeModal();
+                    this.loadRewardPools(1);
+                } else {
+                    showToast(result?.message || '创建失败', 'error');
+                }
+            } catch (e) {
+                showToast('创建失败：' + e.message, 'error');
+            }
+
+            btn.disabled = false;
+            btn.innerHTML = '<i data-lucide="plus"></i> 创建奖池';
+            createIcons({ icons });
+        });
+    },
+
+    async showEditPoolModal(poolId) {
+        const pool = this.rewardPools.find(p => p.id === poolId);
+        if (!pool) return;
+
+        const existing = document.getElementById('edit-pool-modal');
+        if (existing) existing.remove();
+
+        const modalHtml = `
+            <div id="edit-pool-modal" class="modal" style="display:flex;">
+                <div class="modal-overlay"></div>
+                <div class="modal-content" style="max-width:480px;">
+                    <div class="modal-header">
+                        <h3><i data-lucide="edit-3"></i> 编辑奖池 #${poolId}</h3>
+                        <button class="modal-close-btn">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label class="form-label">奖池名称 <span class="required">*</span></label>
+                            <input type="text" class="form-input" id="edit-pool-name" value="${this.escHtml(pool.name)}" maxlength="50" />
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">奖池类型</label>
+                            <select class="form-input" id="edit-pool-type">
+                                <option value="general" ${pool.pool_type === 'general' ? 'selected' : ''}>通用</option>
+                                <option value="explore" ${pool.pool_type === 'explore' ? 'selected' : ''}>探索</option>
+                                <option value="consumable" ${pool.pool_type === 'consumable' ? 'selected' : ''}>消耗品</option>
+                                <option value="activity" ${pool.pool_type === 'activity' ? 'selected' : ''}>活动</option>
+                                <option value="lottery" ${pool.pool_type === 'lottery' ? 'selected' : ''}>彩票</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">描述</label>
+                            <input type="text" class="form-input" id="edit-pool-desc" value="${this.escHtml(pool.description || '')}" />
+                        </div>
+                        <button class="btn btn-primary" id="btn-save-pool" style="width:100%;margin-top:16px;">
+                            保存
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        const modal = document.getElementById('edit-pool-modal');
+        const closeModal = () => modal.remove();
+        modal.querySelector('.modal-overlay').addEventListener('click', closeModal);
+        modal.querySelector('.modal-close-btn').addEventListener('click', closeModal);
+        createIcons({ icons });
+
+        modal.querySelector('#btn-save-pool').addEventListener('click', async () => {
+            const name = modal.querySelector('#edit-pool-name').value.trim();
+            const description = modal.querySelector('#edit-pool-desc').value.trim();
+            const poolType = modal.querySelector('#edit-pool-type').value;
+
+            if (!name) {
+                showToast('请输入奖池名称', 'error');
+                return;
+            }
+
+            const btn = modal.querySelector('#btn-save-pool');
+            btn.disabled = true;
+            btn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> 保存中...';
+            createIcons({ icons });
+
+            try {
+                const result = await adminUpdateRewardPool(poolId, name, description, poolType, null);
+                if (result?.success) {
+                    showToast('保存成功', 'success');
+                    closeModal();
+                    this.loadRewardPools(this.poolPage);
+                } else {
+                    showToast(result?.message || '保存失败', 'error');
+                }
+            } catch (e) {
+                showToast('保存失败：' + e.message, 'error');
+            }
+
+            btn.disabled = false;
+            btn.innerHTML = '保存';
+            createIcons({ icons });
+        });
+    },
+
+    async togglePool(poolId, isActive) {
+        try {
+            const result = await adminUpdateRewardPool(poolId, null, null, null, isActive);
+            if (result?.success) {
+                showToast(isActive ? '已启用' : '已停用', 'success');
+                this.loadRewardPools(this.poolPage);
+            } else {
+                showToast(result?.message || '操作失败', 'error');
+            }
+        } catch (e) {
+            showToast('操作失败：' + e.message, 'error');
+        }
+    },
+
+    async deleteRewardPool(poolId, poolName) {
+        const ok = await showConfirm(
+            `确定要删除奖池「${poolName}」吗？\n\n此操作将删除该奖池及其所有奖励配置，不可撤销！`,
+            { okText: '删除', okClass: 'btn-danger', danger: true }
+        );
+        if (!ok) return;
+
+        try {
+            const result = await adminDeleteRewardPool(poolId);
+            if (result?.success) {
+                showToast('删除成功', 'success');
+                this.loadRewardPools(this.poolPage);
+            } else {
+                showToast(result?.message || '删除失败', 'error');
+            }
+        } catch (e) {
+            showToast('删除失败：' + e.message, 'error');
+        }
+    },
+
+    async showPoolItemsModal(poolId) {
+        const pool = this.rewardPools.find(p => p.id === poolId);
+        if (!pool) return;
+
+        const existing = document.getElementById('pool-items-modal');
+        if (existing) existing.remove();
+
+        const modalHtml = `
+            <div id="pool-items-modal" class="modal" style="display:flex;">
+                <div class="modal-overlay"></div>
+                <div class="modal-content" style="max-width:640px;max-height:85vh;display:flex;flex-direction:column;">
+                    <div class="modal-header">
+                        <h3><i data-lucide="gift"></i> 奖励配置 - ${this.escHtml(pool.name)}</h3>
+                        <button class="modal-close-btn">&times;</button>
+                    </div>
+                    <div class="modal-body" style="flex:1;overflow-y:auto;">
+                        <div class="pool-items-header">
+                            <div class="pool-items-total" id="pool-items-total">总权重: -</div>
+                            <button class="btn btn-primary btn-sm" id="btn-add-pool-item">
+                                <i data-lucide="plus"></i> 添加奖励
+                            </button>
+                        </div>
+                        <div class="pool-items-list" id="pool-items-list">
+                            <div class="skeleton" style="height:60px;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        const modal = document.getElementById('pool-items-modal');
+        const closeModal = () => modal.remove();
+        modal.querySelector('.modal-overlay').addEventListener('click', closeModal);
+        modal.querySelector('.modal-close-btn').addEventListener('click', closeModal);
+        createIcons({ icons });
+
+        modal.querySelector('#btn-add-pool-item').addEventListener('click', () => {
+            this.showAddPoolItemModal(poolId);
+        });
+
+        await this.loadPoolItems(poolId);
+    },
+
+    async loadPoolItems(poolId) {
+        const listEl = document.getElementById('pool-items-list');
+        const totalEl = document.getElementById('pool-items-total');
+        if (!listEl) return;
+
+        try {
+            const detail = await adminGetRewardPoolDetail(poolId);
+            const items = detail?.items || [];
+            const totalWeight = items.reduce((sum, item) => sum + (item.weight || 0), 0);
+
+            if (totalEl) {
+                totalEl.textContent = `总权重: ${totalWeight}`;
+            }
+
+            if (items.length === 0) {
+                listEl.innerHTML = '<div class="empty-state"><p>暂无奖励项</p></div>';
+                return;
+            }
+
+            const rewardTypeLabels = {
+                item: '物品',
+                shells: '果壳币',
+                exp: '经验',
+                nothing: '空奖励'
+            };
+
+            listEl.innerHTML = items.map((item, index) => {
+                const percentage = totalWeight > 0 ? ((item.weight / totalWeight) * 100).toFixed(1) : '0.0';
+                let rewardDesc = '';
+                if (item.reward_type === 'item') {
+                    const qualityCfg = QUALITY_CONFIG[item.item_quality] || QUALITY_CONFIG.white;
+                    rewardDesc = `<span style="color:${qualityCfg.color}">${this.escHtml(item.item_name || '未知物品')}</span> x ${item.item_quantity}`;
+                } else if (item.reward_type === 'shells') {
+                    rewardDesc = `${item.shells_amount} 果壳币`;
+                } else if (item.reward_type === 'exp') {
+                    rewardDesc = `${item.exp_amount} 经验`;
+                } else {
+                    rewardDesc = '空奖励（谢谢参与）';
+                }
+
+                return `
+                    <div class="pool-item-row" data-item-id="${item.id}">
+                        <div class="pool-item-index">${index + 1}</div>
+                        <div class="pool-item-type">${rewardTypeLabels[item.reward_type] || item.reward_type}</div>
+                        <div class="pool-item-desc">${rewardDesc}</div>
+                        <div class="pool-item-weight">
+                            <div class="weight-input-group">
+                                <input type="number" class="form-input weight-input" value="${item.weight}" min="0" data-item-id="${item.id}" />
+                                <span class="weight-percent">${percentage}%</span>
+                            </div>
+                        </div>
+                        <div class="pool-item-actions">
+                            <button class="btn btn-secondary btn-xs btn-edit-pool-item" data-item-id="${item.id}">
+                                <i data-lucide="edit-3"></i>
+                            </button>
+                            <button class="btn btn-danger btn-xs btn-delete-pool-item" data-item-id="${item.id}">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            createIcons({ icons });
+
+            listEl.querySelectorAll('.weight-input').forEach(input => {
+                input.addEventListener('change', async (e) => {
+                    const itemId = parseInt(e.target.dataset.itemId);
+                    const newWeight = parseInt(e.target.value);
+                    if (isNaN(newWeight) || newWeight < 0) return;
+
+                    try {
+                        const result = await adminUpdateRewardPoolItem(itemId, null, null, null, null, null, newWeight, null);
+                        if (result?.success) {
+                            showToast('权重已更新', 'success');
+                            this.loadPoolItems(poolId);
+                        }
+                    } catch (err) {
+                        showToast('更新失败', 'error');
+                    }
+                });
+            });
+
+            listEl.querySelectorAll('.btn-edit-pool-item').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const itemId = parseInt(btn.dataset.itemId);
+                    const item = (detail?.items || []).find(i => i.id === itemId);
+                    if (item) {
+                        this.showEditPoolItemModal(poolId, item);
+                    }
+                });
+            });
+
+            listEl.querySelectorAll('.btn-delete-pool-item').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const itemId = parseInt(btn.dataset.itemId);
+                    const ok = await showConfirm('确定要删除这个奖励项吗？', { okText: '删除', okClass: 'btn-danger' });
+                    if (!ok) return;
+
+                    try {
+                        const result = await adminDeleteRewardPoolItem(itemId);
+                        if (result?.success) {
+                            showToast('删除成功', 'success');
+                            this.loadPoolItems(poolId);
+                        }
+                    } catch (err) {
+                        showToast('删除失败', 'error');
+                    }
+                });
+            });
+
+        } catch (e) {
+            console.error('loadPoolItems error:', e);
+            listEl.innerHTML = '<div class="empty-state"><p>加载失败</p></div>';
+        }
+    },
+
+    showAddPoolItemModal(poolId) {
+        this._showPoolItemModal(poolId, null);
+    },
+
+    showEditPoolItemModal(poolId, item) {
+        this._showPoolItemModal(poolId, item);
+    },
+
+    _showPoolItemModal(poolId, item) {
+        const isEdit = !!item;
+        const modalId = isEdit ? 'edit-pool-item-modal' : 'add-pool-item-modal';
+        const existing = document.getElementById(modalId);
+        if (existing) existing.remove();
+
+        const title = isEdit ? '编辑奖励项' : '添加奖励项';
+        const defaultType = item?.reward_type || 'item';
+
+        const modalHtml = `
+            <div id="${modalId}" class="modal" style="display:flex;">
+                <div class="modal-overlay"></div>
+                <div class="modal-content" style="max-width:440px;">
+                    <div class="modal-header">
+                        <h3><i data-lucide="${isEdit ? 'edit-3' : 'plus'}"></i> ${title}</h3>
+                        <button class="modal-close-btn">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label class="form-label">奖励类型</label>
+                            <select class="form-input" id="pool-item-type">
+                                <option value="item" ${defaultType === 'item' ? 'selected' : ''}>物品</option>
+                                <option value="shells" ${defaultType === 'shells' ? 'selected' : ''}>果壳币</option>
+                                <option value="exp" ${defaultType === 'exp' ? 'selected' : ''}>经验</option>
+                                <option value="nothing" ${defaultType === 'nothing' ? 'selected' : ''}>空奖励（谢谢参与）</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group" id="pool-item-item-section" style="display:${defaultType === 'item' ? 'block' : 'none'};">
+                            <label class="form-label">选择物品</label>
+                            <select class="form-input" id="pool-item-item" data-searchable-item-select>
+                                <option value="">选择物品</option>
+                            </select>
+                            <div class="form-group" style="margin-top:8px;">
+                                <label class="form-label">数量</label>
+                                <input type="number" class="form-input" id="pool-item-quantity" value="${item?.item_quantity || 1}" min="1" />
+                            </div>
+                        </div>
+
+                        <div class="form-group" id="pool-item-shells-section" style="display:${defaultType === 'shells' ? 'block' : 'none'};">
+                            <label class="form-label">果壳币数量</label>
+                            <input type="number" class="form-input" id="pool-item-shells" value="${item?.shells_amount || 100}" min="0" />
+                        </div>
+
+                        <div class="form-group" id="pool-item-exp-section" style="display:${defaultType === 'exp' ? 'block' : 'none'};">
+                            <label class="form-label">经验数量</label>
+                            <input type="number" class="form-input" id="pool-item-exp" value="${item?.exp_amount || 10}" min="0" />
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">权重（概率占比）</label>
+                            <input type="number" class="form-input" id="pool-item-weight" value="${item?.weight || 100}" min="0" />
+                            <div class="form-hint">权重越高，中奖概率越大</div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">排序</label>
+                            <input type="number" class="form-input" id="pool-item-sort" value="${item?.sort_order || 0}" />
+                        </div>
+
+                        <button class="btn btn-primary" id="btn-confirm-pool-item" style="width:100%;margin-top:16px;">
+                            ${isEdit ? '保存' : '添加'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        const modal = document.getElementById(modalId);
+        const closeModal = () => modal.remove();
+        modal.querySelector('.modal-overlay').addEventListener('click', closeModal);
+        modal.querySelector('.modal-close-btn').addEventListener('click', closeModal);
+        createIcons({ icons });
+
+        const typeSelect = modal.querySelector('#pool-item-type');
+        const itemSection = modal.querySelector('#pool-item-item-section');
+        const shellsSection = modal.querySelector('#pool-item-shells-section');
+        const expSection = modal.querySelector('#pool-item-exp-section');
+
+        const updateSections = () => {
+            const type = typeSelect.value;
+            itemSection.style.display = type === 'item' ? 'block' : 'none';
+            shellsSection.style.display = type === 'shells' ? 'block' : 'none';
+            expSection.style.display = type === 'exp' ? 'block' : 'none';
+        };
+        typeSelect.addEventListener('change', updateSections);
+
+        this._loadExplorePointItemSelect('#pool-item-item').then(() => {
+            if (isEdit && item?.item_id) {
+                const sel = modal.querySelector('#pool-item-item');
+                if (sel) {
+                    sel.value = item.item_id;
+                    sel.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            }
+        });
+
+        modal.querySelector('#btn-confirm-pool-item').addEventListener('click', async () => {
+            const rewardType = modal.querySelector('#pool-item-type').value;
+            const weight = parseInt(modal.querySelector('#pool-item-weight').value) || 0;
+            const sortOrder = parseInt(modal.querySelector('#pool-item-sort').value) || 0;
+
+            let itemId = null;
+            let itemQuantity = 1;
+            let shellsAmount = 0;
+            let expAmount = 0;
+
+            if (rewardType === 'item') {
+                itemId = parseInt(modal.querySelector('#pool-item-item').value) || null;
+                itemQuantity = parseInt(modal.querySelector('#pool-item-quantity').value) || 1;
+                if (!itemId) {
+                    showToast('请选择物品', 'error');
+                    return;
+                }
+            } else if (rewardType === 'shells') {
+                shellsAmount = parseInt(modal.querySelector('#pool-item-shells').value) || 0;
+            } else if (rewardType === 'exp') {
+                expAmount = parseInt(modal.querySelector('#pool-item-exp').value) || 0;
+            }
+
+            const btn = modal.querySelector('#btn-confirm-pool-item');
+            btn.disabled = true;
+            btn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> 处理中...';
+            createIcons({ icons });
+
+            try {
+                let result;
+                if (isEdit) {
+                    result = await adminUpdateRewardPoolItem(
+                        item.id, rewardType, itemId, itemQuantity,
+                        shellsAmount, expAmount, weight, sortOrder
+                    );
+                } else {
+                    result = await adminAddRewardPoolItem(
+                        poolId, rewardType, itemId, itemQuantity,
+                        shellsAmount, expAmount, weight, sortOrder
+                    );
+                }
+
+                if (result?.success) {
+                    showToast(isEdit ? '保存成功' : '添加成功', 'success');
+                    closeModal();
+                    this.loadPoolItems(poolId);
+                } else {
+                    showToast(result?.message || '操作失败', 'error');
+                }
+            } catch (e) {
+                showToast('操作失败：' + e.message, 'error');
+            }
+
+            btn.disabled = false;
+            btn.innerHTML = isEdit ? '保存' : '添加';
+            createIcons({ icons });
         });
     }
 };

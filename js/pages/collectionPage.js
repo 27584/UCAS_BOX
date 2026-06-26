@@ -121,13 +121,14 @@ export const collectionPage = {
                 const item = this.items.find(i => i.item_id === itemId);
                 if (item) {
                     openItemDetail({
-                        id: item.item_id,
+                        item_id: item.item_id,
                         name: item.item_name,
                         quality: item.item_quality,
                         image_name: item.item_image,
                         description: item.item_description,
                         item_type: item.item_type,
-                        owned: item.owned
+                        owned: item.owned,
+                        reward_pool_id: item.reward_pool_id
                     });
                 }
             });

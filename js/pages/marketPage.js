@@ -270,7 +270,7 @@ export const marketPage = {
                 const order = this.orders.find(o => o.item_id === itemId);
                 if (order) {
                     openItemDetail({
-                        id: order.item_id,
+                        item_id: order.item_id,
                         name: order.item_name,
                         quality: order.item_quality,
                         image_name: order.item_image,
@@ -1343,7 +1343,7 @@ export const marketPage = {
                 const req = this.buyRequests.find(r => r.item_id === itemId);
                 if (req) {
                     openItemDetail({
-                        id: req.item_id,
+                        item_id: req.item_id,
                         name: req.item_name,
                         quality: req.item_quality,
                         image_name: req.item_image,

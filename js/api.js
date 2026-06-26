@@ -522,17 +522,19 @@ export async function adminGetUsers(search = '', page = 1, limit = 20, isBot = n
     });
 }
 
-export async function adminAddItemDefinition(name, quality, imageName, description, dropWeight) {
+export async function adminAddItemDefinition(name, quality, imageName, description, dropWeight, itemType = 'collection', rewardPoolId = null) {
     return rpc('admin_add_item_definition', {
         p_name: name,
         p_quality: quality,
         p_image_name: imageName,
         p_description: description,
-        p_drop_weight: dropWeight
+        p_drop_weight: dropWeight,
+        p_item_type: itemType,
+        p_reward_pool_id: rewardPoolId
     });
 }
 
-export async function adminUpdateItemDefinition(itemId, name, quality, itemType, imageName, description, dropWeight) {
+export async function adminUpdateItemDefinition(itemId, name, quality, itemType, imageName, description, dropWeight, rewardPoolId = null) {
     return rpc('admin_update_item_definition', {
         p_item_id: itemId,
         p_name: name,
@@ -540,7 +542,8 @@ export async function adminUpdateItemDefinition(itemId, name, quality, itemType,
         p_item_type: itemType,
         p_image_name: imageName,
         p_description: description,
-        p_drop_weight: dropWeight
+        p_drop_weight: dropWeight,
+        p_reward_pool_id: rewardPoolId
     });
 }
 
@@ -772,4 +775,152 @@ export async function getUserMarketOrders(userId, page = 1, limit = 20) {
 
 export async function getUserBuyRequests(userId, page = 1, limit = 20) {
     return rpc('get_user_buy_requests', { p_user_id: userId, p_page: page, p_limit: limit });
+}
+
+// ============================================
+// 探索系统
+// ============================================
+
+export async function getExplorationPoints() {
+    return rpc('get_exploration_points');
+}
+
+export async function explorePoint(pointId, userLat, userLng) {
+    return rpc('explore_point', {
+        p_point_id: pointId,
+        p_user_lat: userLat,
+        p_user_lng: userLng
+    });
+}
+
+// ============================================
+// 管理员探索点管理
+// ============================================
+
+export async function adminGetExplorationPoints(page = 1, limit = 20) {
+    return rpc('admin_get_exploration_points', { p_page: page, p_limit: limit });
+}
+
+export async function adminAddExplorationPoint(name, latitude, longitude, description, radiusMeters = 50, rewardShells = 0, rewardItemId = null, rewardItemChance = 0, dailyLimit = 3, rewardPoolId = null) {
+    return rpc('admin_add_exploration_point', {
+        p_name: name,
+        p_description: description,
+        p_latitude: latitude,
+        p_longitude: longitude,
+        p_radius_meters: radiusMeters,
+        p_reward_shells: rewardShells,
+        p_reward_item_id: rewardItemId,
+        p_reward_item_chance: rewardItemChance,
+        p_daily_limit: dailyLimit,
+        p_reward_pool_id: rewardPoolId
+    });
+}
+
+export async function adminUpdateExplorationPoint(id, name, description, latitude, longitude, radiusMeters, rewardShells, rewardItemId, rewardItemChance, dailyLimit, rewardPoolId = null) {
+    return rpc('admin_update_exploration_point', {
+        p_id: id,
+        p_name: name,
+        p_description: description,
+        p_latitude: latitude,
+        p_longitude: longitude,
+        p_radius_meters: radiusMeters,
+        p_reward_shells: rewardShells,
+        p_reward_item_id: rewardItemId,
+        p_reward_item_chance: rewardItemChance,
+        p_daily_limit: dailyLimit,
+        p_reward_pool_id: rewardPoolId
+    });
+}
+
+export async function adminDeleteExplorationPoint(id) {
+    return rpc('admin_delete_exploration_point', { p_id: id });
+}
+
+export async function adminGetExplorationHistory(page = 1, limit = 20) {
+    return rpc('admin_get_exploration_history', { p_page: page, p_limit: limit });
+}
+
+// ============================================
+// 奖池系统
+// ============================================
+
+export async function getActiveRewardPools() {
+    return rpc('get_active_reward_pools');
+}
+
+export async function drawFromRewardPool(poolId) {
+    return rpc('draw_from_reward_pool', { p_pool_id: poolId });
+}
+
+export async function useConsumablePool(itemId) {
+    return rpc('use_consumable_pool', { p_item_id: itemId });
+}
+
+export async function adminGetRewardPools(page = 1, limit = 20, poolTypes = null) {
+    const types = Array.isArray(poolTypes) ? poolTypes.join(',') : poolTypes;
+    return rpc('admin_get_reward_pools', { p_page: page, p_limit: limit, p_pool_types: types });
+}
+
+export async function adminGetRewardPoolDetail(poolId) {
+    return rpc('admin_get_reward_pool_detail', { p_pool_id: poolId });
+}
+
+export async function adminCreateRewardPool(name, description = '', poolType = 'general') {
+    return rpc('admin_create_reward_pool', {
+        p_name: name,
+        p_description: description,
+        p_pool_type: poolType
+    });
+}
+
+export async function adminUpdateRewardPool(id, name = null, description = null, poolType = null, isActive = null) {
+    return rpc('admin_update_reward_pool', {
+        p_id: id,
+        p_name: name,
+        p_description: description,
+        p_pool_type: poolType,
+        p_is_active: isActive
+    });
+}
+
+export async function adminDeleteRewardPool(id) {
+    return rpc('admin_delete_reward_pool', { p_id: id });
+}
+
+export async function adminAddRewardPoolItem(poolId, rewardType, itemId = null, itemQuantity = 1, shellsAmount = 0, expAmount = 0, weight = 100, sortOrder = 0) {
+    return rpc('admin_add_reward_pool_item', {
+        p_pool_id: poolId,
+        p_reward_type: rewardType,
+        p_item_id: itemId,
+        p_item_quantity: itemQuantity,
+        p_shells_amount: shellsAmount,
+        p_exp_amount: expAmount,
+        p_weight: weight,
+        p_sort_order: sortOrder
+    });
+}
+
+export async function adminUpdateRewardPoolItem(itemId, rewardType = null, itemRefId = null, itemQuantity = null, shellsAmount = null, expAmount = null, weight = null, sortOrder = null) {
+    return rpc('admin_update_reward_pool_item', {
+        p_item_id: itemId,
+        p_reward_type: rewardType,
+        p_item_ref_id: itemRefId,
+        p_item_quantity: itemQuantity,
+        p_shells_amount: shellsAmount,
+        p_exp_amount: expAmount,
+        p_weight: weight,
+        p_sort_order: sortOrder
+    });
+}
+
+export async function adminDeleteRewardPoolItem(itemId) {
+    return rpc('admin_delete_reward_pool_item', { p_item_id: itemId });
+}
+
+export async function adminGetRewardPoolDraws(poolId = null, page = 1, limit = 20) {
+    return rpc('admin_get_reward_pool_draws', {
+        p_pool_id: poolId,
+        p_page: page,
+        p_limit: limit
+    });
 }

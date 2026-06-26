@@ -198,10 +198,12 @@ CREATE TABLE IF NOT EXISTS public.items (
     description TEXT,
     drop_weight INT DEFAULT 100,
     item_type TEXT DEFAULT 'collection' CHECK (item_type IN ('collection', 'consumable', 'equipment', 'material', 'currency', 'seed')),
+    reward_pool_id INT REFERENCES public.reward_pools(id),
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
 ALTER TABLE public.items ADD COLUMN IF NOT EXISTS item_type TEXT DEFAULT 'collection';
+ALTER TABLE public.items ADD COLUMN IF NOT EXISTS reward_pool_id INT REFERENCES public.reward_pools(id);
 
 DO $$
 BEGIN
@@ -986,7 +988,7 @@ $$;
 -- ============================================================
 DROP FUNCTION IF EXISTS public.get_user_inventory();
 CREATE OR REPLACE FUNCTION public.get_user_inventory()
-RETURNS TABLE(inv_id BIGINT, item_id BIGINT, quantity INT, acquired_at TIMESTAMP, item_name TEXT, item_quality TEXT, item_image TEXT, item_description TEXT, item_type TEXT)
+RETURNS TABLE(inv_id BIGINT, item_id BIGINT, quantity INT, acquired_at TIMESTAMP, item_name TEXT, item_quality TEXT, item_image TEXT, item_description TEXT, item_type TEXT, reward_pool_id INT)
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
@@ -1007,7 +1009,8 @@ BEGIN
         i.quality AS item_quality,
         i.image_name AS item_image,
         i.description AS item_description,
-        i.item_type AS item_type
+        i.item_type AS item_type,
+        i.reward_pool_id AS reward_pool_id
     FROM public.inventory inv
     JOIN public.items i ON inv.item_id = i.id
     WHERE inv.user_id = user_uuid
@@ -1520,7 +1523,7 @@ CREATE OR REPLACE FUNCTION public.admin_get_items(
     p_quality TEXT DEFAULT NULL,
     p_item_type TEXT DEFAULT NULL
 )
-RETURNS TABLE(item_id BIGINT, name TEXT, quality TEXT, image_name TEXT, description TEXT, drop_weight INT, item_type TEXT, total_count BIGINT, crop_info JSONB)
+RETURNS TABLE(item_id BIGINT, name TEXT, quality TEXT, image_name TEXT, description TEXT, drop_weight INT, item_type TEXT, reward_pool_id INT, total_count BIGINT, crop_info JSONB)
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
@@ -1547,7 +1550,7 @@ BEGIN
           AND (p_quality IS NULL OR p_quality = '' OR it.quality = p_quality)
           AND (p_item_type IS NULL OR p_item_type = '' OR it.item_type = p_item_type)
     )
-    SELECT f.id AS item_id, f.name, f.quality, f.image_name, f.description, f.drop_weight, f.item_type,
+    SELECT f.id AS item_id, f.name, f.quality, f.image_name, f.description, f.drop_weight, f.item_type, f.reward_pool_id,
         (SELECT COUNT(*) FROM filtered)::BIGINT AS total_count,
         CASE WHEN f.item_type = 'seed' THEN
             (SELECT jsonb_build_object(
@@ -1573,7 +1576,7 @@ $$;
 -- 管理员获取所有物品列表（不分页，用于下拉选择）
 DROP FUNCTION IF EXISTS public.admin_get_all_items();
 CREATE OR REPLACE FUNCTION public.admin_get_all_items()
-RETURNS TABLE(id BIGINT, name TEXT, quality TEXT, image_name TEXT, description TEXT, drop_weight INT, item_type TEXT)
+RETURNS TABLE(id BIGINT, name TEXT, quality TEXT, image_name TEXT, description TEXT, drop_weight INT, item_type TEXT, reward_pool_id INT)
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
@@ -1589,7 +1592,7 @@ BEGIN
     END IF;
 
     RETURN QUERY
-    SELECT i.id, i.name, i.quality, i.image_name, i.description, i.drop_weight, i.item_type
+    SELECT i.id, i.name, i.quality, i.image_name, i.description, i.drop_weight, i.item_type, i.reward_pool_id
     FROM public.items i
     ORDER BY i.id;
 END;
@@ -2449,7 +2452,8 @@ CREATE OR REPLACE FUNCTION public.admin_add_item_definition(
     p_image_name TEXT,
     p_description TEXT,
     p_drop_weight INT,
-    p_item_type TEXT DEFAULT 'collection'
+    p_item_type TEXT DEFAULT 'collection',
+    p_reward_pool_id INT DEFAULT NULL
 )
 RETURNS BIGINT
 LANGUAGE plpgsql
@@ -2478,8 +2482,8 @@ BEGIN
         RAISE EXCEPTION '描述长度不能超过2000字符';
     END IF;
 
-    INSERT INTO public.items (name, quality, image_name, description, drop_weight, item_type)
-    VALUES (v_name, p_quality, p_image_name, v_desc, p_drop_weight, p_item_type)
+    INSERT INTO public.items (name, quality, image_name, description, drop_weight, item_type, reward_pool_id)
+    VALUES (v_name, p_quality, p_image_name, v_desc, p_drop_weight, p_item_type, p_reward_pool_id)
     RETURNING id INTO new_id;
 
     RETURN new_id;
@@ -2498,7 +2502,8 @@ CREATE OR REPLACE FUNCTION public.admin_update_item_definition(
     p_item_type TEXT,
     p_image_name TEXT,
     p_description TEXT,
-    p_drop_weight INT
+    p_drop_weight INT,
+    p_reward_pool_id INT DEFAULT NULL
 )
 RETURNS VOID
 LANGUAGE plpgsql
@@ -2521,7 +2526,8 @@ BEGIN
         image_name = p_image_name,
         description = p_description,
         drop_weight = p_drop_weight,
-        item_type = p_item_type
+        item_type = p_item_type,
+        reward_pool_id = p_reward_pool_id
     WHERE id = p_item_id;
 
     IF NOT FOUND THEN
@@ -2779,7 +2785,7 @@ END;
 $$;
 
 -- ============================================================
--- 29. RPC 函数：使用端午节福袋
+-- 29. RPC 函数：使用端午节福袋（已迁移到奖池系统，保留为兼容）
 -- ============================================================
 DROP FUNCTION IF EXISTS public.use_dragon_boat_bag();
 CREATE OR REPLACE FUNCTION public.use_dragon_boat_bag()
@@ -2790,100 +2796,18 @@ AS $$
 DECLARE
     user_uuid UUID := auth.uid();
     bag_item_id BIGINT;
-    inv_id BIGINT;
-    selected_item RECORD;
-    total_weight NUMERIC;
-    random_pick NUMERIC;
-    remaining NUMERIC;
-    item_row RECORD;
 BEGIN
     IF user_uuid IS NULL THEN
         RETURN jsonb_build_object('success', false, 'message', '请先登录');
     END IF;
     
-    -- 查找端午节福袋物品定义
     SELECT id INTO bag_item_id FROM public.items WHERE name = '端午节福袋' AND item_type = 'consumable';
     
     IF bag_item_id IS NULL THEN
         RETURN jsonb_build_object('success', false, 'message', '端午节福袋不存在');
     END IF;
     
-    -- 检查用户是否拥有福袋
-    SELECT id INTO inv_id FROM public.inventory WHERE user_id = user_uuid AND item_id = bag_item_id;
-    
-    IF inv_id IS NULL THEN
-        RETURN jsonb_build_object('success', false, 'message', '你没有端午节福袋');
-    END IF;
-    
-    -- 计算端午收藏品的总权重
-    -- 如果drop_weight全为0，则使用固定权重：白色100，绿色80，蓝色50，紫色30，橙色15，红色5
-    SELECT COALESCE(SUM(
-        CASE 
-            WHEN i.drop_weight > 0 THEN i.drop_weight
-            WHEN i.quality = 'white' THEN 100
-            WHEN i.quality = 'green' THEN 80
-            WHEN i.quality = 'blue' THEN 50
-            WHEN i.quality = 'purple' THEN 30
-            WHEN i.quality = 'orange' THEN 15
-            WHEN i.quality = 'red' THEN 5
-            ELSE 50
-        END
-    ), 0) INTO total_weight
-    FROM public.items i
-    WHERE i.item_type = 'collection' AND i.name IN ('粽子', '艾草香囊', '龙舟模型', '五彩绳', '雄黄酒', '离骚');
-    
-    IF total_weight <= 0 THEN
-        RETURN jsonb_build_object('success', false, 'message', '端午节收藏品暂不可用');
-    END IF;
-    
-    -- 随机选择
-    random_pick := floor(random() * total_weight) + 1;
-    remaining := random_pick;
-    
-    FOR item_row IN
-        SELECT i.id, i.name, i.quality, i.image_name, 
-            CASE 
-                WHEN i.drop_weight > 0 THEN i.drop_weight
-                WHEN i.quality = 'white' THEN 100
-                WHEN i.quality = 'green' THEN 80
-                WHEN i.quality = 'blue' THEN 50
-                WHEN i.quality = 'purple' THEN 30
-                WHEN i.quality = 'orange' THEN 15
-                WHEN i.quality = 'red' THEN 5
-                ELSE 50
-            END AS effective_weight
-        FROM public.items i
-        WHERE i.item_type = 'collection' AND i.name IN ('粽子', '艾草香囊', '龙舟模型', '五彩绳', '雄黄酒', '《离骚》')
-        ORDER BY i.id
-    LOOP
-        remaining := remaining - item_row.effective_weight;
-        IF remaining <= 0 THEN
-            selected_item := item_row;
-            EXIT;
-        END IF;
-    END LOOP;
-    
-    IF selected_item IS NULL THEN
-        RETURN jsonb_build_object('success', false, 'message', '端午节福袋暂不可用');
-    END IF;
-    
-    -- 扣除一个福袋（只减数量，不删除整行）
-    UPDATE public.inventory SET quantity = quantity - 1 WHERE id = inv_id;
-
-    -- 如果数量为0，删除该行
-    DELETE FROM public.inventory WHERE id = inv_id AND quantity <= 0;
-    
-    -- 给用户随机收藏品
-    PERFORM public.inventory_add_item(user_uuid, selected_item.id, 1);
-    
-    RETURN jsonb_build_object(
-        'success', true, 
-        'message', '恭喜获得「' || selected_item.name || '」！',
-        'item_id', selected_item.id,
-        'item_name', selected_item.name,
-        'item_quality', selected_item.quality,
-        'item_image', selected_item.image_name
-    );
+    RETURN public.use_consumable_pool(bag_item_id::INT);
 END;
 $$;
 
@@ -6795,7 +6719,7 @@ AS $$
 BEGIN
     RETURN (
         SELECT jsonb_agg(t) FROM (
-            SELECT id, name, quality, image_name, description, item_type
+            SELECT id, name, quality, image_name, description, item_type, reward_pool_id
             FROM public.items
             ORDER BY id
         ) t
@@ -7039,6 +6963,1062 @@ BEGIN
     WHERE br.buyer_id = p_user_id AND br.status = 'active'
     ORDER BY br.created_at DESC
     LIMIT p_limit OFFSET v_offset;
+END;
+$$;
+
+-- ============================================================
+-- 探索系统
+-- ============================================================
+
+-- 奖池系统（必须在 exploration_points 之前，因为有外键引用）
+CREATE TABLE IF NOT EXISTS public.reward_pools (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT,
+    pool_type TEXT DEFAULT 'general' CHECK (pool_type IN ('general', 'explore', 'activity', 'lottery', 'consumable')),
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.reward_pool_items (
+    id SERIAL PRIMARY KEY,
+    pool_id INT REFERENCES public.reward_pools(id) ON DELETE CASCADE,
+    reward_type TEXT NOT NULL CHECK (reward_type IN ('item', 'shells', 'exp', 'nothing')),
+    item_id INT REFERENCES public.items(id),
+    item_quantity INT DEFAULT 1,
+    shells_amount INT DEFAULT 0,
+    exp_amount INT DEFAULT 0,
+    weight INT DEFAULT 100,
+    sort_order INT DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.reward_pool_draws (
+    id BIGSERIAL PRIMARY KEY,
+    pool_id INT REFERENCES public.reward_pools(id),
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    reward_type TEXT NOT NULL,
+    item_id INT REFERENCES public.items(id),
+    item_quantity INT DEFAULT 0,
+    shells_amount INT DEFAULT 0,
+    exp_amount INT DEFAULT 0,
+    drawn_at TIMESTAMPTZ DEFAULT now()
+);
+
+DROP TABLE IF EXISTS public.exploration_history;
+DROP TABLE IF EXISTS public.exploration_points;
+CREATE TABLE IF NOT EXISTS public.exploration_points (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT,
+    latitude DOUBLE PRECISION NOT NULL,
+    longitude DOUBLE PRECISION NOT NULL,
+    radius_meters INT DEFAULT 50,
+    reward_shells INT DEFAULT 0,
+    reward_item_id INT REFERENCES public.items(id),
+    reward_item_chance DECIMAL(5,2) DEFAULT 0,
+    daily_limit INT DEFAULT 3,
+    unlock_condition TEXT DEFAULT NULL,
+    image_name TEXT DEFAULT NULL,
+    reward_pool_id INT REFERENCES public.reward_pools(id),
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.exploration_history (
+    id SERIAL PRIMARY KEY,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    point_id INT REFERENCES public.exploration_points(id),
+    explored_at TIMESTAMPTZ DEFAULT now(),
+    reward_shells INT DEFAULT 0,
+    reward_item_id INT REFERENCES public.items(id),
+    success BOOLEAN DEFAULT true
+);
+
+DROP FUNCTION IF EXISTS public.get_exploration_points();
+CREATE OR REPLACE FUNCTION public.get_exploration_points()
+RETURNS SETOF JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'id', ep.id,
+        'name', ep.name,
+        'description', ep.description,
+        'latitude', ep.latitude,
+        'longitude', ep.longitude,
+        'radius_meters', ep.radius_meters,
+        'reward_shells', ep.reward_shells,
+        'reward_item_id', ep.reward_item_id,
+        'reward_item_chance', ep.reward_item_chance,
+        'daily_limit', ep.daily_limit,
+        'image_name', ep.image_name
+    )
+    FROM public.exploration_points ep
+    ORDER BY ep.name;
+END;
+$$;
+
+DROP FUNCTION IF EXISTS public.explore_point(INT, DOUBLE PRECISION, DOUBLE PRECISION);
+CREATE OR REPLACE FUNCTION public.explore_point(p_point_id INT, p_user_lat DOUBLE PRECISION, p_user_lng DOUBLE PRECISION)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_point RECORD;
+    v_distance_meters DOUBLE PRECISION;
+    v_today_count INT;
+    v_reward_item_id INT := NULL;
+    v_reward_shells INT := 0;
+    v_user_id UUID := auth.uid();
+    v_pool_result JSONB;
+    v_draw_record RECORD;
+BEGIN
+    SELECT * INTO v_point FROM public.exploration_points WHERE id = p_point_id;
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('success', false, 'message', '探索点不存在');
+    END IF;
+
+    v_distance_meters := ST_DistanceSphere(
+        ST_SetSRID(ST_MakePoint(v_point.longitude, v_point.latitude), 4326),
+        ST_SetSRID(ST_MakePoint(p_user_lng, p_user_lat), 4326)
+    );
+
+    IF v_distance_meters > v_point.radius_meters THEN
+        RETURN jsonb_build_object('success', false, 'message', '距离太远，请靠近后再探索');
+    END IF;
+
+    SELECT COUNT(*) INTO v_today_count FROM public.exploration_history
+    WHERE user_id = v_user_id AND point_id = p_point_id
+    AND explored_at >= date_trunc('day', now());
+
+    IF v_today_count >= v_point.daily_limit THEN
+        RETURN jsonb_build_object('success', false, 'message', '今日探索次数已用完');
+    END IF;
+
+    -- 如果关联了奖池，从奖池抽取
+    IF v_point.reward_pool_id IS NOT NULL THEN
+        SELECT * INTO v_draw_record FROM public.reward_pool_draws
+        WHERE pool_id = v_point.reward_pool_id AND user_id = v_user_id
+        ORDER BY drawn_at DESC LIMIT 1;
+
+        -- 调用奖池抽取
+        v_pool_result := public.draw_from_reward_pool(v_point.reward_pool_id);
+
+        IF v_pool_result->>'success' = 'true' THEN
+            v_reward_item_id := NULLIF(v_pool_result->>'item_id', '')::INT;
+            v_reward_shells := COALESCE(NULLIF(v_pool_result->>'shells_amount', '')::INT, 0);
+
+            -- 更新用户果壳币（奖池可能包含果壳币奖励）
+            IF v_reward_shells > 0 THEN
+                UPDATE public.profiles SET shells = shells + v_reward_shells WHERE id = v_user_id;
+            END IF;
+        END IF;
+    ELSE
+        -- 旧的奖励逻辑（物品概率）
+        IF v_point.reward_item_id IS NOT NULL AND v_point.reward_item_chance > 0 THEN
+            IF random() < v_point.reward_item_chance THEN
+                v_reward_item_id := v_point.reward_item_id;
+                INSERT INTO public.inventory (user_id, item_id, quantity)
+                VALUES (v_user_id, v_reward_item_id, 1)
+                ON CONFLICT (user_id, item_id) DO UPDATE SET quantity = inventory.quantity + 1;
+            END IF;
+        END IF;
+
+        v_reward_shells := COALESCE(v_point.reward_shells, 0);
+        IF v_reward_shells > 0 THEN
+            UPDATE public.profiles SET shells = shells + v_reward_shells WHERE id = v_user_id;
+        END IF;
+    END IF;
+
+    INSERT INTO public.exploration_history (user_id, point_id, reward_shells, reward_item_id, success)
+    VALUES (v_user_id, p_point_id, v_reward_shells, v_reward_item_id, true);
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'message', '探索成功！',
+        'reward_shells', v_point.reward_shells,
+        'reward_item_id', v_reward_item_id
+    );
+END;
+$$;
+
+-- ============================================================
+-- 管理员探索点管理
+-- ============================================================
+
+DROP FUNCTION IF EXISTS public.admin_get_exploration_points(INT, INT);
+CREATE OR REPLACE FUNCTION public.admin_get_exploration_points(
+    p_page INT DEFAULT 1,
+    p_limit INT DEFAULT 20
+)
+RETURNS TABLE(
+    id INT,
+    name TEXT,
+    description TEXT,
+    latitude DOUBLE PRECISION,
+    longitude DOUBLE PRECISION,
+    radius_meters INT,
+    reward_shells INT,
+    reward_item_id INT,
+    reward_item_name TEXT,
+    reward_item_chance DECIMAL,
+    daily_limit INT,
+    reward_pool_id INT,
+    created_at TIMESTAMPTZ,
+    total_count BIGINT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+    v_offset INT;
+BEGIN
+    IF user_uuid IS NULL THEN
+        RAISE EXCEPTION '未登录';
+    END IF;
+
+    IF NOT public.check_admin() THEN
+        RAISE EXCEPTION '无权限';
+    END IF;
+
+    v_offset := (GREATEST(p_page, 1) - 1) * GREATEST(p_limit, 1);
+
+    RETURN QUERY
+    SELECT
+        ep.id,
+        ep.name,
+        ep.description,
+        ep.latitude,
+        ep.longitude,
+        ep.radius_meters,
+        ep.reward_shells,
+        ep.reward_item_id,
+        i.name AS reward_item_name,
+        ep.reward_item_chance,
+        ep.daily_limit,
+        ep.reward_pool_id,
+        ep.created_at,
+        (SELECT COUNT(*) FROM public.exploration_points) AS total_count
+    FROM public.exploration_points ep
+    LEFT JOIN public.items i ON ep.reward_item_id = i.id
+    ORDER BY ep.id
+    LIMIT GREATEST(p_limit, 1) OFFSET v_offset;
+END;
+$$;
+
+DROP FUNCTION IF EXISTS public.admin_add_exploration_point(TEXT, TEXT, DOUBLE PRECISION, DOUBLE PRECISION, INT, INT, INT, DECIMAL, INT, INT);
+DROP FUNCTION IF EXISTS public.admin_add_exploration_point(TEXT, DOUBLE PRECISION, DOUBLE PRECISION, TEXT, INT, INT, INT, DECIMAL, INT, INT);
+CREATE OR REPLACE FUNCTION public.admin_add_exploration_point(
+    p_name TEXT,
+    p_latitude DOUBLE PRECISION,
+    p_longitude DOUBLE PRECISION,
+    p_description TEXT DEFAULT NULL,
+    p_radius_meters INT DEFAULT 50,
+    p_reward_shells INT DEFAULT 0,
+    p_reward_item_id INT DEFAULT NULL,
+    p_reward_item_chance DECIMAL DEFAULT 0,
+    p_daily_limit INT DEFAULT 3,
+    p_reward_pool_id INT DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_new_id INT;
+BEGIN
+    INSERT INTO public.exploration_points (name, description, latitude, longitude, radius_meters, reward_shells, reward_item_id, reward_item_chance, daily_limit, reward_pool_id)
+    VALUES (p_name, p_description, p_latitude, p_longitude, p_radius_meters, p_reward_shells, p_reward_item_id, p_reward_item_chance, p_daily_limit, p_reward_pool_id)
+    RETURNING id INTO v_new_id;
+    
+    RETURN jsonb_build_object('success', true, 'id', v_new_id);
+END;
+$$;
+
+DROP FUNCTION IF EXISTS public.admin_update_exploration_point(INT, TEXT, TEXT, DOUBLE PRECISION, DOUBLE PRECISION, INT, INT, INT, DECIMAL, INT, INT);
+CREATE OR REPLACE FUNCTION public.admin_update_exploration_point(
+    p_id INT,
+    p_name TEXT DEFAULT NULL,
+    p_description TEXT DEFAULT NULL,
+    p_latitude DOUBLE PRECISION DEFAULT NULL,
+    p_longitude DOUBLE PRECISION DEFAULT NULL,
+    p_radius_meters INT DEFAULT NULL,
+    p_reward_shells INT DEFAULT NULL,
+    p_reward_item_id INT DEFAULT NULL,
+    p_reward_item_chance DECIMAL DEFAULT NULL,
+    p_daily_limit INT DEFAULT NULL,
+    p_reward_pool_id INT DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    UPDATE public.exploration_points SET
+        name = COALESCE(p_name, name),
+        description = COALESCE(p_description, description),
+        latitude = COALESCE(p_latitude, latitude),
+        longitude = COALESCE(p_longitude, longitude),
+        radius_meters = COALESCE(p_radius_meters, radius_meters),
+        reward_shells = COALESCE(p_reward_shells, reward_shells),
+        reward_item_id = COALESCE(p_reward_item_id, reward_item_id),
+        reward_item_chance = COALESCE(p_reward_item_chance, reward_item_chance),
+        daily_limit = COALESCE(p_daily_limit, daily_limit),
+        reward_pool_id = CASE WHEN p_reward_pool_id = 0 THEN NULL ELSE COALESCE(p_reward_pool_id, reward_pool_id) END
+    WHERE id = p_id;
+    
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('success', false, 'message', '探索点不存在');
+    END IF;
+    
+    RETURN jsonb_build_object('success', true);
+END;
+$$;
+
+DROP FUNCTION IF EXISTS public.admin_delete_exploration_point(INT);
+CREATE OR REPLACE FUNCTION public.admin_delete_exploration_point(p_id INT)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    DELETE FROM public.exploration_history WHERE point_id = p_id;
+    DELETE FROM public.exploration_points WHERE id = p_id;
+    
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('success', false, 'message', '探索点不存在');
+    END IF;
+    
+    RETURN jsonb_build_object('success', true);
+END;
+$$;
+
+DROP FUNCTION IF EXISTS public.admin_get_exploration_history(INT, INT);
+CREATE OR REPLACE FUNCTION public.admin_get_exploration_history(
+    p_page INT DEFAULT 1,
+    p_limit INT DEFAULT 20
+)
+RETURNS TABLE(
+    id INT,
+    user_id UUID,
+    user_nickname TEXT,
+    point_id INT,
+    point_name TEXT,
+    explored_at TIMESTAMPTZ,
+    reward_shells INT,
+    reward_item_id INT,
+    reward_item_name TEXT,
+    success BOOLEAN,
+    total_count BIGINT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+    v_offset INT;
+BEGIN
+    IF user_uuid IS NULL THEN
+        RAISE EXCEPTION '未登录';
+    END IF;
+
+    IF NOT public.check_admin() THEN
+        RAISE EXCEPTION '无权限';
+    END IF;
+
+    v_offset := (GREATEST(p_page, 1) - 1) * GREATEST(p_limit, 1);
+
+    RETURN QUERY
+    SELECT
+        eh.id,
+        eh.user_id,
+        p.nickname AS user_nickname,
+        eh.point_id,
+        ep.name AS point_name,
+        eh.explored_at,
+        eh.reward_shells,
+        eh.reward_item_id,
+        i.name AS reward_item_name,
+        eh.success,
+        (SELECT COUNT(*) FROM public.exploration_history) AS total_count
+    FROM public.exploration_history eh
+    JOIN public.profiles p ON eh.user_id = p.id
+    JOIN public.exploration_points ep ON eh.point_id = ep.id
+    LEFT JOIN public.items i ON eh.reward_item_id = i.id
+    ORDER BY eh.explored_at DESC
+    LIMIT GREATEST(p_limit, 1) OFFSET v_offset;
+END;
+$$;
+
+-- ============================================================
+-- 15. 奖池系统
+-- ============================================================
+
+-- RLS for reward tables
+ALTER TABLE public.reward_pools ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.reward_pool_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.reward_pool_draws ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view active reward pools" ON public.reward_pools;
+CREATE POLICY "Users can view active reward pools" ON public.reward_pools FOR SELECT USING (is_active = true);
+
+DROP POLICY IF EXISTS "Users can view reward pool items" ON public.reward_pool_items;
+CREATE POLICY "Users can view reward pool items" ON public.reward_pool_items FOR SELECT USING (
+    EXISTS (SELECT 1 FROM public.reward_pools rp WHERE rp.id = pool_id AND rp.is_active = true)
+);
+
+DROP POLICY IF EXISTS "Users can view own draws" ON public.reward_pool_draws;
+CREATE POLICY "Users can view own draws" ON public.reward_pool_draws FOR SELECT USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Admin can manage reward pools" ON public.reward_pools;
+CREATE POLICY "Admin can manage reward pools" ON public.reward_pools FOR ALL USING (public.check_admin());
+
+DROP POLICY IF EXISTS "Admin can manage reward pool items" ON public.reward_pool_items;
+CREATE POLICY "Admin can manage reward pool items" ON public.reward_pool_items FOR ALL USING (public.check_admin());
+
+DROP POLICY IF EXISTS "Admin can view all draws" ON public.reward_pool_draws;
+CREATE POLICY "Admin can view all draws" ON public.reward_pool_draws FOR SELECT USING (public.check_admin());
+
+-- ============================================================
+-- 奖池 RPC 函数
+-- ============================================================
+
+-- 获取活跃奖池列表（用户用）
+DROP FUNCTION IF EXISTS public.get_active_reward_pools();
+CREATE OR REPLACE FUNCTION public.get_active_reward_pools()
+RETURNS SETOF JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'id', rp.id,
+        'name', rp.name,
+        'description', rp.description,
+        'pool_type', rp.pool_type,
+        'items', COALESCE((
+            SELECT jsonb_agg(jsonb_build_object(
+                'id', rpi.id,
+                'reward_type', rpi.reward_type,
+                'item_id', rpi.item_id,
+                'item_name', i.name,
+                'item_quality', i.quality,
+                'item_quantity', rpi.item_quantity,
+                'shells_amount', rpi.shells_amount,
+                'exp_amount', rpi.exp_amount,
+                'weight', rpi.weight
+            ) ORDER BY rpi.sort_order, rpi.id)
+            FROM public.reward_pool_items rpi
+            LEFT JOIN public.items i ON rpi.item_id = i.id
+            WHERE rpi.pool_id = rp.id
+        ), '[]'::jsonb)
+    )
+    FROM public.reward_pools rp
+    WHERE rp.is_active = true
+    ORDER BY rp.id;
+END;
+$$;
+
+-- 从奖池抽取奖励（核心函数）
+DROP FUNCTION IF EXISTS public.draw_from_reward_pool(INT);
+CREATE OR REPLACE FUNCTION public.draw_from_reward_pool(p_pool_id INT)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_user_id UUID := auth.uid();
+    v_pool RECORD;
+    v_total_weight INT;
+    v_random_val INT;
+    v_cumulative INT := 0;
+    v_selected_item RECORD;
+    v_result JSONB;
+BEGIN
+    IF v_user_id IS NULL THEN
+        RAISE EXCEPTION '未登录';
+    END IF;
+
+    SELECT * INTO v_pool FROM public.reward_pools WHERE id = p_pool_id AND is_active = true;
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('success', false, 'message', '奖池不存在或未激活');
+    END IF;
+
+    SELECT COALESCE(SUM(weight), 0) INTO v_total_weight
+    FROM public.reward_pool_items
+    WHERE pool_id = p_pool_id;
+
+    IF v_total_weight <= 0 THEN
+        RETURN jsonb_build_object('success', false, 'message', '奖池为空');
+    END IF;
+
+    v_random_val := FLOOR(RANDOM() * v_total_weight) + 1;
+
+    FOR v_selected_item IN
+        SELECT * FROM public.reward_pool_items
+        WHERE pool_id = p_pool_id
+        ORDER BY sort_order, id
+    LOOP
+        v_cumulative := v_cumulative + v_selected_item.weight;
+        IF v_random_val <= v_cumulative THEN
+            EXIT;
+        END IF;
+    END LOOP;
+
+    IF v_selected_item IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '抽取失败');
+    END IF;
+
+    IF v_selected_item.reward_type = 'item' AND v_selected_item.item_id IS NOT NULL AND v_selected_item.item_quantity > 0 THEN
+        INSERT INTO public.inventory (user_id, item_id, quantity)
+        VALUES (v_user_id, v_selected_item.item_id, v_selected_item.item_quantity)
+        ON CONFLICT (user_id, item_id) DO UPDATE
+        SET quantity = inventory.quantity + v_selected_item.item_quantity;
+    END IF;
+
+    IF v_selected_item.reward_type = 'shells' AND v_selected_item.shells_amount > 0 THEN
+        UPDATE public.profiles
+        SET shells = shells + v_selected_item.shells_amount
+        WHERE id = v_user_id;
+    END IF;
+
+    INSERT INTO public.reward_pool_draws (
+        pool_id, user_id, reward_type, item_id, item_quantity, shells_amount, exp_amount
+    ) VALUES (
+        p_pool_id, v_user_id, v_selected_item.reward_type,
+        v_selected_item.item_id, v_selected_item.item_quantity,
+        v_selected_item.shells_amount, v_selected_item.exp_amount
+    );
+
+    v_result := jsonb_build_object(
+        'success', true,
+        'reward_type', v_selected_item.reward_type,
+        'item_id', v_selected_item.item_id,
+        'item_name', (SELECT name FROM public.items WHERE id = v_selected_item.item_id),
+        'item_quality', (SELECT quality FROM public.items WHERE id = v_selected_item.item_id),
+        'item_quantity', v_selected_item.item_quantity,
+        'shells_amount', v_selected_item.shells_amount,
+        'exp_amount', v_selected_item.exp_amount
+    );
+
+    RETURN v_result;
+END;
+$$;
+
+-- 管理员获取奖池列表
+DROP FUNCTION IF EXISTS public.admin_get_reward_pools(INT, INT, TEXT);
+CREATE OR REPLACE FUNCTION public.admin_get_reward_pools(
+    p_page INT DEFAULT 1,
+    p_limit INT DEFAULT 20,
+    p_pool_types TEXT DEFAULT NULL
+)
+RETURNS TABLE(
+    id INT,
+    name TEXT,
+    description TEXT,
+    pool_type TEXT,
+    is_active BOOLEAN,
+    item_count BIGINT,
+    created_at TIMESTAMPTZ,
+    total_count BIGINT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+    v_offset INT;
+BEGIN
+    IF user_uuid IS NULL THEN
+        RAISE EXCEPTION '未登录';
+    END IF;
+
+    IF NOT public.check_admin() THEN
+        RAISE EXCEPTION '无权限';
+    END IF;
+
+    v_offset := (GREATEST(p_page, 1) - 1) * GREATEST(p_limit, 1);
+
+    RETURN QUERY
+    SELECT
+        rp.id,
+        rp.name,
+        rp.description,
+        rp.pool_type,
+        rp.is_active,
+        (SELECT COUNT(*) FROM public.reward_pool_items rpi WHERE rpi.pool_id = rp.id) AS item_count,
+        rp.created_at,
+        (SELECT COUNT(*) FROM public.reward_pools rp_count WHERE p_pool_types IS NULL OR rp_count.pool_type = ANY(string_to_array(p_pool_types, ','))) AS total_count
+    FROM public.reward_pools rp
+    WHERE p_pool_types IS NULL OR rp.pool_type = ANY(string_to_array(p_pool_types, ','))
+    ORDER BY rp.id DESC
+    LIMIT GREATEST(p_limit, 1) OFFSET v_offset;
+END;
+$$;
+
+-- 管理员获取奖池详情（含奖励项）
+DROP FUNCTION IF EXISTS public.admin_get_reward_pool_detail(INT);
+CREATE OR REPLACE FUNCTION public.admin_get_reward_pool_detail(p_pool_id INT)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+    v_pool JSONB;
+BEGIN
+    IF user_uuid IS NULL THEN
+        RAISE EXCEPTION '未登录';
+    END IF;
+
+    IF NOT public.check_admin() THEN
+        RAISE EXCEPTION '无权限';
+    END IF;
+
+    SELECT jsonb_build_object(
+        'id', rp.id,
+        'name', rp.name,
+        'description', rp.description,
+        'pool_type', rp.pool_type,
+        'is_active', rp.is_active,
+        'items', COALESCE((
+            SELECT jsonb_agg(jsonb_build_object(
+                'id', rpi.id,
+                'reward_type', rpi.reward_type,
+                'item_id', rpi.item_id,
+                'item_name', i.name,
+                'item_quality', i.quality,
+                'item_quantity', rpi.item_quantity,
+                'shells_amount', rpi.shells_amount,
+                'exp_amount', rpi.exp_amount,
+                'weight', rpi.weight,
+                'sort_order', rpi.sort_order
+            ) ORDER BY rpi.sort_order, rpi.id)
+            FROM public.reward_pool_items rpi
+            LEFT JOIN public.items i ON rpi.item_id = i.id
+            WHERE rpi.pool_id = rp.id
+        ), '[]'::jsonb)
+    ) INTO v_pool
+    FROM public.reward_pools rp
+    WHERE rp.id = p_pool_id;
+
+    RETURN v_pool;
+END;
+$$;
+
+-- 管理员创建奖池
+DROP FUNCTION IF EXISTS public.admin_create_reward_pool(TEXT, TEXT, TEXT);
+CREATE OR REPLACE FUNCTION public.admin_create_reward_pool(
+    p_name TEXT,
+    p_description TEXT DEFAULT NULL,
+    p_pool_type TEXT DEFAULT 'general'
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+    v_new_id INT;
+BEGIN
+    IF user_uuid IS NULL THEN
+        RAISE EXCEPTION '未登录';
+    END IF;
+
+    IF NOT public.check_admin() THEN
+        RAISE EXCEPTION '无权限';
+    END IF;
+
+    IF p_name IS NULL OR TRIM(p_name) = '' THEN
+        RETURN jsonb_build_object('success', false, 'message', '奖池名称不能为空');
+    END IF;
+
+    INSERT INTO public.reward_pools (name, description, pool_type)
+    VALUES (TRIM(p_name), p_description, p_pool_type)
+    RETURNING id INTO v_new_id;
+
+    RETURN jsonb_build_object('success', true, 'id', v_new_id);
+END;
+$$;
+
+-- 管理员更新奖池
+DROP FUNCTION IF EXISTS public.admin_update_reward_pool(INT, TEXT, TEXT, TEXT, BOOLEAN);
+CREATE OR REPLACE FUNCTION public.admin_update_reward_pool(
+    p_id INT,
+    p_name TEXT DEFAULT NULL,
+    p_description TEXT DEFAULT NULL,
+    p_pool_type TEXT DEFAULT NULL,
+    p_is_active BOOLEAN DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+BEGIN
+    IF user_uuid IS NULL THEN
+        RAISE EXCEPTION '未登录';
+    END IF;
+
+    IF NOT public.check_admin() THEN
+        RAISE EXCEPTION '无权限';
+    END IF;
+
+    UPDATE public.reward_pools SET
+        name = COALESCE(p_name, name),
+        description = COALESCE(p_description, description),
+        pool_type = COALESCE(p_pool_type, pool_type),
+        is_active = COALESCE(p_is_active, is_active),
+        updated_at = now()
+    WHERE id = p_id;
+
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('success', false, 'message', '奖池不存在');
+    END IF;
+
+    RETURN jsonb_build_object('success', true);
+END;
+$$;
+
+-- 管理员删除奖池
+DROP FUNCTION IF EXISTS public.admin_delete_reward_pool(INT);
+CREATE OR REPLACE FUNCTION public.admin_delete_reward_pool(p_id INT)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+BEGIN
+    IF user_uuid IS NULL THEN
+        RAISE EXCEPTION '未登录';
+    END IF;
+
+    IF NOT public.check_admin() THEN
+        RAISE EXCEPTION '无权限';
+    END IF;
+
+    DELETE FROM public.reward_pools WHERE id = p_id;
+
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('success', false, 'message', '奖池不存在');
+    END IF;
+
+    RETURN jsonb_build_object('success', true);
+END;
+$$;
+
+-- 管理员添加奖池奖励项
+DROP FUNCTION IF EXISTS public.admin_add_reward_pool_item(INT, TEXT, INT, INT, INT, INT, INT);
+CREATE OR REPLACE FUNCTION public.admin_add_reward_pool_item(
+    p_pool_id INT,
+    p_reward_type TEXT,
+    p_item_id INT DEFAULT NULL,
+    p_item_quantity INT DEFAULT 1,
+    p_shells_amount INT DEFAULT 0,
+    p_exp_amount INT DEFAULT 0,
+    p_weight INT DEFAULT 100,
+    p_sort_order INT DEFAULT 0
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+    v_new_id INT;
+BEGIN
+    IF user_uuid IS NULL THEN
+        RAISE EXCEPTION '未登录';
+    END IF;
+
+    IF NOT public.check_admin() THEN
+        RAISE EXCEPTION '无权限';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM public.reward_pools WHERE id = p_pool_id) THEN
+        RETURN jsonb_build_object('success', false, 'message', '奖池不存在');
+    END IF;
+
+    IF p_reward_type NOT IN ('item', 'shells', 'exp', 'nothing') THEN
+        RETURN jsonb_build_object('success', false, 'message', '无效的奖励类型');
+    END IF;
+
+    IF p_reward_type = 'item' AND (p_item_id IS NULL OR p_item_quantity <= 0) THEN
+        RETURN jsonb_build_object('success', false, 'message', '物品奖励需要指定物品ID和数量');
+    END IF;
+
+    INSERT INTO public.reward_pool_items (
+        pool_id, reward_type, item_id, item_quantity,
+        shells_amount, exp_amount, weight, sort_order
+    ) VALUES (
+        p_pool_id, p_reward_type, p_item_id, p_item_quantity,
+        p_shells_amount, p_exp_amount, p_weight, p_sort_order
+    )
+    RETURNING id INTO v_new_id;
+
+    RETURN jsonb_build_object('success', true, 'id', v_new_id);
+END;
+$$;
+
+-- 管理员更新奖池奖励项
+DROP FUNCTION IF EXISTS public.admin_update_reward_pool_item(INT, TEXT, INT, INT, INT, INT, INT);
+CREATE OR REPLACE FUNCTION public.admin_update_reward_pool_item(
+    p_item_id INT,
+    p_reward_type TEXT DEFAULT NULL,
+    p_item_ref_id INT DEFAULT NULL,
+    p_item_quantity INT DEFAULT NULL,
+    p_shells_amount INT DEFAULT NULL,
+    p_exp_amount INT DEFAULT NULL,
+    p_weight INT DEFAULT NULL,
+    p_sort_order INT DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+BEGIN
+    IF user_uuid IS NULL THEN
+        RAISE EXCEPTION '未登录';
+    END IF;
+
+    IF NOT public.check_admin() THEN
+        RAISE EXCEPTION '无权限';
+    END IF;
+
+    UPDATE public.reward_pool_items SET
+        reward_type = COALESCE(p_reward_type, reward_type),
+        item_id = COALESCE(p_item_ref_id, item_id),
+        item_quantity = COALESCE(p_item_quantity, item_quantity),
+        shells_amount = COALESCE(p_shells_amount, shells_amount),
+        exp_amount = COALESCE(p_exp_amount, exp_amount),
+        weight = COALESCE(p_weight, weight),
+        sort_order = COALESCE(p_sort_order, sort_order)
+    WHERE id = p_item_id;
+
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('success', false, 'message', '奖励项不存在');
+    END IF;
+
+    RETURN jsonb_build_object('success', true);
+END;
+$$;
+
+-- 管理员删除奖池奖励项
+DROP FUNCTION IF EXISTS public.admin_delete_reward_pool_item(INT);
+CREATE OR REPLACE FUNCTION public.admin_delete_reward_pool_item(p_item_id INT)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+BEGIN
+    IF user_uuid IS NULL THEN
+        RAISE EXCEPTION '未登录';
+    END IF;
+
+    IF NOT public.check_admin() THEN
+        RAISE EXCEPTION '无权限';
+    END IF;
+
+    DELETE FROM public.reward_pool_items WHERE id = p_item_id;
+
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('success', false, 'message', '奖励项不存在');
+    END IF;
+
+    RETURN jsonb_build_object('success', true);
+END;
+$$;
+
+DROP FUNCTION IF EXISTS public.use_consumable_pool(INT);
+CREATE OR REPLACE FUNCTION public.use_consumable_pool(p_item_id INT)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+    v_item RECORD;
+    v_pool RECORD;
+    v_inv_id BIGINT;
+    v_total_weight INT;
+    v_random_pick INT;
+    v_remaining INT;
+    v_selected_item RECORD;
+    v_result JSONB;
+BEGIN
+    IF user_uuid IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '请先登录');
+    END IF;
+
+    SELECT i.* INTO v_item FROM public.items i WHERE i.id = p_item_id;
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('success', false, 'message', '物品不存在');
+    END IF;
+
+    IF v_item.reward_pool_id IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '该物品未设置奖池');
+    END IF;
+
+    SELECT rp.* INTO v_pool FROM public.reward_pools rp WHERE rp.id = v_item.reward_pool_id AND rp.is_active = true;
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('success', false, 'message', '奖池不存在或已停用');
+    END IF;
+
+    SELECT id INTO v_inv_id FROM public.inventory WHERE user_id = user_uuid AND item_id = p_item_id;
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('success', false, 'message', '你没有该物品');
+    END IF;
+
+    SELECT COALESCE(SUM(weight), 0) INTO v_total_weight
+    FROM public.reward_pool_items
+    WHERE pool_id = v_item.reward_pool_id;
+
+    IF v_total_weight <= 0 THEN
+        RETURN jsonb_build_object('success', false, 'message', '奖池暂无可抽取奖励');
+    END IF;
+
+    v_random_pick := floor(random() * v_total_weight) + 1;
+    v_remaining := v_random_pick;
+
+    FOR v_selected_item IN
+        SELECT rpi.id AS rpi_id, rpi.reward_type, rpi.item_id, rpi.item_quantity, rpi.shells_amount, rpi.exp_amount, rpi.weight,
+               i.name AS item_name, i.quality AS item_quality, i.image_name AS item_image
+        FROM public.reward_pool_items rpi
+        LEFT JOIN public.items i ON rpi.item_id = i.id
+        WHERE rpi.pool_id = v_item.reward_pool_id
+        ORDER BY rpi.sort_order, rpi.id
+    LOOP
+        v_remaining := v_remaining - v_selected_item.weight;
+        IF v_remaining <= 0 THEN
+            EXIT;
+        END IF;
+    END LOOP;
+
+    IF v_selected_item IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', '抽取失败');
+    END IF;
+
+    UPDATE public.inventory SET quantity = quantity - 1 WHERE id = v_inv_id;
+    DELETE FROM public.inventory WHERE id = v_inv_id AND quantity <= 0;
+
+    INSERT INTO public.reward_pool_draws (pool_id, user_id, reward_type, item_id, item_quantity, shells_amount, exp_amount)
+    VALUES (v_item.reward_pool_id, user_uuid, v_selected_item.reward_type, v_selected_item.item_id,
+            v_selected_item.item_quantity, v_selected_item.shells_amount, v_selected_item.exp_amount);
+
+    IF v_selected_item.reward_type = 'item' AND v_selected_item.item_id IS NOT NULL THEN
+        PERFORM public.inventory_add_item(user_uuid, v_selected_item.item_id, v_selected_item.item_quantity);
+        v_result := jsonb_build_object(
+            'success', true,
+            'message', '恭喜获得「' || COALESCE(v_selected_item.item_name, '未知物品') || '」x' || v_selected_item.item_quantity || '！',
+            'reward_type', 'item',
+            'item_id', v_selected_item.item_id,
+            'item_name', v_selected_item.item_name,
+            'item_quality', v_selected_item.item_quality,
+            'item_image', v_selected_item.item_image,
+            'item_quantity', v_selected_item.item_quantity
+        );
+    ELSIF v_selected_item.reward_type = 'shells' THEN
+        UPDATE public.profiles SET shells = shells + v_selected_item.shells_amount WHERE id = user_uuid;
+        v_result := jsonb_build_object(
+            'success', true,
+            'message', '恭喜获得 ' || v_selected_item.shells_amount || ' 果壳币！',
+            'reward_type', 'shells',
+            'shells_amount', v_selected_item.shells_amount
+        );
+    ELSIF v_selected_item.reward_type = 'exp' THEN
+        UPDATE public.profiles SET exp = exp + v_selected_item.exp_amount WHERE id = user_uuid;
+        v_result := jsonb_build_object(
+            'success', true,
+            'message', '恭喜获得 ' || v_selected_item.exp_amount || ' 经验值！',
+            'reward_type', 'exp',
+            'exp_amount', v_selected_item.exp_amount
+        );
+    ELSE
+        v_result := jsonb_build_object(
+            'success', true,
+            'message', '很遗憾，什么都没获得...',
+            'reward_type', 'nothing'
+        );
+    END IF;
+
+    RETURN v_result;
+END;
+$$;
+
+-- 获取奖池抽取记录
+DROP FUNCTION IF EXISTS public.admin_get_reward_pool_draws(INT, INT, INT);
+CREATE OR REPLACE FUNCTION public.admin_get_reward_pool_draws(
+    p_pool_id INT DEFAULT NULL,
+    p_page INT DEFAULT 1,
+    p_limit INT DEFAULT 20
+)
+RETURNS TABLE(
+    id BIGINT,
+    pool_id INT,
+    pool_name TEXT,
+    user_id UUID,
+    user_nickname TEXT,
+    reward_type TEXT,
+    item_id INT,
+    item_name TEXT,
+    item_quantity INT,
+    shells_amount INT,
+    exp_amount INT,
+    drawn_at TIMESTAMPTZ,
+    total_count BIGINT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_uuid UUID := auth.uid();
+    v_offset INT;
+BEGIN
+    IF user_uuid IS NULL THEN
+        RAISE EXCEPTION '未登录';
+    END IF;
+
+    IF NOT public.check_admin() THEN
+        RAISE EXCEPTION '无权限';
+    END IF;
+
+    v_offset := (GREATEST(p_page, 1) - 1) * GREATEST(p_limit, 1);
+
+    RETURN QUERY
+    SELECT
+        rpd.id,
+        rpd.pool_id,
+        rp.name AS pool_name,
+        rpd.user_id,
+        p.nickname AS user_nickname,
+        rpd.reward_type,
+        rpd.item_id,
+        i.name AS item_name,
+        rpd.item_quantity,
+        rpd.shells_amount,
+        rpd.exp_amount,
+        rpd.drawn_at,
+        (SELECT COUNT(*) FROM public.reward_pool_draws
+         WHERE (p_pool_id IS NULL OR pool_id = p_pool_id)) AS total_count
+    FROM public.reward_pool_draws rpd
+    JOIN public.reward_pools rp ON rpd.pool_id = rp.id
+    JOIN public.profiles p ON rpd.user_id = p.id
+    LEFT JOIN public.items i ON rpd.item_id = i.id
+    WHERE (p_pool_id IS NULL OR rpd.pool_id = p_pool_id)
+    ORDER BY rpd.drawn_at DESC
+    LIMIT GREATEST(p_limit, 1) OFFSET v_offset;
 END;
 $$;
 

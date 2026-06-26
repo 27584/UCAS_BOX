@@ -438,6 +438,163 @@
 }
 
 /* ============================================
+   探索点管理
+   ============================================ */
+
+.explore-admin-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.explore-point-list-admin {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.explore-point-card-admin {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--paper-card);
+    border: 1.5px solid var(--ink);
+    box-shadow: 2px 2px 0 var(--ink-faded);
+    transition: all 0.15s;
+}
+
+.explore-point-card-admin:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: 3px 3px 0 var(--ink);
+}
+
+.explore-point-card-admin .point-icon-admin {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent);
+    color: white;
+    flex-shrink: 0;
+}
+
+.explore-point-card-admin .point-icon-admin svg {
+    width: 18px;
+    height: 18px;
+}
+
+.explore-point-card-admin .point-info-admin {
+    flex: 1;
+    min-width: 0;
+}
+
+.explore-point-card-admin .point-name-admin {
+    font-family: var(--font-display);
+    font-size: 1rem;
+    color: var(--ink);
+    font-weight: 600;
+    margin-bottom: 2px;
+}
+
+.explore-point-card-admin .point-coords-admin {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--ink-soft);
+}
+
+.explore-point-card-admin .point-reward-admin {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    color: var(--accent);
+    flex-shrink: 0;
+}
+
+.explore-point-card-admin .point-reward-admin svg {
+    width: 14px;
+    height: 14px;
+}
+
+.explore-point-card-admin .point-actions-admin {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.explore-point-card-admin .point-actions-admin .btn {
+    padding: 6px 10px;
+    font-size: 0.75rem;
+}
+
+.explore-history-modal-content {
+    width: 90%;
+    max-width: 600px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.explore-history-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.explore-history-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--paper-bg);
+    border: 1px solid var(--ink-light);
+    font-size: 0.85rem;
+}
+
+.explore-history-item .history-user {
+    font-family: var(--font-display);
+    font-weight: 600;
+    color: var(--ink);
+    flex-shrink: 0;
+}
+
+.explore-history-item .history-point {
+    color: var(--accent);
+    flex-shrink: 0;
+}
+
+.explore-history-item .history-time {
+    font-family: var(--font-mono);
+    color: var(--ink-soft);
+    font-size: 0.75rem;
+}
+
+.explore-history-item .history-reward {
+    font-family: var(--font-mono);
+    color: var(--ink);
+}
+
+.explore-point-form-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.explore-point-form-row .form-group {
+    flex: 1;
+}
+
+.explore-point-form-row .form-group.coords {
+    max-width: 120px;
+}
+
+/* ============================================
    移动端响应式
    ============================================ */
 @media (max-width: 768px) {
@@ -937,5 +1094,423 @@
 }
 
 .item-search-bar .form-input:focus { box-shadow: none; }
+
+/* ============================================
+   后台地图管理
+   ============================================ */
+
+.explore-map-container {
+    margin-bottom: 16px;
+    border: 2px solid var(--ink);
+    border-radius: 0;
+    overflow: hidden;
+    box-shadow: 3px 3px 0 var(--ink-faded);
+}
+
+.explore-admin-map {
+    height: 400px;
+    position: relative;
+}
+
+.explore-admin-map .map-loading,
+.explore-admin-map .map-error {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    color: var(--ink-faded);
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+}
+
+.explore-map-tips {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--paper-bg);
+    border-top: 1px dashed var(--ink-faded);
+    font-size: 0.75rem;
+    color: var(--ink-faded);
+    font-family: var(--font-mono);
+}
+
+.explore-map-tips i { width: 14px; height: 14px; }
+
+.admin-point-marker {
+    background: transparent;
+    border: none;
+}
+
+.admin-point-marker-inner {
+    width: 36px;
+    height: 36px;
+    background: var(--accent);
+    border: 2px solid var(--ink);
+    border-radius: 50% 50% 50% 0;
+    transform: rotate(-45deg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 2px 2px 4px rgba(0,0,0,0.4);
+}
+
+.admin-point-marker-inner svg {
+    transform: rotate(45deg);
+    width: 18px;
+    height: 18px;
+    color: var(--ink);
+}
+
+.admin-user-marker-inner {
+    width: 40px;
+    height: 40px;
+    background: var(--seal-red);
+    border: 2px solid var(--ink);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 2px 2px 4px rgba(0,0,0,0.4);
+    animation: pulse 2s infinite;
+}
+
+.admin-user-marker-inner svg {
+    width: 20px;
+    height: 20px;
+    color: white;
+}
+
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(220, 53, 69, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(220, 53, 69, 0);
+    }
+}
+
+.admin-map-popup {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+}
+
+.admin-map-popup small {
+    color: var(--ink-faded);
+    display: block;
+    margin-top: 2px;
+}
+
+.map-locate-btn {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    z-index: 1000;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--ink);
+    color: var(--ink);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+    transition: all 0.15s;
+}
+
+.map-locate-btn:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: 3px 3px 6px rgba(0,0,0,0.4);
+}
+
+.map-locate-btn:active {
+    transform: translate(1px, 1px);
+    box-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+}
+
+.map-locate-btn svg {
+    width: 18px;
+    height: 18px;
+}
+
+/* ============================================
+   奖池管理
+   ============================================ */
+
+.reward-pools-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.pool-type-filter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+}
+
+.pool-type-filter .filter-label {
+    font-size: 0.75rem;
+    color: var(--ink-faded);
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.reward-pool-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.reward-pool-card {
+    background: var(--paper-card);
+    border: 1.5px solid var(--ink);
+    border-radius: 0;
+    padding: 16px;
+    box-shadow: 3px 3px 0 var(--ink-faded);
+    transition: all 0.15s;
+}
+
+.reward-pool-card:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: 4px 4px 0 var(--ink);
+}
+
+.pool-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.pool-icon {
+    width: 44px;
+    height: 44px;
+    background: var(--accent);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border: 2px solid var(--ink);
+}
+
+.pool-icon svg { width: 22px; height: 22px; }
+
+.pool-info {
+    flex: 1;
+}
+
+.pool-name {
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--ink);
+    display: block;
+    margin-bottom: 4px;
+}
+
+.pool-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.pool-type-tag {
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    background: var(--paper-bg);
+    border: 1px solid var(--ink-faded);
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.pool-item-count {
+    font-size: 0.75rem;
+    color: var(--ink-faded);
+    font-family: var(--font-mono);
+}
+
+.status-tag {
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    background: var(--paper-bg);
+    border: 1px solid var(--ink-faded);
+    font-family: var(--font-mono);
+    color: var(--ink-faded);
+}
+
+.status-tag.active {
+    background: rgba(76, 175, 80, 0.1);
+    border-color: #4CAF50;
+    color: #4CAF50;
+}
+
+.pool-desc {
+    font-size: 0.85rem;
+    color: var(--ink-faded);
+    margin-bottom: 10px;
+    font-family: var(--font-mono);
+}
+
+.pool-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.pool-actions .btn { padding: 6px 12px; font-size: 0.8rem; }
+
+/* 奖池奖励项 */
+.pool-items-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px dashed var(--ink-faded);
+}
+
+.pool-items-total {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    color: var(--ink-faded);
+}
+
+.pool-items-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.pool-item-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--paper-bg);
+    border: 1px solid var(--ink-faded);
+    border-radius: 0;
+}
+
+.pool-item-index {
+    width: 24px;
+    height: 24px;
+    background: var(--ink);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    flex-shrink: 0;
+}
+
+.pool-item-type {
+    width: 60px;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--ink-faded);
+    flex-shrink: 0;
+}
+
+.pool-item-desc {
+    flex: 1;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pool-item-weight {
+    width: 100px;
+    flex-shrink: 0;
+}
+
+.weight-input-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.weight-input {
+    width: 60px;
+    padding: 4px 8px;
+    font-size: 0.8rem;
+}
+
+.weight-percent {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--accent);
+    min-width: 50px;
+}
+
+.pool-item-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.pool-item-actions .btn {
+    padding: 4px 6px;
+}
+
+/* 奖池预览 */
+.pool-preview-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px;
+    background: var(--paper-bg);
+    border: 1px dashed var(--ink-faded);
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.preview-item {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    padding: 4px 0;
+    border-bottom: 1px dotted var(--ink-faded);
+}
+
+.preview-item:last-child { border-bottom: none; }
+
+.preview-weight {
+    color: var(--accent);
+    font-weight: 600;
+}
+
+/* 探索点奖池标签 */
+.pool-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    background: linear-gradient(135deg, var(--accent), #FF6B6B);
+    color: white;
+    font-size: 0.7rem;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    border-radius: 2px;
+}
 
 

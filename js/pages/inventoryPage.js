@@ -325,13 +325,14 @@ export const inventoryPage = {
                 const inv = this.items.find(i => i.item_id === itemId);
                 if (inv) {
                     openItemDetail({
-                        id: inv.item_id,
+                        item_id: inv.item_id,
                         name: inv.item_name,
                         quality: inv.item_quality,
                         image_name: inv.item_image,
                         description: inv.item_description,
                         item_type: inv.item_type,
-                        owned: inv.quantity
+                        owned: inv.quantity,
+                        reward_pool_id: inv.reward_pool_id
                     });
                 }
             });

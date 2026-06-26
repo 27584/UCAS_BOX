@@ -40,6 +40,8 @@
         <button class="tab-btn" data-tab="submissions">投稿审核</button>
         <button class="tab-btn" data-tab="lottery">彩票管理</button>
         <button class="tab-btn" data-tab="bots">机器人管理</button>
+        <button class="tab-btn" data-tab="explore">探索管理</button>
+        <button class="tab-btn" data-tab="reward-pools">奖池管理</button>
     </div>
 
     <div class="tab-content" id="tab-users">
@@ -178,5 +180,73 @@
             每小时自动按配置上架商品。展开可修改配置、查看挂单、手动上下架。
         </p>
         <div id="bot-list"></div>
+    </div>
+
+    <div class="tab-content" id="tab-explore" style="display:none;">
+        <div class="explore-admin-header">
+            <button class="btn btn-primary" id="btn-open-add-explore-point">
+                <i data-lucide="plus"></i>
+                <span>添加探索点</span>
+            </button>
+            <button class="btn btn-secondary" id="btn-view-explore-history">
+                <i data-lucide="history"></i>
+                <span>探索记录</span>
+            </button>
+        </div>
+        <p class="info-text" style="margin-bottom:12px;">
+            点击地图可快速添加探索点，拖拽可调整位置。
+        </p>
+
+        <div class="explore-map-container" id="explore-map-container">
+            <div class="explore-admin-map" id="explore-admin-map">
+                <div class="map-loading" id="admin-map-loading">
+                    <i data-lucide="loader-2" class="spin"></i>
+                    <span>加载地图中...</span>
+                </div>
+                <div class="map-error" id="admin-map-error" style="display:none;">
+                    <i data-lucide="alert-circle"></i>
+                    <span>无法加载地图</span>
+                </div>
+                <button class="map-locate-btn" id="btn-map-locate" title="定位我的位置">
+                    <i data-lucide="crosshair"></i>
+                </button>
+            </div>
+            <div class="explore-map-tips">
+                <i data-lucide="info"></i>
+                <span>点击地图快速添加探索点，拖拽标记调整位置</span>
+            </div>
+        </div>
+
+        <div class="explore-point-list-admin" id="explore-point-list-admin">
+            <div class="skeleton" style="height:60px;"></div>
+            <div class="skeleton" style="height:60px;"></div>
+        </div>
+    </div>
+
+    <div class="tab-content" id="tab-reward-pools" style="display:none;">
+        <div class="reward-pools-header">
+            <button class="btn btn-primary" id="btn-open-add-pool">
+                <i data-lucide="plus"></i>
+                <span>创建奖池</span>
+            </button>
+            <div class="pool-type-filter">
+                <label class="filter-label">类型：</label>
+                <select class="form-input" id="pool-type-filter">
+                    <option value="">全部</option>
+                    <option value="general">通用</option>
+                    <option value="explore">探索</option>
+                    <option value="consumable">消耗品</option>
+                    <option value="activity">活动</option>
+                    <option value="lottery">彩票</option>
+                </select>
+            </div>
+        </div>
+        <p class="info-text" style="margin-bottom:12px;">
+            管理奖励奖池，可配置多种奖励类型及概率权重，用于探索、活动等场景。
+        </p>
+        <div class="reward-pool-list" id="reward-pool-list">
+            <div class="skeleton" style="height:80px;"></div>
+            <div class="skeleton" style="height:80px;"></div>
+        </div>
     </div>
 </div>
