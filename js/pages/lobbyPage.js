@@ -1,4 +1,4 @@
-import { openBox, getProfile } from '../api.js';
+import { openBox, getProfile, claimAdRewards } from '../api.js';
 import { formatCountdown, showToast } from '../utils.js';
 import { createIcons, icons } from 'lucide';
 import { updateGlobalShells } from '../auth.js';
@@ -44,6 +44,35 @@ export const lobbyPage = {
             }, 600);
         });
 
+        // 广告书签按钮
+        const btnAd = container.querySelector('#btn-watch-ad');
+        const btnPlay = container.querySelector('#btn-just-play');
+        if (btnAd) {
+            btnAd.addEventListener('click', async () => {
+                if (btnAd.classList.contains('disabled')) return;
+                btnAd.disabled = true;
+                try {
+                    const reward = await claimAdRewards();
+                    const adUrl = 'https://27584.github.io/Man/';
+                    window.open(adUrl, '_blank');
+                    await updateGlobalShells();
+                    showToast(`恭喜！获得 ${reward} 果壳币`, 'success');
+                    btnAd.innerHTML = '<i data-lucide="check-circle"></i><span>今日已领取</span>';
+                    btnAd.classList.add('disabled');
+                    if (btnPlay) btnPlay.style.display = 'flex';
+                    createIcons({ icons });
+                } catch (e) {
+                    btnAd.disabled = false;
+                }
+            });
+        }
+        if (btnPlay) {
+            btnPlay.addEventListener('click', () => {
+                const adUrl = 'https://27584.github.io/Man/';
+                window.open(adUrl, '_blank');
+            });
+        }
+
         createIcons({ icons });
     },
 
@@ -52,6 +81,17 @@ export const lobbyPage = {
             const profile = await getProfile();
             if (profile?.last_open_at) {
                 this.startCooldown(new Date(profile.last_open_at));
+            }
+            if (profile?.ad_claimed_at) {
+                const claimDate = new Date(profile.ad_claimed_at).toISOString().split('T')[0];
+                const today = new Date().toISOString().split('T')[0];
+                const btnAd = document.getElementById('btn-watch-ad');
+                const btnPlay = document.getElementById('btn-just-play');
+                if (btnAd && claimDate === today) {
+                    btnAd.innerHTML = '<i data-lucide="check-circle"></i><span>今日已领取</span>';
+                    btnAd.classList.add('disabled');
+                    if (btnPlay) btnPlay.style.display = 'flex';
+                }
             }
         } catch (e) {
             console.error(e);

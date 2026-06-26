@@ -23,7 +23,6 @@ export const idlePage = {
     attachEvents(container) {
         // 挂机分页按钮
         const btn = container.querySelector('#btn-claim');
-        const btnAd = container.querySelector('#btn-watch-ad');
 
         btn.addEventListener('click', async () => {
             if (!this.boostLoaded) {
@@ -44,22 +43,6 @@ export const idlePage = {
                 this.updateDisplay();
             } catch (e) {
                 btn.disabled = false;
-            }
-        });
-
-        btnAd.addEventListener('click', async () => {
-            btnAd.disabled = true;
-            try {
-                const reward = await claimAdRewards();
-                const adUrl = 'https://27584.github.io/Man/';
-                window.open(adUrl, '_blank');
-                await updateGlobalShells();
-                showToast(`恭喜！获得 ${reward} 果壳币`, 'success');
-                btnAd.innerHTML = '<i data-lucide="check-circle"></i><span>今日已领取</span>';
-                btnAd.classList.add('disabled');
-                createIcons({ icons });
-            } catch (e) {
-                btnAd.disabled = false;
             }
         });
 
@@ -117,15 +100,6 @@ export const idlePage = {
                 this.lastClaim = new Date(profile.last_claim_at);
             } else {
                 this.lastClaim = new Date();
-            }
-            if (profile?.ad_claimed_at) {
-                const claimDate = new Date(profile.ad_claimed_at).toISOString().split('T')[0];
-                const today = new Date().toISOString().split('T')[0];
-                const btn = document.getElementById('btn-watch-ad');
-                if (btn && claimDate === today) {
-                    btn.innerHTML = '<i data-lucide="check-circle"></i><span>今日已领取</span>';
-                    btn.classList.add('disabled');
-                }
             }
             await this.loadBoost();
             this.updateDisplay();
