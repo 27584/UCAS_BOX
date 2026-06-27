@@ -18,9 +18,14 @@
                 <i data-lucide="alert-circle"></i>
                 <span>无法加载地图，请检查网络</span>
             </div>
+            <button class="sidebar-toggle-btn" id="sidebar-toggle-btn">
+                <i data-lucide="list"></i>
+            </button>
         </div>
 
-        <div class="explore-sidebar">
+        <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+        <div class="explore-sidebar" id="explore-sidebar">
             <div class="explore-sidebar-header">
                 <h3><i data-lucide="compass"></i> 探索点</h3>
                 <span class="point-count" id="point-count">0</span>
@@ -46,13 +51,9 @@
             <div class="explore-modal-body">
                 <p id="explore-modal-desc">探索点描述</p>
                 <div class="explore-modal-info">
-                    <div class="info-item">
-                        <i data-lucide="coins"></i>
-                        <span>奖励：<strong id="explore-modal-reward">100</strong> 果壳币</span>
-                    </div>
-                    <div class="info-item">
+                    <div class="info-item" id="explore-modal-pool-item">
                         <i data-lucide="gift"></i>
-                        <span>物品概率：<strong id="explore-modal-chance">30%</strong></span>
+                        <span>奖池：<strong id="explore-modal-pool">--</strong></span>
                     </div>
                     <div class="info-item">
                         <i data-lucide="clock"></i>

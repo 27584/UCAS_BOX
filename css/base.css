@@ -91,6 +91,7 @@ body {
     background: var(--paper-bg);
     color: var(--ink);
     min-height: 100vh;
+    min-height: 100dvh;
     -webkit-font-smoothing: antialiased;
     /* 纸张纹理：多频段噪点 + 细纤维 */
     background-image:
@@ -133,6 +134,7 @@ body.drop-modal-open::after {
     max-width: 1180px;
     margin: 0 auto;
     width: 100%;
+    min-height: 0;
 }
 
 /* ============================================

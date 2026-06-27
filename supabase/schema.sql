@@ -7054,9 +7054,12 @@ BEGIN
         'reward_item_id', ep.reward_item_id,
         'reward_item_chance', ep.reward_item_chance,
         'daily_limit', ep.daily_limit,
-        'image_name', ep.image_name
+        'image_name', ep.image_name,
+        'reward_pool_id', ep.reward_pool_id,
+        'pool_name', rp.name
     )
     FROM public.exploration_points ep
+    LEFT JOIN public.reward_pools rp ON ep.reward_pool_id = rp.id
     ORDER BY ep.name;
 END;
 $$;
@@ -7082,10 +7085,11 @@ BEGIN
         RETURN jsonb_build_object('success', false, 'message', '探索点不存在');
     END IF;
 
-    v_distance_meters := ST_DistanceSphere(
-        ST_SetSRID(ST_MakePoint(v_point.longitude, v_point.latitude), 4326),
-        ST_SetSRID(ST_MakePoint(p_user_lng, p_user_lat), 4326)
-    );
+    v_distance_meters := 6371000 * 2 * ASIN(SQRT(
+        POWER(SIN((p_user_lat - v_point.latitude) * PI() / 360), 2) +
+        COS(v_point.latitude * PI() / 180) * COS(p_user_lat * PI() / 180) *
+        POWER(SIN((p_user_lng - v_point.longitude) * PI() / 360), 2)
+    ));
 
     IF v_distance_meters > v_point.radius_meters THEN
         RETURN jsonb_build_object('success', false, 'message', '距离太远，请靠近后再探索');

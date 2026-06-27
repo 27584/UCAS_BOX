@@ -4,6 +4,71 @@ import { router } from '../router.js';
 import { createIcons, icons } from 'lucide';
 import { showToast, showConfirm, showConfirmTyped, QUALITY_CONFIG, QUALITY_OPTIONS, ITEM_TYPES, itemTypeOptionsHTML, qualityOptionsHTML, renderPagination, bindPagination, itemImageHTML, initItemImages, replaceWithSearchableSelect, upgradeSelectsToSearchable, userAvatarHTML } from '../utils.js';
 
+function transformLat(x, y) {
+    let ret = -100.0 + 2.0 * x + 3.0 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * Math.sqrt(Math.abs(x));
+    ret += (20.0 * Math.sin(6.0 * x * Math.PI) + 20.0 * Math.sin(2.0 * x * Math.PI)) * 2.0 / 3.0;
+    ret += (20.0 * Math.sin(y * Math.PI) + 40.0 * Math.sin(y / 3.0 * Math.PI)) * 2.0 / 3.0;
+    ret += (160.0 * Math.sin(y / 12.0 * Math.PI) + 320 * Math.sin(y * Math.PI / 30.0)) * 2.0 / 3.0;
+    return ret;
+}
+
+function transformLng(x, y) {
+    let ret = 300.0 + x + 2.0 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * Math.sqrt(Math.abs(x));
+    ret += (20.0 * Math.sin(6.0 * x * Math.PI) + 20.0 * Math.sin(2.0 * x * Math.PI)) * 2.0 / 3.0;
+    ret += (20.0 * Math.sin(x * Math.PI) + 40.0 * Math.sin(x / 3.0 * Math.PI)) * 2.0 / 3.0;
+    ret += (150.0 * Math.sin(x / 12.0 * Math.PI) + 300.0 * Math.sin(x / 30.0 * Math.PI)) * 2.0 / 3.0;
+    return ret;
+}
+
+function wgs84ToGcj02(wgsLat, wgsLng) {
+    const a = 6378245.0;
+    const ee = 0.00669342162296594323;
+    
+    if (outOfChina(wgsLat, wgsLng)) {
+        return { lat: wgsLat, lng: wgsLng };
+    }
+    
+    let dLat = transformLat(wgsLng - 105.0, wgsLat - 35.0);
+    let dLng = transformLng(wgsLng - 105.0, wgsLat - 35.0);
+    
+    const radLat = wgsLat / 180.0 * Math.PI;
+    let magic = Math.sin(radLat);
+    magic = 1 - ee * magic * magic;
+    const sqrtMagic = Math.sqrt(magic);
+    dLat = (dLat * 180.0) / ((a * (1 - ee)) / (magic * sqrtMagic) * Math.PI);
+    dLng = (dLng * 180.0) / (a / sqrtMagic * Math.cos(radLat) * Math.PI);
+    
+    return {
+        lat: wgsLat + dLat,
+        lng: wgsLng + dLng
+    };
+}
+
+function gcj02ToWgs84(gcjLat, gcjLng) {
+    if (outOfChina(gcjLat, gcjLng)) {
+        return { lat: gcjLat, lng: gcjLng };
+    }
+    
+    let dLat = transformLat(gcjLng - 105.0, gcjLat - 35.0);
+    let dLng = transformLng(gcjLng - 105.0, gcjLat - 35.0);
+    
+    const radLat = gcjLat / 180.0 * Math.PI;
+    let magic = Math.sin(radLat);
+    magic = 1 - 0.00669342162296594323 * magic * magic;
+    const sqrtMagic = Math.sqrt(magic);
+    dLat = (dLat * 180.0) / ((6378245.0 * (1 - 0.00669342162296594323)) / (magic * sqrtMagic) * Math.PI);
+    dLng = (dLng * 180.0) / (6378245.0 / sqrtMagic * Math.cos(radLat) * Math.PI);
+    
+    return {
+        lat: gcjLat - dLat,
+        lng: gcjLng - dLng
+    };
+}
+
+function outOfChina(lat, lng) {
+    return !(lng > 73.66 && lng < 135.05 && lat > 3.86 && lat < 53.55);
+}
+
 export const adminPage = {
     users: [],
     items: [],
@@ -2680,10 +2745,6 @@ export const adminPage = {
             const script = document.createElement('script');
             script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
             script.onload = () => {
-                const link = document.createElement('link');
-                link.rel = 'stylesheet';
-                link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-                document.head.appendChild(link);
                 this._initAdminMapAfterLoad();
             };
             script.onerror = () => {
@@ -2691,6 +2752,11 @@ export const adminPage = {
                 document.getElementById('admin-map-error').style.display = 'flex';
             };
             document.head.appendChild(script);
+            
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+            document.head.appendChild(link);
         } else {
             this._initAdminMapAfterLoad();
         }
@@ -2712,7 +2778,8 @@ export const adminPage = {
 
         this.adminMap.on('click', (e) => {
             if (this._isLocating) return;
-            this.showAddExplorePointModal(e.latlng.lat, e.latlng.lng);
+            const wgs = gcj02ToWgs84(e.latlng.lat, e.latlng.lng);
+            this.showAddExplorePointModal(wgs.lat, wgs.lng);
         });
 
         this.updateAdminMapMarkers();
@@ -2740,6 +2807,7 @@ export const adminPage = {
         const bounds = [];
 
         points.forEach(point => {
+            const gcj = wgs84ToGcj02(point.latitude, point.longitude);
             const icon = L.divIcon({
                 className: 'admin-point-marker',
                 html: `<div class="admin-point-marker-inner">
@@ -2749,7 +2817,7 @@ export const adminPage = {
                 iconAnchor: [18, 36]
             });
 
-            const marker = L.marker([point.latitude, point.longitude], {
+            const marker = L.marker([gcj.lat, gcj.lng], {
                 icon,
                 draggable: true
             }).addTo(this.adminMap);
@@ -2767,23 +2835,25 @@ export const adminPage = {
             `);
 
             marker.on('dragend', async (e) => {
-                const newLat = e.target.getLatLng().lat;
-                const newLng = e.target.getLatLng().lng;
+                const newGcjLat = e.target.getLatLng().lat;
+                const newGcjLng = e.target.getLatLng().lng;
+                const newWgs = gcj02ToWgs84(newGcjLat, newGcjLng);
 
                 try {
                     const result = await adminUpdateExplorationPoint(
-                        point.id, null, null, newLat, newLng, null, null, null, null, null
+                        point.id, null, null, newWgs.lat, newWgs.lng, null, null, null, null, null
                     );
                     if (result?.success) {
                         showToast('位置已更新', 'success');
-                        point.latitude = newLat;
-                        point.longitude = newLng;
+                        point.latitude = newWgs.lat;
+                        point.longitude = newWgs.lng;
                         this.renderExplorePoints();
                         this.updateAdminMapCircles();
                     }
                 } catch (err) {
                     showToast('更新失败', 'error');
-                    marker.setLatLng([point.latitude, point.longitude]);
+                    const gcj = wgs84ToGcj02(point.latitude, point.longitude);
+                    marker.setLatLng([gcj.lat, gcj.lng]);
                 }
             });
 
@@ -2801,9 +2871,9 @@ export const adminPage = {
             });
 
             this.adminMapMarkers.push(marker);
-            bounds.push([point.latitude, point.longitude]);
+            bounds.push([gcj.lat, gcj.lng]);
 
-            const circle = L.circle([point.latitude, point.longitude], {
+            const circle = L.circle([gcj.lat, gcj.lng], {
                 radius: point.radius_meters,
                 color: '#FF5722',
                 fillColor: 'rgba(255, 87, 34, 0.1)',
@@ -2830,7 +2900,8 @@ export const adminPage = {
 
         const points = this.explorePoints || [];
         points.forEach(point => {
-            const circle = L.circle([point.latitude, point.longitude], {
+            const gcj = wgs84ToGcj02(point.latitude, point.longitude);
+            const circle = L.circle([gcj.lat, gcj.lng], {
                 radius: point.radius_meters,
                 color: '#FF5722',
                 fillColor: 'rgba(255, 87, 34, 0.1)',
@@ -2863,10 +2934,11 @@ export const adminPage = {
 
         navigator.geolocation.getCurrentPosition(
             (position) => {
-                const lat = position.coords.latitude;
-                const lng = position.coords.longitude;
+                const wgsLat = position.coords.latitude;
+                const wgsLng = position.coords.longitude;
+                const gcj = wgs84ToGcj02(wgsLat, wgsLng);
                 
-                this.adminMap.setView([lat, lng], 16);
+                this.adminMap.setView([gcj.lat, gcj.lng], 16);
 
                 this._removeUserMarker();
                 const userIcon = L.divIcon({
@@ -2875,7 +2947,7 @@ export const adminPage = {
                     iconSize: [40, 40],
                     iconAnchor: [20, 20]
                 });
-                this._adminUserMarker = L.marker([lat, lng], { icon: userIcon })
+                this._adminUserMarker = L.marker([gcj.lat, gcj.lng], { icon: userIcon })
                     .addTo(this.adminMap)
                     .bindPopup('您的位置');
                 
@@ -3302,7 +3374,8 @@ export const adminPage = {
                 let rewardDesc = '';
                 if (item.reward_type === 'item') {
                     const qualityCfg = QUALITY_CONFIG[item.item_quality] || QUALITY_CONFIG.white;
-                    rewardDesc = `<span style="color:${qualityCfg.color}">${this.escHtml(item.item_name || '未知物品')}</span> x ${item.item_quantity}`;
+                    const textShadow = item.item_quality === 'white' ? 'text-shadow:1px 1px 0 var(--ink), -1px -1px 0 var(--ink), 1px -1px 0 var(--ink), -1px 1px 0 var(--ink);font-weight:600;' : '';
+                    rewardDesc = `<span style="color:${qualityCfg.color};${textShadow}">${this.escHtml(item.item_name || '未知物品')}</span> x ${item.item_quantity}`;
                 } else if (item.reward_type === 'shells') {
                     rewardDesc = `${item.shells_amount} 果壳币`;
                 } else if (item.reward_type === 'exp') {

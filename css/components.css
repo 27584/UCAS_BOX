@@ -473,7 +473,7 @@ textarea.form-input { resize: vertical; min-height: 80px; line-height: 1.6; font
 .quality-red    { color: var(--q-red);    --q: var(--q-red); }
 
 /* 品质文字颜色（仅文字用，不影响边框） */
-.quality-white-text  { color: var(--q-white); }
+.quality-white-text  { color: var(--q-white); text-shadow:1px 1px 0 var(--ink), -1px -1px 0 var(--ink), 1px -1px 0 var(--ink), -1px 1px 0 var(--ink); font-weight: 600; }
 .quality-green-text  { color: var(--q-green); }
 .quality-blue-text   { color: var(--q-blue); }
 .quality-purple-text { color: var(--q-purple); }

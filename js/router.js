@@ -71,22 +71,28 @@ class Router {
         const page = routes[route] || routes.lobby;
         const container = document.getElementById('main-content');
 
+        document.body.classList.remove('explore-page-active');
+
         try {
             const html = await loadTemplate(route);
             container.innerHTML = html;
-            // 调用 render（如果存在）或 attachEvents
+            if (route === 'explore') {
+                document.body.classList.add('explore-page-active');
+            }
             if (page.render) {
                 page.render(container);
             } else if (page.attachEvents) {
                 page.attachEvents(container);
             }
             
-            // 背包页面挂载刷新方法
             if (route === 'inventory' && page.refreshInventory) {
                 window.refreshInventory = () => page.refreshInventory();
             }
         } catch (e) {
             console.error('Failed to load template:', e.message);
+            if (route === 'explore') {
+                document.body.classList.add('explore-page-active');
+            }
             if (page.render) {
                 page.render(container);
             } else if (page.attachEvents) {
