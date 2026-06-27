@@ -233,25 +233,47 @@ function openRenameModal() {
 // ============================================
 // 通用开盒结果弹窗
 // ============================================
+function getShellsQuality(amount) {
+    if (amount >= 200000) return 'red';
+    if (amount >= 100000) return 'orange';
+    if (amount >= 20000) return 'purple';
+    if (amount >= 5000) return 'blue';
+    if (amount >= 1000) return 'green';
+    return 'white';
+}
+
 function showDropModal(item) {
     try {
         console.log('[showDropModal] called with:', item);
-        const name = (item && (item.out_item_name || item.item_name || item.name)) || '未知物品';
-        const quality = (item && (item.out_item_quality || item.item_quality || item.quality)) || 'white';
+        
+        let name = (item && (item.out_item_name || item.item_name || item.name)) || '未知物品';
+        let quality = (item && (item.out_item_quality || item.item_quality || item.quality)) || 'white';
         const image = item && (item.out_item_image || item.item_image || item.image_name);
+        const shellsAmount = parseInt(item?.shells_amount) || 0;
+        const isShellsReward = shellsAmount > 0 || name.includes('果壳币');
+
+        if (isShellsReward) {
+            quality = getShellsQuality(shellsAmount);
+            name = shellsAmount + ' 果壳币';
+        }
 
         const old = document.getElementById('dragon-boat-result-modal');
         if (old) old.remove();
 
         const cfg = (typeof QUALITY_CONFIG !== 'undefined' && QUALITY_CONFIG[quality]) || { label: quality };
         let itemHtml = '';
-        try {
-            if (typeof itemImageHTML === 'function') {
-                itemHtml = itemImageHTML(name, quality, image, 100);
+        
+        if (isShellsReward) {
+            itemHtml = `<div style="width:100px;height:100px;display:flex;align-items:center;justify-content:center;font-size:48px;color:${cfg.color};"><i data-lucide="coins" style="width:64px;height:64px;"></i></div>`;
+        } else {
+            try {
+                if (typeof itemImageHTML === 'function') {
+                    itemHtml = itemImageHTML(name, quality, image, 100);
+                }
+            } catch (e) {
+                console.error('[showDropModal] itemImageHTML error:', e);
+                itemHtml = '<div style="width:100px;height:100px;display:flex;align-items:center;justify-content:center;border:2px solid #000;font-size:40px;">' + (name ? name.charAt(0) : '?') + '</div>';
             }
-        } catch (e) {
-            console.error('[showDropModal] itemImageHTML error:', e);
-            itemHtml = '<div style="width:100px;height:100px;display:flex;align-items:center;justify-content:center;border:2px solid #000;font-size:40px;">' + (name ? name.charAt(0) : '?') + '</div>';
         }
 
         const modalHtml = `
@@ -269,6 +291,9 @@ function showDropModal(item) {
         `;
 
         document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+        // 渲染 Lucide 图标
+        createIcons({ icons });
 
         const modal = document.getElementById('dragon-boat-result-modal');
         const close = () => {
@@ -355,7 +380,8 @@ async function useConsumablePoolItem(itemId) {
             } else if (result.reward_type === 'shells') {
                 showDropModal({
                     item_name: `${result.shells_amount} 果壳币`,
-                    item_quality: 'orange'
+                    item_quality: getShellsQuality(result.shells_amount),
+                    shells_amount: result.shells_amount
                 });
             } else if (result.reward_type === 'exp') {
                 showDropModal({

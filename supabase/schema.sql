@@ -34,6 +34,14 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- 为已存在的表添加 exp 字段
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'exp') THEN
+        ALTER TABLE public.profiles ADD COLUMN exp BIGINT DEFAULT 0;
+    END IF;
+END $$;
+
 -- 为已存在的表添加端午活动字段（兼容旧版PostgreSQL）
 DO $$
 BEGIN
@@ -7006,8 +7014,6 @@ CREATE TABLE IF NOT EXISTS public.reward_pool_draws (
     drawn_at TIMESTAMPTZ DEFAULT now()
 );
 
-DROP TABLE IF EXISTS public.exploration_history;
-DROP TABLE IF EXISTS public.exploration_points;
 CREATE TABLE IF NOT EXISTS public.exploration_points (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
@@ -7041,6 +7047,8 @@ RETURNS SETOF JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
+DECLARE
+    v_user_id UUID := auth.uid();
 BEGIN
     RETURN QUERY
     SELECT jsonb_build_object(
@@ -7054,12 +7062,20 @@ BEGIN
         'reward_item_id', ep.reward_item_id,
         'reward_item_chance', ep.reward_item_chance,
         'daily_limit', ep.daily_limit,
+        'remaining_count', ep.daily_limit - COALESCE(today_count.cnt, 0),
         'image_name', ep.image_name,
         'reward_pool_id', ep.reward_pool_id,
         'pool_name', rp.name
     )
     FROM public.exploration_points ep
     LEFT JOIN public.reward_pools rp ON ep.reward_pool_id = rp.id
+    LEFT JOIN (
+        SELECT point_id, COUNT(*) as cnt
+        FROM public.exploration_history
+        WHERE user_id = v_user_id
+          AND explored_at >= date_trunc('day', now())
+        GROUP BY point_id
+    ) today_count ON today_count.point_id = ep.id
     ORDER BY ep.name;
 END;
 $$;
@@ -7074,11 +7090,8 @@ DECLARE
     v_point RECORD;
     v_distance_meters DOUBLE PRECISION;
     v_today_count INT;
-    v_reward_item_id INT := NULL;
-    v_reward_shells INT := 0;
     v_user_id UUID := auth.uid();
     v_pool_result JSONB;
-    v_draw_record RECORD;
 BEGIN
     SELECT * INTO v_point FROM public.exploration_points WHERE id = p_point_id;
     IF NOT FOUND THEN
@@ -7103,50 +7116,56 @@ BEGIN
         RETURN jsonb_build_object('success', false, 'message', '今日探索次数已用完');
     END IF;
 
-    -- 如果关联了奖池，从奖池抽取
+    -- 调用奖池抽取
     IF v_point.reward_pool_id IS NOT NULL THEN
-        SELECT * INTO v_draw_record FROM public.reward_pool_draws
-        WHERE pool_id = v_point.reward_pool_id AND user_id = v_user_id
-        ORDER BY drawn_at DESC LIMIT 1;
-
-        -- 调用奖池抽取
         v_pool_result := public.draw_from_reward_pool(v_point.reward_pool_id);
-
-        IF v_pool_result->>'success' = 'true' THEN
-            v_reward_item_id := NULLIF(v_pool_result->>'item_id', '')::INT;
-            v_reward_shells := COALESCE(NULLIF(v_pool_result->>'shells_amount', '')::INT, 0);
-
-            -- 更新用户果壳币（奖池可能包含果壳币奖励）
-            IF v_reward_shells > 0 THEN
-                UPDATE public.profiles SET shells = shells + v_reward_shells WHERE id = v_user_id;
-            END IF;
-        END IF;
     ELSE
-        -- 旧的奖励逻辑（物品概率）
         IF v_point.reward_item_id IS NOT NULL AND v_point.reward_item_chance > 0 THEN
             IF random() < v_point.reward_item_chance THEN
-                v_reward_item_id := v_point.reward_item_id;
                 INSERT INTO public.inventory (user_id, item_id, quantity)
-                VALUES (v_user_id, v_reward_item_id, 1)
+                VALUES (v_user_id, v_point.reward_item_id, 1)
                 ON CONFLICT (user_id, item_id) DO UPDATE SET quantity = inventory.quantity + 1;
+                v_pool_result := jsonb_build_object(
+                    'success', true,
+                    'reward_type', 'item',
+                    'item_id', v_point.reward_item_id,
+                    'item_name', (SELECT name FROM public.items WHERE id = v_point.reward_item_id),
+                    'item_quality', (SELECT quality FROM public.items WHERE id = v_point.reward_item_id),
+                    'item_image', (SELECT image_name FROM public.items WHERE id = v_point.reward_item_id),
+                    'item_quantity', 1,
+                    'shells_amount', COALESCE(v_point.reward_shells, 0)
+                );
             END IF;
         END IF;
-
-        v_reward_shells := COALESCE(v_point.reward_shells, 0);
-        IF v_reward_shells > 0 THEN
-            UPDATE public.profiles SET shells = shells + v_reward_shells WHERE id = v_user_id;
+        
+        IF v_pool_result IS NULL THEN
+            IF COALESCE(v_point.reward_shells, 0) > 0 THEN
+                UPDATE public.profiles SET shells = shells + v_point.reward_shells WHERE id = v_user_id;
+                v_pool_result := jsonb_build_object(
+                    'success', true,
+                    'reward_type', 'shells',
+                    'shells_amount', v_point.reward_shells
+                );
+            ELSE
+                v_pool_result := jsonb_build_object(
+                    'success', true,
+                    'reward_type', 'nothing',
+                    'shells_amount', 0
+                );
+            END IF;
         END IF;
     END IF;
 
     INSERT INTO public.exploration_history (user_id, point_id, reward_shells, reward_item_id, success)
-    VALUES (v_user_id, p_point_id, v_reward_shells, v_reward_item_id, true);
-
-    RETURN jsonb_build_object(
-        'success', true,
-        'message', '探索成功！',
-        'reward_shells', v_point.reward_shells,
-        'reward_item_id', v_reward_item_id
+    VALUES (
+        v_user_id, 
+        p_point_id, 
+        COALESCE(NULLIF(v_pool_result->>'shells_amount', '')::INT, 0),
+        NULLIF(v_pool_result->>'item_id', '')::INT, 
+        true
     );
+
+    RETURN v_pool_result;
 END;
 $$;
 
@@ -7492,6 +7511,12 @@ BEGIN
         WHERE id = v_user_id;
     END IF;
 
+    IF v_selected_item.reward_type = 'exp' AND v_selected_item.exp_amount > 0 THEN
+        UPDATE public.profiles
+        SET exp = exp + v_selected_item.exp_amount
+        WHERE id = v_user_id;
+    END IF;
+
     INSERT INTO public.reward_pool_draws (
         pool_id, user_id, reward_type, item_id, item_quantity, shells_amount, exp_amount
     ) VALUES (
@@ -7506,6 +7531,7 @@ BEGIN
         'item_id', v_selected_item.item_id,
         'item_name', (SELECT name FROM public.items WHERE id = v_selected_item.item_id),
         'item_quality', (SELECT quality FROM public.items WHERE id = v_selected_item.item_id),
+        'item_image', (SELECT image_name FROM public.items WHERE id = v_selected_item.item_id),
         'item_quantity', v_selected_item.item_quantity,
         'shells_amount', v_selected_item.shells_amount,
         'exp_amount', v_selected_item.exp_amount

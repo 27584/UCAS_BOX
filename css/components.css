@@ -1118,6 +1118,14 @@ textarea.form-input { resize: vertical; min-height: 80px; line-height: 1.6; font
     transform: translate(2px, 2px);
     box-shadow: 1px 1px 0 var(--seal-red);
 }
+.drop-modal-btn.cancel {
+    background: var(--paper-card);
+    color: var(--ink);
+    box-shadow: 3px 3px 0 var(--ink-light);
+}
+.drop-modal-btn.cancel:hover {
+    background: var(--paper-bg);
+}
 
 .drop-result-card {
     position: relative;

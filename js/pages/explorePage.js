@@ -12,6 +12,17 @@ let userMarker = null;
 let poiMarkers = [];
 let circleLayers = [];
 
+function getShellsQuality(amount) {
+    if (amount >= 200000) return 'red';
+    if (amount >= 100000) return 'orange';
+    if (amount >= 20000) return 'purple';
+    if (amount >= 5000) return 'blue';
+    if (amount >= 1000) return 'green';
+    return 'white';
+}
+
+window.getShellsQuality = getShellsQuality;
+
 function transformLat(x, y) {
     let ret = -100.0 + 2.0 * x + 3.0 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * Math.sqrt(Math.abs(x));
     ret += (20.0 * Math.sin(6.0 * x * Math.PI) + 20.0 * Math.sin(2.0 * x * Math.PI)) * 2.0 / 3.0;
@@ -81,14 +92,30 @@ export const explorePage = {
     async render(container) {
         await this.loadData();
         this.initMap();
+        this.moveModalsToBody();
         this.attachEvents();
         createIcons({ icons });
+    },
+
+    moveModalsToBody() {
+        const modal1 = document.getElementById('explore-modal');
+        const modal2 = document.getElementById('explore-result-modal');
+        if (modal1 && modal1.parentNode !== document.body) {
+            document.body.appendChild(modal1);
+        }
+        if (modal2 && modal2.parentNode !== document.body) {
+            document.body.appendChild(modal2);
+        }
     },
 
     async loadData() {
         try {
             explorationPoints = await getExplorationPoints();
+            this.updateDistances();
             this.updatePointList();
+            if (map) {
+                this.addPointMarkers();
+            }
         } catch (e) {
             console.error('加载探索点失败:', e);
             document.getElementById('explore-point-list').innerHTML = 
@@ -328,8 +355,7 @@ export const explorePage = {
             });
 
             const marker = L.marker([gcj.lat, gcj.lng], { icon })
-                .addTo(map)
-                .bindPopup(`<b>${point.name}</b><br>${point.description}`);
+                .addTo(map);
 
             marker.on('click', () => {
                 this.openPointModal(point);
@@ -382,14 +408,17 @@ export const explorePage = {
     },
 
     updateDistances() {
+        console.log('[updateDistances] currentLocation:', currentLocation);
         explorationPoints.forEach(point => {
-            if (currentLocation) {
+            console.log('[updateDistances] point:', point.id, point.latitude, point.longitude);
+            if (currentLocation && currentLocation.lat && currentLocation.lng) {
                 point.distance = this.calculateDistance(
                     currentLocation.lat,
                     currentLocation.lng,
                     point.latitude,
                     point.longitude
                 );
+                console.log('[updateDistances] distance calculated:', point.distance);
             } else {
                 point.distance = null;
             }
@@ -460,45 +489,81 @@ export const explorePage = {
     },
 
     openPointModal(point) {
+        console.log('[openPointModal] called with:', point);
         selectedPoint = point;
         
-        document.getElementById('explore-modal-title').textContent = point.name;
-        document.getElementById('explore-modal-desc').textContent = point.description || '暂无描述';
-        document.getElementById('explore-modal-pool').textContent = point.pool_name || '未设置';
-        document.getElementById('explore-modal-remaining').textContent = point.daily_limit;
+        const oldModal = document.getElementById('explore-point-modal');
+        if (oldModal) oldModal.remove();
         
-        const distEl = document.getElementById('explore-distance');
-        const distInfo = document.getElementById('distance-info');
-        
-        if (point.distance !== null) {
-            distEl.textContent = `${Math.round(point.distance)}米`;
-            distInfo.classList.toggle('near', point.distance <= point.radius_meters);
-        } else {
-            distEl.textContent = '未知';
-            distInfo.classList.remove('near');
-        }
-        
-        const btn = document.getElementById('btn-explore');
         const isNearby = this.isNearby(point);
-        btn.disabled = !isNearby;
+        const distanceText = point.distance !== null ? `${Math.round(point.distance)}米` : '未知';
+        const distanceColor = isNearby ? '#4CAF50' : '#a8371f';
+        const remaining = point.remaining_count !== undefined ? point.remaining_count : point.daily_limit;
+        const disabled = !isNearby || remaining <= 0;
         
-        if (isNearby) {
-            btn.innerHTML = '<i data-lucide="search"></i><span>开始探索</span>';
-            btn.classList.remove('disabled');
-        } else {
-            btn.innerHTML = '<i data-lucide="navigation"></i><span>距离太远</span>';
-            btn.classList.add('disabled');
+        const modalHtml = `
+            <div id="explore-point-modal" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;display:flex;align-items:center;justify-content:center;">
+                <div id="explore-modal-overlay" style="position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(31,26,18,0.7);backdrop-filter:blur(3px);"></div>
+                <div style="position:relative;z-index:1;background:#fbf5e4;border:1.5px solid #1f1a12;padding:40px 24px 24px;max-width:340px;width:90%;text-align:center;box-shadow:0 6px 20px rgba(0,0,0,0.2);">
+                    <div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%) rotate(-3deg);width:50px;height:20px;background:#a8371f;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,0.25);"></div>
+                    <div style="font-size:1.5rem;color:#a8371f;margin:0 0 20px;font-weight:700;letter-spacing:2px;display:inline-block;transform:rotate(-2deg);">${point.name}</div>
+                    <p style="font-family:system-ui,sans-serif;font-size:0.9rem;color:#666;line-height:1.5;margin:0 0 16px;">${point.description || '暂无描述'}</p>
+                    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;text-align:left;">
+                        <div style="display:flex;align-items:center;gap:8px;font-family:system-ui,sans-serif;font-size:0.85rem;color:#1f1a12;">
+                            <i data-lucide="gift" style="width:16px;height:16px;color:#999;"></i>
+                            <span>奖池：<strong style="color:#4CAF50;">${point.pool_name || '未设置'}</strong></span>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px;font-family:system-ui,sans-serif;font-size:0.85rem;color:#1f1a12;">
+                            <i data-lucide="clock" style="width:16px;height:16px;color:#999;"></i>
+                            <span>今日剩余：<strong style="color:#4CAF50;">${remaining}</strong> 次</span>
+                        </div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;padding:10px;background:#faf5e6;border:1.5px solid #ddd;font-family:system-ui,sans-serif;font-size:0.85rem;color:#1f1a12;margin-bottom:20px;">
+                        <i data-lucide="navigation" style="width:16px;height:16px;"></i>
+                        <span>距离：<strong style="color:${distanceColor};">${distanceText}</strong></span>
+                    </div>
+                    <div style="display:flex;gap:10px;">
+                        <button id="explore-modal-cancel" style="flex:1;padding:12px 20px;background:#fbf5e4;color:#1f1a12;border:1.5px solid #1f1a12;font-size:0.9rem;font-weight:700;letter-spacing:2px;cursor:pointer;box-shadow:3px 3px 0 #ccc;transition:all 0.15s;">取消</button>
+                        <button id="explore-modal-explore" style="flex:1;padding:12px 20px;background:#1f1a12;color:#fbf5e4;border:1.5px solid #1f1a12;font-size:0.9rem;font-weight:700;letter-spacing:2px;cursor:pointer;box-shadow:3px 3px 0 #a8371f;transition:all 0.15s;${disabled ? 'opacity:0.5;cursor:not-allowed;' : ''}" ${disabled ? 'disabled' : ''}>${remaining <= 0 ? '今日已用完' : (isNearby ? '开始探索' : '距离太远')}</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        createIcons({ icons });
+        
+        const modal = document.getElementById('explore-point-modal');
+        const closeModal = () => { modal.remove(); };
+        
+        const cancelBtn = document.getElementById('explore-modal-cancel');
+        const exploreBtn = document.getElementById('explore-modal-explore');
+        const overlay = document.getElementById('explore-modal-overlay');
+        
+        if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+        if (overlay) overlay.addEventListener('click', closeModal);
+        if (exploreBtn && !disabled) {
+            exploreBtn.addEventListener('click', () => {
+                closeModal();
+                this.doExplore();
+            });
+            exploreBtn.addEventListener('mouseenter', () => {
+                exploreBtn.style.background = '#a8371f';
+                exploreBtn.style.boxShadow = '4px 4px 0 #1f1a12';
+                exploreBtn.style.transform = 'translate(-1px, -1px)';
+            });
+            exploreBtn.addEventListener('mouseleave', () => {
+                exploreBtn.style.background = '#1f1a12';
+                exploreBtn.style.boxShadow = '3px 3px 0 #a8371f';
+                exploreBtn.style.transform = 'translate(0, 0)';
+            });
         }
         
-        createIcons({ icons });
-        document.getElementById('explore-modal').style.display = 'flex';
+        console.log('[openPointModal] modal created');
     },
 
     async doExplore() {
         if (!selectedPoint || !currentLocation) return;
-        
-        const btn = document.getElementById('btn-explore');
-        btn.disabled = true;
         
         try {
             const result = await explorePoint(
@@ -508,72 +573,69 @@ export const explorePage = {
             );
             
             if (result.success) {
-                closeExploreModal();
-                this.showResultModal(true, result.reward_shells, result.reward_item_id);
                 await updateGlobalShells();
                 await this.loadData();
+                
+                console.log('[doExplore] result:', result);
+                
+                setTimeout(() => {
+                    if (window.showDropModal) {
+                        const shellsAmount = parseInt(result.shells_amount) || 0;
+                        
+                        if (result.reward_type === 'nothing') {
+                            showToast('探索失败，什么都没找到', 'warning');
+                        } else if (result.reward_type === 'shells' || shellsAmount > 0) {
+                            showToast('获得 ' + shellsAmount + ' 果壳币', 'success');
+                            window.showDropModal({
+                                item_name: shellsAmount + ' 果壳币',
+                                item_quality: getShellsQuality(shellsAmount),
+                                shells_amount: shellsAmount,
+                                out_item_image: null
+                            });
+                        } else if (result.reward_type === 'item' && result.item_name) {
+                            showToast('获得 ' + result.item_name, 'success');
+                            window.showDropModal({
+                                item_id: result.item_id,
+                                item_name: result.item_name,
+                                item_quality: result.item_quality || 'white',
+                                item_image: result.item_image,
+                                shells_amount: shellsAmount,
+                                item_quantity: result.item_quantity || 1
+                            });
+                        } else if (result.reward_type === 'exp' && result.exp_amount > 0) {
+                            showToast('获得 ' + result.exp_amount + ' 经验值', 'success');
+                            window.showDropModal({
+                                item_name: result.exp_amount + ' 经验值',
+                                item_quality: 'blue',
+                                exp_amount: result.exp_amount
+                            });
+                        } else {
+                            showToast('探索成功！', 'success');
+                        }
+                    } else {
+                        showToast('探索成功！', 'success');
+                    }
+                }, 300);
             } else {
                 showToast(result.message, 'error');
-                btn.disabled = false;
             }
         } catch (e) {
             console.error('探索失败:', e);
-            btn.disabled = false;
         }
-    },
-
-    showResultModal(success, shells, itemId) {
-        const modal = document.getElementById('explore-result-modal');
-        const iconEl = document.getElementById('result-icon');
-        const titleEl = document.getElementById('result-title');
-        const shellsEl = document.getElementById('result-shells');
-        const itemEl = document.getElementById('result-item');
-        const itemNameEl = document.getElementById('result-item-name');
-        
-        modal.style.display = 'flex';
-        
-        if (success) {
-            iconEl.className = 'result-icon success';
-            iconEl.innerHTML = '<i data-lucide="check-circle"></i>';
-            titleEl.textContent = '探索成功！';
-            shellsEl.innerHTML = `<i data-lucide="coins"></i><span>获得 <strong>${shells}</strong> 果壳币</span>`;
-            
-            if (itemId) {
-                const item = explorationPoints.find(p => p.reward_item_id === itemId);
-                itemEl.style.display = 'flex';
-                itemNameEl.textContent = '神秘物品';
-            } else {
-                itemEl.style.display = 'none';
-            }
-        } else {
-            iconEl.className = 'result-icon error';
-            iconEl.innerHTML = '<i data-lucide="x-circle"></i>';
-            titleEl.textContent = '探索失败';
-            shellsEl.style.display = 'none';
-            itemEl.style.display = 'none';
-        }
-        
-        createIcons({ icons });
     },
 
     attachEvents() {
+        console.log('[attachEvents] called');
+        
         window.openExploreModal = (pointId) => {
+            console.log('[openExploreModal] called with pointId:', pointId);
             const point = explorationPoints.find(p => p.id === pointId);
+            console.log('[openExploreModal] point found:', !!point);
             if (point) {
                 this.openPointModal(point);
+            } else {
+                console.error('[openExploreModal] point not found:', pointId);
             }
-        };
-        
-        window.closeExploreModal = () => {
-            document.getElementById('explore-modal').style.display = 'none';
-        };
-        
-        window.closeResultModal = () => {
-            document.getElementById('explore-result-modal').style.display = 'none';
-        };
-        
-        window.doExplore = () => {
-            this.doExplore();
         };
         
         window.addEventListener('resize', () => {
