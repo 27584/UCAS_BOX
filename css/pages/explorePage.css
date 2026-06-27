@@ -574,38 +574,71 @@
     bottom: 0;
     background: rgba(0,0,0,0.5);
     z-index: 50;
-}
-
-@media (max-width: 900px) {
+}@media (max-width: 900px) {
+    html, body {
+        height: 100%;
+        overflow: hidden;
+        margin: 0;
+    }
     .explore-page {
-        padding-bottom: 0;
+        height: 100vh;
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* 顶部头部固定，单独一层，不挤压地图 */
+    .explore-header {
+        padding: 12px 16px;
+        padding-top: calc(12px + env(safe-area-inset-top));
+        flex-shrink: 0;
     }
 
     .explore-content {
         flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 12px;
         position: relative;
         overflow: hidden;
+        min-height: 0;
     }
 
+    /* 地图改为居中、固定最大宽高，不再铺满屏幕 */
     .map-container {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        width: 100%;
-        height: 100%;
+        width: 96%;
+        height: 88%;
+        max-width: 720px;
+        position: relative;
+        min-height: unset;
+        border: 1.5px solid var(--ink);
     }
 
+    /* 缩放按钮放在地图内部右下角 */
+    .leaflet-control-zoom {
+        bottom: 16px !important;
+        right: 16px !important;
+    }
+
+    /* 侧边栏切换按钮放在地图内部左下角 */
+    .sidebar-toggle-btn {
+        display: flex;
+        position: absolute;
+        bottom: 16px;
+        left: 16px;
+    }
+
+    /* 底部弹出侧边栏悬浮层，仅弹出时覆盖，常态不影响地图 */
     .explore-sidebar {
         position: fixed;
-        top: auto;
-        bottom: 0;
+        bottom: env(safe-area-inset-bottom);
         left: 0;
         right: 0;
         width: 100%;
-        height: 70%;
-        max-height: 500px;
+        height: 52%;
+        max-height: 380px;
         border-left: none;
         border-right: none;
         border-bottom: none;
@@ -614,7 +647,6 @@
         transition: transform 0.3s ease;
         z-index: 200;
     }
-
     .explore-sidebar.open {
         transform: translateY(0);
     }
@@ -625,18 +657,9 @@
         pointer-events: none;
         transition: opacity 0.3s ease;
     }
-
     .sidebar-overlay.open {
         opacity: 1;
         pointer-events: auto;
-    }
-
-    .sidebar-toggle-btn {
-        display: flex;
-    }
-
-    .explore-header {
-        padding: 12px 16px;
     }
 
     .explore-header h2 {
