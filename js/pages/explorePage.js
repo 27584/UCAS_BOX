@@ -97,6 +97,18 @@ export const explorePage = {
         createIcons({ icons });
     },
 
+    _cleanupMap() {
+        if (map) {
+            map.off();
+            map.remove();
+            map = null;
+        }
+        markers = [];
+        poiMarkers = [];
+        currentLocationMarker = null;
+        userLocationMarker = null;
+    },
+
     moveModalsToBody() {
         const modal1 = document.getElementById('explore-modal');
         const modal2 = document.getElementById('explore-result-modal');

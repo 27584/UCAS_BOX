@@ -89,21 +89,32 @@ export const adminPage = {
     explorePage: 1, exploreLimit: 20, exploreTotal: 0,
 
     async render(container) {
-        // 先校验权限，成功再渲染DOM、绑定事件
+        this._cleanupAdminMap();
+        
         const pass = await this.checkPermission();
         if (!pass) return;
 
-        // 获取当前用户ID（用于禁用"删除自己"按钮）
         const { data: { user } } = await supabase.auth.getUser();
         this.currentUserId = user?.id || null;
 
         await this.loadStats();
         await this.loadUsers();
-        // DOM渲染完成后再绑定事件
+        await this.loadExplorePoints();
         this.attachEvents(container);
         createIcons({ icons });
 
         setTimeout(() => this.initAdminMap(), 500);
+    },
+
+    _cleanupAdminMap() {
+        if (this.adminMap) {
+            this.adminMap.off();
+            this.adminMap.remove();
+            this.adminMap = null;
+        }
+        this.adminMapMarkers = [];
+        this.adminMapCircles = [];
+        this._adminUserMarker = null;
     },
 
     async checkPermission() {
@@ -2178,6 +2189,7 @@ export const adminPage = {
                 this.exploreTotal = 0;
             }
             this.renderExplorePoints();
+            this.updateAdminMapMarkers();
         } catch (e) {
             console.error('loadExplorePoints error:', e);
             list.innerHTML = '<div class="empty-state"><p>加载失败</p></div>';
@@ -2775,6 +2787,10 @@ export const adminPage = {
             subdomains: '1234',
             attribution: '© 高德地图'
         }).addTo(this.adminMap);
+
+        setTimeout(() => {
+            this.adminMap.invalidateSize();
+        }, 100);
 
         this.adminMap.on('click', (e) => {
             if (this._isLocating) return;
