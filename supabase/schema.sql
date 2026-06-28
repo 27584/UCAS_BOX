@@ -6,11 +6,7 @@
 
 ALTER DATABASE postgres SET TIME ZONE 'Asia/Shanghai';
 
--- 清理旧的机器人相关对象
-DROP TABLE IF EXISTS public.bot_accounts CASCADE;
-DROP TABLE IF EXISTS public.bot_state CASCADE;
-DROP FUNCTION IF EXISTS public.ensure_bot_users CASCADE;
-DROP FUNCTION IF EXISTS public.bot_place_market_order CASCADE;
+
 
 -- ============================================================
 -- 1. 用户扩展表
